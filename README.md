@@ -86,7 +86,7 @@ App 启动 5 秒后静默检查 ← latest.json + 签名安装包 ←───�
 - **Secrets → Actions** 添加：
   - `TAURI_SIGNING_PRIVATE_KEY`：`scripts/hoyo-auth-updater.key` 文件全部内容（私钥，已 gitignore，**请自行备份，丢失将无法再推送更新**）
   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：空字符串（本项目密钥未设密码）
-- **`src-tauri/tauri.conf.json`** 的 `plugins.updater.endpoints` 需改为你的实际仓库地址（当前为 `icimence/hoyo-auth`）
+- **`src-tauri/tauri.conf.json`** 的 `plugins.updater.endpoints` 需改为你的实际仓库地址（当前为 `icimence/OpenHoyo`）
 
 ### 数据维护节奏
 
