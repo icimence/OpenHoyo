@@ -1,0 +1,34 @@
+[package]
+name = "hoyo-auth"
+version = "0.1.0"
+description = "米哈游账号登录示例（Tauri 重制）"
+edition = "2021"
+
+[lib]
+name = "hoyo_auth_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+md-5 = "0.10"
+base64 = "0.22"
+rsa = { version = "0.9", features = ["pem"] }
+rand = "0.8"
+qrcode = "0.14"
+percent-encoding = "2"
+uuid = { version = "1", features = ["v4"] }
+winreg = "0.55"
+
+[profile.release]
+strip = true
+lto = true

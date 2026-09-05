@@ -1,0 +1,4 @@
+# 本机 schannel 存在证书吊销检查失败的问题（企业网络常见），
+# cargo 下载 crates 时禁用吊销检查。等价于 CARGO_HTTP_CHECK_REVOKE=false
+[http]
+check-revoke = false

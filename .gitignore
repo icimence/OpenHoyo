@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+
+src-tauri/target
+src-tauri/gen
+
+# updater 签名私钥（仅本地与 GitHub Secrets，严禁提交）
+scripts/*.key
+!scripts/*.key.pub
+
+*.log
+.DS_Store

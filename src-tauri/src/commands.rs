@@ -1,0 +1,292 @@
+//! Tauri IPC 命令层：前端 ↔ 后端的唯一入口。
+
+use crate::cookie::{self, Cookie};
+use crate::models::QrLoginResult;
+use crate::passport;
+use crate::response::{ApiError, ApiResult};
+use crate::service::{self, UserDto};
+use crate::state::{salts, AppState};
+use crate::store::{self, UserRecord};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, State};
+
+#[tauri::command]
+pub async fn list_users(state: State<'_, AppState>) -> ApiResult<Vec<UserDto>> {
+    let db = state.db.lock().unwrap();
+    let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    drop(db);
+    Ok(records.iter().map(UserDto::from).collect())
+}
+
+// ---------------------------------------------------------------------------
+// 扫码登录
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct QrCreateDto {
+    pub ticket: String,
+    /// 二维码 SVG，前端直接 innerHTML
+    pub svg: String,
+}
+
+#[tauri::command]
+pub async fn qr_login_create(state: State<'_, AppState>) -> ApiResult<QrCreateDto> {
+    let salts = salts(&state).await;
+    let qr = passport::create_qr_login(&state.http, &salts, &state.devices).await?;
+
+    // 本地生成二维码 SVG（对应原版 QRCoder）
+    let code = qrcode::QrCode::new(qr.url.as_bytes())
+        .map_err(|e| ApiError::transport(format!("二维码生成失败: {e}")))?;
+    let svg = code
+        .render::<qrcode::render::svg::Color>()
+        .min_dimensions(220, 220)
+        .dark_color(qrcode::render::svg::Color("#000000"))
+        .light_color(qrcode::render::svg::Color("#ffffff"))
+        .build();
+
+    Ok(QrCreateDto {
+        ticket: qr.ticket,
+        svg: svg.trim_start_matches(['\u{feff}', '\n']).to_string(),
+    })
+}
+
+#[derive(Serialize)]
+pub struct QrPollDto {
+    /// Init=等待扫码 | Scanned=已扫码 | Confirmed=已确认 | Expired=已过期
+    pub status: String,
+    pub user: Option<UserDto>,
+}
+
+#[tauri::command]
+pub async fn qr_login_poll(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+    ticket: String,
+) -> ApiResult<QrPollDto> {
+    let salts = salts(&state).await;
+    let result: QrLoginResult = passport::query_qr_login_status(&state.http, &salts, &state.devices, &ticket).await?;
+
+    if result.status == "Confirmed" {
+        // token_type == 1 即 stoken（对应原版 Tokens.Single(t => t.TokenType is 1)）
+        let stoken = result
+            .tokens
+            .iter()
+            .find(|t| t.token_type == 1)
+            .map(|t| t.token.clone())
+            .ok_or_else(|| ApiError::empty_data("tokens[token_type=1]"))?;
+        let user_info = result
+            .user_info
+            .ok_or_else(|| ApiError::empty_data("user_info"))?;
+
+        let cookie = cookie::build_stoken_cookie(&user_info.aid, &user_info.mid, &stoken);
+        let user = service::login_with_stoken(&state, &handle, cookie, false).await?;
+        return Ok(QrPollDto { status: "Confirmed".into(), user: Some(user) });
+    }
+
+    Ok(QrPollDto {
+        status: result.status,
+        user: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// 手机验证码登录
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct CaptchaSendDto {
+    pub action_type: String,
+    pub countdown: i64,
+}
+
+#[tauri::command]
+pub async fn mobile_captcha_send(state: State<'_, AppState>, mobile: String) -> ApiResult<CaptchaSendDto> {
+    let salts = salts(&state).await;
+    // aigis 风控在 passport 层检测：触发时返回带提示的错误
+    let (data, _) = passport::create_login_captcha(&state.http, &salts, &state.devices, &mobile, None).await?;
+
+    Ok(CaptchaSendDto {
+        action_type: data.action_type,
+        countdown: data.countdown,
+    })
+}
+
+#[tauri::command]
+pub async fn mobile_captcha_login(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+    mobile: String,
+    captcha: String,
+    action_type: String,
+) -> ApiResult<UserDto> {
+    let salts = salts(&state).await;
+    let result = passport::login_by_mobile_captcha(&state.http, &salts, &state.devices, &mobile, &captcha, &action_type, None).await?;
+
+    let token = result
+        .token
+        .ok_or_else(|| ApiError::empty_data("token"))?;
+    let user_info = result
+        .user_info
+        .ok_or_else(|| ApiError::empty_data("user_info"))?;
+
+    let cookie = cookie::build_stoken_cookie(&user_info.aid, &user_info.mid, &token.token);
+    service::login_with_stoken(&state, &handle, cookie, false).await
+}
+
+// ---------------------------------------------------------------------------
+// Cookie 导入
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn cookie_login(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+    raw: String,
+    is_oversea: bool,
+) -> ApiResult<UserDto> {
+    let cookie = Cookie::parse(&raw);
+    let stoken = cookie
+        .stoken()
+        .ok_or_else(|| ApiError::retcode(-3, "Cookie 无效：需要同时包含 stuid、mid、stoken"))?;
+
+    service::login_with_stoken(&state, &handle, stoken, is_oversea).await
+}
+
+// ---------------------------------------------------------------------------
+// 用户管理
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn remove_user(state: State<'_, AppState>, handle: AppHandle, id: i64) -> ApiResult<()> {
+    {
+        let db = state.db.lock().unwrap();
+        store::delete(&db, id).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    }
+    let _ = handle.emit("users://changed", ());
+    Ok(())
+}
+
+/// 手动刷新某个用户的 cookie_token（对应原版 RefreshCookieTokenCommand）
+#[tauri::command]
+pub async fn refresh_cookie_token(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+    id: i64,
+) -> ApiResult<UserDto> {
+    let mut rec = {
+        let db = state.db.lock().unwrap();
+        let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+        records
+            .into_iter()
+            .find(|r: &UserRecord| r.id == id)
+            .ok_or_else(|| ApiError::retcode(-5, "用户不存在"))?
+    };
+
+    let salts = salts(&state).await;
+    let data = passport::get_cookie_token_by_stoken(&state.http, &salts, &state.devices, &rec).await?;
+    rec.cookie_token = Some(cookie::build_cookie_token_cookie(&rec.aid, &data.cookie_token));
+    rec.cookie_token_updated_at = service::now_ms();
+
+    service::save(&state, &mut rec)?;
+    let _ = handle.emit("users://changed", ());
+    Ok(UserDto::from(&rec))
+}
+
+/// 导出用户完整 Cookie（对应原版 CopyCookieCommand）
+#[tauri::command]
+pub async fn export_user_cookies(state: State<'_, AppState>, id: i64) -> ApiResult<String> {
+    let db = state.db.lock().unwrap();
+    let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    drop(db);
+    let rec = records
+        .into_iter()
+        .find(|r| r.id == id)
+        .ok_or_else(|| ApiError::retcode(-5, "用户不存在"))?;
+    Ok(rec.full_cookie_string())
+}
+
+// ---------------------------------------------------------------------------
+// 祈愿记录
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct GachaArchiveDto {
+    pub id: i64,
+    pub uid: String,
+}
+
+#[tauri::command]
+pub async fn gacha_archives(state: State<'_, AppState>) -> ApiResult<Vec<GachaArchiveDto>> {
+    Ok(crate::gacha::list_archives(&state)?
+        .into_iter()
+        .map(|(id, uid)| GachaArchiveDto { id, uid })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn gacha_statistics(state: State<'_, AppState>, archive_id: i64) -> ApiResult<crate::gacha_stats::GachaStatisticsDto> {
+    let items = crate::gacha::load_items(&state, archive_id)?;
+    let uid = crate::gacha::list_archives(&state)?
+        .into_iter()
+        .find(|(id, _)| *id == archive_id)
+        .map(|(_, uid)| uid)
+        .ok_or_else(|| ApiError::retcode(-5, "存档不存在"))?;
+    Ok(crate::gacha_stats::build_statistics(&uid, &items))
+}
+
+#[tauri::command]
+pub async fn gacha_remove_archive(state: State<'_, AppState>, archive_id: i64) -> ApiResult<()> {
+    crate::gacha::remove_archive(&state, archive_id)
+}
+
+/// SToken 刷新：需要当前用户与其游戏角色（对应原版 GachaLogQuerySTokenProvider）
+#[tauri::command]
+pub async fn gacha_refresh_by_stoken(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+    user_id: i64,
+    game_uid: String,
+) -> ApiResult<String> {
+    let rec = {
+        let db = state.db.lock().unwrap();
+        let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+        records
+            .into_iter()
+            .find(|r| r.id == user_id)
+            .ok_or_else(|| ApiError::retcode(-5, "用户不存在"))?
+    };
+    let role = rec
+        .game_roles
+        .iter()
+        .find(|r| r.game_uid == game_uid)
+        .cloned()
+        .ok_or_else(|| ApiError::retcode(-6, "用户没有该游戏角色"))?;
+
+    let salts = salts(&state).await;
+    let query = crate::gacha::build_query_from_stoken(&state, &salts, &rec, &role).await?;
+    crate::gacha::refresh_gacha_log(&state, &handle, &query, rec.is_oversea, false).await
+}
+
+/// 网页缓存刷新（对应原版 GachaLogQueryWebCacheProvider）
+#[tauri::command]
+pub async fn gacha_refresh_by_web_cache(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+) -> ApiResult<String> {
+    let query = crate::gacha::build_query_from_web_cache()?;
+    let is_oversea = query.contains("region=os_");
+    crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, false).await
+}
+
+/// 手动输入刷新（对应原版 GachaLogQueryManualInputProvider）
+#[tauri::command]
+pub async fn gacha_refresh_by_manual(
+    state: State<'_, AppState>,
+    handle: AppHandle,
+    input: String,
+    aggressive: bool,
+) -> ApiResult<String> {
+    let query = crate::gacha::build_query_from_manual(&input)?;
+    let is_oversea = query.contains("region=os_");
+    crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, aggressive).await
+}

@@ -1,0 +1,70 @@
+# 应用发布流水线：构建 Windows 安装包 → 签名 → 创建 GitHub Release（含 latest.json 供更新器使用）
+# 触发: 推送 v* 标签，或在 Actions 页面手动运行（输入版本号）
+#
+# 前置配置（仓库 Settings → Secrets → Actions）:
+#   TAURI_SIGNING_PRIVATE_KEY         - scripts/hoyo-auth-updater.key 的完整内容（更新器私钥）
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD - 生成密钥时的密码（本项目的密钥无密码，设为空字符串即可）
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号 (x.y.z)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          fi
+
+      - name: Bump version files
+        run: node scripts/bump-version.mjs ${{ env.VERSION }}
+
+      - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Commit version bump
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          git diff --cached --quiet || (git commit -m "chore(release): v${{ env.VERSION }}" && git push)
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v${{ env.VERSION }}
+          releaseName: "胡桃工具箱·学习复刻版 v${{ env.VERSION }}"
+          releaseBody: "见 Assets 中的安装包，下载 hoyo-auth_${{ env.VERSION }}_x64-setup.exe 安装。"
+          releaseDraft: false
+          prerelease: false
+          args: --target x86_64-pc-windows-msvc

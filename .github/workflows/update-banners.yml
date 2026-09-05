@@ -1,0 +1,58 @@
+# 每周自动同步米哈游卡池(祈愿活动)与物品名称数据
+# 数据上游: DGP-Studio 元数据的社区镜像 (wangdage12/Snap.Metadata)
+# 原版 Snap.Hutao 在运行时从 api.snapgenshin.com 拉取，该 CDN 已随项目归档下线，
+# 因此改为"仓库内打包 + CI 按周同步"的维护方式。
+name: Update Gacha Banner Data
+
+on:
+  schedule:
+    # 每天 04:00 (UTC) = 北京时间 12:00
+    # 上游镜像在每个半池开池后 2~5 天内更新数据，日检可将 UP 误判窗口压到最短
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Fetch latest GachaEvent metadata
+        run: |
+          curl -fsSL \
+            "https://raw.githubusercontent.com/wangdage12/Snap.Metadata/main/Genshin/CHS/GachaEvent.json" \
+            -o src-tauri/src/data/gacha_events.json
+
+      - name: Rebuild item name mapping
+        run: node scripts/build-item-names.mjs
+
+      - name: Validate
+        run: |
+          node -e "
+            const evs = require('./src-tauri/src/data/gacha_events.json');
+            const names = require('./src-tauri/src/data/item_names.json');
+            if (!Array.isArray(evs) || evs.length < 200) throw new Error('卡池数据异常: ' + evs.length);
+            if (Object.keys(names).length < 300) throw new Error('名称映射异常');
+            for (const e of evs) {
+              if (!e.From || !e.To || !Array.isArray(e.UpOrangeList)) {
+                throw new Error('字段缺失: ' + JSON.stringify(e).slice(0, 100));
+              }
+            }
+            console.log('OK, ' + evs.length + ' 个卡池事件, ' + Object.keys(names).length + ' 条名称映射');
+          "
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/src/data/gacha_events.json src-tauri/src/data/item_names.json
+          git diff --cached --quiet && echo "无更新" && exit 0
+          git commit -m "chore(data): sync gacha banner events and item names"
+          git push
