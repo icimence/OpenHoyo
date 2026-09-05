@@ -1,11 +1,8 @@
 # 应用发布流水线：构建 Windows 安装包 → 签名 → 创建 GitHub Release（含 latest.json 供更新器使用）
-# 触发: 推送 v* 标签，或在 Actions 页面手动运行（输入版本号）
-#
-# 前置配置（仓库 Settings → Secrets → Actions）:
-#   TAURI_SIGNING_PRIVATE_KEY         - scripts/hoyo-auth-updater.key 的完整内容（更新器私钥）
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD - 生成密钥时的密码（本项目的密钥无密码，设为空字符串即可）
-name: Release
-
+# 触发方式:
+#   1. push v* 标签（手动兜底）
+#   2. Actions 页面手动运行（输入版本号）
+#   3. auto-release.yml 检测到米哈游新版本时自动调用（workflow_call）
 on:
   push:
     tags: ["v*"]
@@ -14,6 +11,15 @@ on:
       version:
         description: "版本号 (x.y.z)"
         required: true
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      game_version:
+        required: false
+        type: string
+        description: "对应的米哈游游戏版本（写入发布说明）"
 
 permissions:
   contents: write
@@ -31,8 +37,8 @@ jobs:
       - name: Resolve version
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
           else
             echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
           fi
@@ -63,8 +69,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v${{ env.VERSION }}
-          releaseName: "胡桃工具箱·学习复刻版 v${{ env.VERSION }}"
-          releaseBody: "见 Assets 中的安装包，下载 hoyo-auth_${{ env.VERSION }}_x64-setup.exe 安装。"
+          releaseName: "OpenHoyo v${{ env.VERSION }}"
+          releaseBody: ${{ inputs.game_version && format('随原神 {0} 版本发布。下载 hoyo-auth_{1}_x64-setup.exe 安装，已安装用户启动应用即可收到更新。', inputs.game_version, env.VERSION) || '下载 Assets 中的 hoyo-auth_*_x64-setup.exe 安装。已安装用户启动应用即可收到更新提示。' }}
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
