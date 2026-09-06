@@ -28,7 +28,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "user", label: "用户", icon: "i-user" },
   { id: "announcement", label: "主页", icon: "i-home" },
-  { id: "launchgame", label: "启动游戏", icon: "i-launch", group: "工具" },
   { id: "gachalog", label: "祈愿记录", icon: "i-gacha", group: "工具" },
   { id: "achievement", label: "成就管理", icon: "i-achievement", group: "工具" },
   { id: "dailynote", label: "实时便笺", icon: "i-dailynote", group: "工具" },
