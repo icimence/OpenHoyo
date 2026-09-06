@@ -312,15 +312,18 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
     }
     refreshing = true;
     shell.refreshBtn.disabled = true;
+    console.info("[chronicle] 深境螺旋刷新");
     try {
       abyssPeriods = await fetchWithVerification(currentUser!.id, (ch) =>
         api.chronicleRefresh<SpiralAbyss>(currentUser!.id, role.game_uid, "abyss", ch),
       );
+      console.info(`[chronicle] 深境螺旋刷新完成，共 ${abyssPeriods.length} 期`);
       abyssIdx = 0;
       renderList();
       renderDetail();
     } catch (e) {
       if (!isRiskError(e)) {
+        console.warn(`[chronicle] 深境螺旋刷新失败: ${errText(e)}`);
         toast(`深境螺旋刷新失败: ${errText(e)}`, "error");
       }
     } finally {

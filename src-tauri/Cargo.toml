@@ -28,6 +28,12 @@ qrcode = "0.14"
 percent-encoding = "2"
 uuid = { version = "1", features = ["v4"] }
 winreg = "0.55"
+tauri-plugin-log = "2.9.1"
+tauri-plugin-dialog = "2.7.3"
+tauri-plugin-opener = "2.5.5"
+zip = "8.6.0"
+chrono = "0.4.45"
+log = "0.4.34"
 
 [profile.release]
 strip = true

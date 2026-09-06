@@ -1,5 +1,11 @@
-// 设置页：主题切换（跟随系统/浅色/深色）、当前版本号与手动检查更新
+// 设置页：主题切换（跟随系统/浅色/深色）、当前版本号与手动检查更新、反馈中心
 import { checkForUpdates } from "./updater";
+import { api, errText, type FeedbackResult } from "./api";
+import { toast } from "./ui";
+
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+}
 
 export type ThemeMode = "auto" | "light" | "dark";
 
@@ -77,6 +83,27 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
           <button class="primary" id="btn-check-update"><svg><use href="#i-refresh"/></svg>检查更新</button>
         </div>
       </div>
+      <div class="setting-card" id="fb-card">
+        <div class="setting-row">
+          <div class="setting-text">
+            <div class="setting-label">反馈中心</div>
+            <div class="setting-desc">提交时会自动附带应用元数据、最近 10 分钟运行日志与崩溃转储（如有），打包为 zip 并打开预填好的 GitHub Issue 页面，将 zip 与图片拖入即可提交</div>
+          </div>
+        </div>
+        <div class="fb-form">
+          <textarea id="fb-text" class="fb-textarea" placeholder="请描述遇到的问题：做了什么操作、期望的结果、实际的结果…（至少 5 个字）"></textarea>
+          <div class="fb-toolbar">
+            <button id="fb-add-image"><svg><use href="#i-copy"/></svg>添加图片</button>
+            <div class="fb-chips" id="fb-chips"></div>
+          </div>
+          <label class="fb-check"><input type="checkbox" id="fb-logs" checked />附带最近 10 分钟运行日志</label>
+          <label class="fb-check"><input type="checkbox" id="fb-dumps" checked />附带崩溃转储 .dmp（未发现时自动跳过）</label>
+          <div class="fb-actions">
+            <button class="primary" id="fb-submit"><svg><use href="#i-launch"/></svg>提交反馈到 GitHub</button>
+            <span class="fb-hint" id="fb-hint"></span>
+          </div>
+        </div>
+      </div>
     </div>`;
 
   const seg = content.querySelector<HTMLElement>("#theme-seg")!;
@@ -101,5 +128,70 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
     void checkForUpdates(false).finally(() => {
       checkBtn.disabled = false;
     });
+  });
+
+  // ---- 反馈中心 ----
+  const fbImages: string[] = [];
+  const chipsEl = content.querySelector<HTMLElement>("#fb-chips")!;
+  const renderChips = (): void => {
+    chipsEl.innerHTML = fbImages
+      .map((p, i) => {
+        const name = p.split(/[\\/]/).pop() ?? p;
+        return `<span class="fb-chip" title="${esc(p)}">${esc(name)}<button data-i="${i}" title="移除">×</button></span>`;
+      })
+      .join("");
+  };
+  chipsEl.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("button[data-i]");
+    if (btn) {
+      fbImages.splice(Number(btn.dataset.i), 1);
+      renderChips();
+    }
+  });
+
+  content.querySelector<HTMLButtonElement>("#fb-add-image")!.addEventListener("click", () => {
+    void (async () => {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const picked = await open({
+        multiple: true,
+        filters: [{ name: "图片", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
+      });
+      if (typeof picked === "string") {
+        fbImages.push(picked);
+      } else if (Array.isArray(picked)) {
+        fbImages.push(...picked);
+      }
+      renderChips();
+    })().catch((e: unknown) => toast(errText(e), "error"));
+  });
+
+  const fbSubmitBtn = content.querySelector<HTMLButtonElement>("#fb-submit")!;
+  const fbHint = content.querySelector<HTMLElement>("#fb-hint")!;
+  fbSubmitBtn.addEventListener("click", () => {
+    const text = (content.querySelector<HTMLTextAreaElement>("#fb-text")!.value ?? "").trim();
+    const includeLogs = (content.querySelector<HTMLInputElement>("#fb-logs")!).checked;
+    const includeDumps = (content.querySelector<HTMLInputElement>("#fb-dumps")!).checked;
+    fbSubmitBtn.disabled = true;
+    fbHint.textContent = "正在打包诊断信息…";
+    void api
+      .feedbackSubmit(text, fbImages.slice(), includeLogs, includeDumps)
+      .then((r: FeedbackResult) => {
+        const parts = [`zip：${r.zipPath.split(/[\\/]/).pop() ?? ""}`];
+        if (r.dumpCount > 0) {
+          parts.push(`崩溃转储 ${r.dumpCount} 个`);
+        }
+        if (r.imageCount > 0) {
+          parts.push(`图片 ${r.imageCount} 张`);
+        }
+        fbHint.textContent = `已打开 GitHub Issue 页面，请将 ${parts.join("，")}拖入 Issue 后提交`;
+        toast("已生成反馈包并打开 GitHub Issue 页面", "success");
+      })
+      .catch((e: unknown) => {
+        fbHint.textContent = "";
+        toast(errText(e), "error");
+      })
+      .finally(() => {
+        fbSubmitBtn.disabled = false;
+      });
   });
 }

@@ -118,7 +118,21 @@ export const api = {
   /** 拉官方数据合并入库，返回合并后全部期 */
   chronicleRefresh: <T>(userId: number, gameUid: string, kind: string, challenge?: string) =>
     invoke<T[]>("chronicle_refresh", { userId, gameUid, kind, challenge: challenge ?? null }),
+
+  // ---- 反馈中心 ----
+
+  /** 打包诊断信息并打开 GitHub Issue 页面，返回 zip 路径与 Issue 链接 */
+  feedbackSubmit: (text: string, imagePaths: string[], includeLogs: boolean, includeDumps: boolean) =>
+    invoke<FeedbackResult>("feedback_submit", { text, imagePaths, includeLogs, includeDumps }),
 };
+
+/** feedback_submit 命令的返回（后端 serde rename_all = camelCase） */
+export interface FeedbackResult {
+  zipPath: string;
+  issueUrl: string;
+  dumpCount: number;
+  imageCount: number;
+}
 
 // ---------------------------------------------------------------------------
 // 祈愿记录类型（对应后端 gacha_stats.rs）

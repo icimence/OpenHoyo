@@ -20,6 +20,7 @@ mod cookie;
 mod daily_note;
 mod device_fp;
 mod ds;
+mod feedback;
 mod gacha;
 mod gacha_events;
 mod gacha_stats;
@@ -40,6 +41,31 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("hoyoauth.log".into()),
+                    }),
+                ])
+                .max_file_size(2 * 1024 * 1024)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .level(log::LevelFilter::Info)
+                // 行格式与 feedback::parse_log_timestamp 约定一致
+                .format(|out, message, record| {
+                    out.finish(format_args!(
+                        "[{}][{}][{}] {}",
+                        chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                        record.level(),
+                        record.target(),
+                        message
+                    ))
+                })
+                .build(),
+        )
         .setup(|app| {
             let dir = app
                 .path()
@@ -54,6 +80,14 @@ pub fn run() {
             game_record::init_tables(&conn).expect("无法初始化周期记录表");
 
             app.manage(state::AppState::new(conn));
+
+            log::info!(
+                "应用启动 v{}（tauri {}，{} {}）",
+                app.package_info().version,
+                tauri::VERSION,
+                std::env::consts::OS,
+                std::env::consts::ARCH
+            );
 
             // 启动任务：刷新 salt + 恢复所有用户（懒刷新过期凭证）
             let handle = app.handle().clone();
@@ -84,6 +118,7 @@ pub fn run() {
             commands::card_verify_verification,
             commands::chronicle_list,
             commands::chronicle_refresh,
+            feedback::feedback_submit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

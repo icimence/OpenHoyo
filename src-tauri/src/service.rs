@@ -100,6 +100,7 @@ pub async fn login_with_stoken(
     stoken_cookie: Cookie,
     is_oversea: bool,
 ) -> ApiResult<UserDto> {
+    log::info!("[user] 登录流程开始（{}）", if is_oversea { "HoYoLAB" } else { "米游社" });
     let stuid = stoken_cookie
         .get(cookie::STUID)
         .ok_or_else(|| ApiError::retcode(-3, "Cookie 缺少 stuid"))?
@@ -211,6 +212,7 @@ pub async fn startup_resume(state: &AppState, handle: &tauri::AppHandle) {
         let db = state.db.lock().unwrap();
         store::list(&db).unwrap_or_default()
     };
+    log::info!("[startup] 恢复用户：{} 个账号", records.len());
 
     let mut any_changed = false;
     for mut rec in records {
@@ -221,7 +223,7 @@ pub async fn startup_resume(state: &AppState, handle: &tauri::AppHandle) {
                 }
             }
             Err(e) => {
-                eprintln!("[startup] 用户 {} 初始化失败: {}", rec.mid, e);
+                log::warn!("[startup] 用户 {} 初始化失败: {e}", rec.mid);
             }
         }
     }

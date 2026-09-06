@@ -112,6 +112,7 @@ function renderNav(): void {
 
 function renderPage(): void {
   const content = document.getElementById("content")!;
+  console.info(`[nav] 进入页面: ${currentPage}`);
   if (currentPage === "gachalog") {
     const cur = currentUser();
     renderGachaPage(content, {
@@ -546,6 +547,10 @@ async function main(): Promise<void> {
   // 尽早恢复主题，避免首帧闪烁暗色
   initTheme();
 
+  // console.* → 后端日志文件（反馈中心采集用；不要改用 attachConsole，方向相反）
+  const { initFrontendLog } = await import("./log");
+  initFrontendLog();
+
   // 渲染异常直接显示在页面上，避免静默失败导致"某个控件不见了"却无从排查
   window.addEventListener("error", (ev) => {
     const el = document.getElementById("toast");
@@ -554,6 +559,7 @@ async function main(): Promise<void> {
       el.className = "toast error";
       window.setTimeout(() => el.classList.add("hidden"), 6000);
     }
+    console.error("页面错误:", ev.message);
   });
 
   // 标题栏窗口控制

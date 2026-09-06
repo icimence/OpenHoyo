@@ -221,6 +221,7 @@ function render(content: HTMLElement): void {
 function wireToolbar(content: HTMLElement): void {
   const select = content.querySelector<HTMLSelectElement>("#gacha-archive-select");
   select?.addEventListener("change", () => {
+    console.info(`[gacha] 切换存档 → ${select.selectedOptions[0]?.textContent ?? select.value}`);
     selectedArchive = Number(select.value);
     void load().catch((e: unknown) => toast(errText(e), "error"));
   });
@@ -242,6 +243,7 @@ function wireToolbar(content: HTMLElement): void {
     btn.addEventListener("click", () => {
       menu.classList.add("hidden");
       const kind = btn.dataset.refresh!;
+      console.info(`[gacha] 用户选择刷新方式: ${kind}`);
       if (kind === "stoken") {
         void refreshByStoken();
       } else if (kind === "webcache") {

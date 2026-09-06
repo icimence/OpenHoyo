@@ -158,6 +158,7 @@ pub async fn cookie_login(
 
 #[tauri::command]
 pub async fn remove_user(state: State<'_, AppState>, handle: AppHandle, id: i64) -> ApiResult<()> {
+    log::info!("[user] 移除账号 id={id}");
     {
         let db = state.db.lock().unwrap();
         store::delete(&db, id).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
@@ -263,8 +264,20 @@ pub async fn gacha_refresh_by_stoken(
         .ok_or_else(|| ApiError::retcode(-6, "用户没有该游戏角色"))?;
 
     let salts = salts(&state).await;
-    let query = crate::gacha::build_query_from_stoken(&state, &salts, &rec, &role).await?;
-    crate::gacha::refresh_gacha_log(&state, &handle, &query, rec.is_oversea, false).await
+    log::info!("[gacha] SToken 刷新开始（uid={game_uid}）");
+    let query = match crate::gacha::build_query_from_stoken(&state, &salts, &rec, &role).await {
+        Ok(q) => q,
+        Err(e) => {
+            log::warn!("[gacha] SToken genAuthKey 失败({}): {}", e.code, e.message);
+            return Err(e);
+        }
+    };
+    let result = crate::gacha::refresh_gacha_log(&state, &handle, &query, rec.is_oversea, false).await;
+    match &result {
+        Ok(msg) => log::info!("[gacha] SToken 刷新完成: {msg}"),
+        Err(e) => log::warn!("[gacha] SToken 刷新失败({}): {}", e.code, e.message),
+    }
+    result
 }
 
 /// 网页缓存刷新（对应原版 GachaLogQueryWebCacheProvider）
@@ -273,9 +286,15 @@ pub async fn gacha_refresh_by_web_cache(
     state: State<'_, AppState>,
     handle: AppHandle,
 ) -> ApiResult<String> {
+    log::info!("[gacha] 网页缓存刷新开始");
     let query = crate::gacha::build_query_from_web_cache()?;
     let is_oversea = query.contains("region=os_");
-    crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, false).await
+    let result = crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, false).await;
+    match &result {
+        Ok(msg) => log::info!("[gacha] 网页缓存刷新完成: {msg}"),
+        Err(e) => log::warn!("[gacha] 网页缓存刷新失败({}): {}", e.code, e.message),
+    }
+    result
 }
 
 /// 手动输入刷新（对应原版 GachaLogQueryManualInputProvider）
@@ -286,9 +305,15 @@ pub async fn gacha_refresh_by_manual(
     input: String,
     aggressive: bool,
 ) -> ApiResult<String> {
+    log::info!("[gacha] 手动输入刷新开始");
     let query = crate::gacha::build_query_from_manual(&input)?;
     let is_oversea = query.contains("region=os_");
-    crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, false).await
+    let result = crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, aggressive).await;
+    match &result {
+        Ok(msg) => log::info!("[gacha] 手动输入刷新完成: {msg}"),
+        Err(e) => log::warn!("[gacha] 手动输入刷新失败({}): {}", e.code, e.message),
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +337,7 @@ pub async fn daily_note(
     game_uid: String,
     challenge: Option<String>,
 ) -> ApiResult<crate::daily_note::DailyNoteData> {
+    log::info!("[dailynote] 拉取实时便签（uid={game_uid}，携带验证挑战={}）", challenge.is_some());
     let mut rec = find_user(&state, user_id)?;
     let role = rec
         .game_roles
@@ -324,13 +350,13 @@ pub async fn daily_note(
     // 注意：这里绝不广播 users://changed —— 那会触发前端整页重载→再次请求→事件回环
     if let Err(e) = service::initialize_user(&state, &mut rec, false).await {
         // 凭证刷新失败不必然致命（本地可能仍有有效缓存凭证），记录后继续尝试
-        eprintln!("[daily_note] 凭证刷新失败: {e}");
+        log::warn!("[dailynote] 凭证刷新失败: {e}");
     } else {
         let _ = service::save(&state, &mut rec);
     }
 
     let salts = salts(&state).await;
-    crate::daily_note::fetch(
+    let result = crate::daily_note::fetch(
         &state.http,
         &salts,
         &state.devices,
@@ -339,7 +365,12 @@ pub async fn daily_note(
         &role.region,
         challenge.as_deref(),
     )
-    .await
+    .await;
+    match &result {
+        Ok(_) => log::info!("[dailynote] 拉取成功（uid={game_uid}）"),
+        Err(e) => log::warn!("[dailynote] 拉取失败（uid={game_uid}）: ({}) {}", e.code, e.message),
+    }
+    result
 }
 
 /// 安全验证第一步：申请极验会话（对应 CardClient.CreateVerificationAsync）
@@ -348,6 +379,7 @@ pub async fn card_create_verification(
     state: State<'_, AppState>,
     user_id: i64,
 ) -> ApiResult<crate::daily_note::GeetestVerificationDto> {
+    log::info!("[verify] 申请极验验证会话");
     let rec = find_user(&state, user_id)?;
     let salts = salts(&state).await;
     crate::daily_note::create_verification(&state.http, &salts, &state.devices, &rec).await
@@ -361,9 +393,16 @@ pub async fn card_verify_verification(
     challenge: String,
     validate: String,
 ) -> ApiResult<String> {
+    log::info!("[verify] 提交极验验证结果");
     let rec = find_user(&state, user_id)?;
     let salts = salts(&state).await;
-    crate::daily_note::verify_verification(&state.http, &salts, &state.devices, &rec, &challenge, &validate).await
+    let result =
+        crate::daily_note::verify_verification(&state.http, &salts, &state.devices, &rec, &challenge, &validate).await;
+    match &result {
+        Ok(_) => log::info!("[verify] 验证通过"),
+        Err(e) => log::warn!("[verify] 验证失败: ({}) {}", e.code, e.message),
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -380,7 +419,7 @@ async fn prepare_record_user(state: &State<'_, AppState>, user_id: i64, game_uid
         .cloned()
         .ok_or_else(|| ApiError::retcode(-6, "用户没有该游戏角色"))?;
     if let Err(e) = service::initialize_user(state, &mut rec, false).await {
-        eprintln!("[game_record] 凭证刷新失败: {e}");
+        log::warn!("[game_record] 凭证刷新失败: {e}");
     } else {
         let _ = service::save(state, &mut rec);
     }
@@ -412,6 +451,7 @@ pub async fn chronicle_refresh(
     let salts = salts(&state).await;
     let uid = role.game_uid.clone();
     let region = role.region.clone();
+    log::info!("[chronicle] 刷新周期记录（kind={kind}，uid={uid}）");
 
     let fetched: Vec<serde_json::Value> = match kind.as_str() {
         // 深境螺旋：本期(schedule 1)与上期(2)各拉一次
@@ -459,6 +499,7 @@ pub async fn chronicle_refresh(
             }
         }
     }
+    log::info!("[chronicle] kind={kind} 拉取 {} 期并合并入库", fetched.len());
 
     let db = state.db.lock().unwrap();
     crate::game_record::list_periods(&db, &uid, &kind).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))

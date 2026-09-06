@@ -154,6 +154,11 @@ pub async fn request<T: DeserializeOwned>(
     devices: &Devices,
     spec: RequestSpec,
 ) -> ApiResult<HoyoResponse<T>> {
+    // 请求追踪：query 中可能含 authkey/stoken 等凭证，日志只保留路径
+    let started = std::time::Instant::now();
+    let url_path = spec.url.split('?').next().unwrap_or(&spec.url).to_string();
+    log::info!("[http] {} {}", spec.method, url_path);
+
     let body_str = spec
         .query_body
         .as_ref()
@@ -203,19 +208,51 @@ pub async fn request<T: DeserializeOwned>(
             .body(body.clone());
     }
 
-    let resp = req.send().await.map_err(|e| ApiError::transport(e.to_string()))?;
+    let resp = match req.send().await {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("[http] {} {} → 网络错误: {e}", spec.method, url_path);
+            return Err(ApiError::transport(e.to_string()));
+        }
+    };
     let aigis = resp
         .headers()
         .get("X-Rpc-Aigis")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
     let status = resp.status();
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| ApiError::transport(format!("HTTP {status}, {e}")))?;
-    let envelope: Envelope<T> = serde_json::from_slice(&bytes)
-        .map_err(|e| ApiError::transport(format!("HTTP {status}, 响应解析失败: {e}")))?;
+    let bytes = match resp.bytes().await {
+        Ok(b) => b,
+        Err(e) => {
+            log::warn!("[http] {} {} → 读取响应失败: HTTP {status}, {e}", spec.method, url_path);
+            return Err(ApiError::transport(format!("HTTP {status}, {e}")));
+        }
+    };
+    let envelope: Envelope<T> = match serde_json::from_slice(&bytes) {
+        Ok(e) => e,
+        Err(e) => {
+            log::warn!("[http] {} {} → 响应解析失败: HTTP {status}, {e}", spec.method, url_path);
+            return Err(ApiError::transport(format!("HTTP {status}, 响应解析失败: {e}")));
+        }
+    };
+
+    if envelope.retcode == 0 {
+        log::info!(
+            "[http] {} {} → OK（{}ms）",
+            spec.method,
+            url_path,
+            started.elapsed().as_millis()
+        );
+    } else {
+        log::warn!(
+            "[http] {} {} → retcode={} {}（{}ms）",
+            spec.method,
+            url_path,
+            envelope.retcode,
+            envelope.message,
+            started.elapsed().as_millis()
+        );
+    }
 
     Ok(HoyoResponse { envelope, aigis })
 }

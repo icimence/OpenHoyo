@@ -247,6 +247,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
     }
     refreshing = true;
     refreshBtn.disabled = true;
+    console.info(`[dailynote] 刷新实时便签（${roles.length} 个角色，${interactive ? "手动含验证" : "自动"}）`);
     try {
       for (const role of roles) {
         try {

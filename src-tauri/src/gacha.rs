@@ -129,6 +129,7 @@ fn extract_gacha_url_from_web_cache() -> ApiResult<String> {
         let web_caches = game_dir.join(data_folder).join("webCaches");
         for cache_file in cache_files_newest_first(&web_caches) {
             if let Some(url) = match_gacha_url_in_cache(&cache_file) {
+                log::info!("[gacha] 网页缓存命中: {}", cache_file.display());
                 return Ok(url);
             }
         }
@@ -375,6 +376,7 @@ pub async fn refresh_gacha_log_with_progress(
     let mut authkey_timeout = false;
 
     for &gacha_type in QUERY_TYPES {
+        log::info!("[gacha] 开始拉取 {}（gacha_type={gacha_type}）", pool_display_name(gacha_type));
         let mut end_id: i64 = 0;
         let mut fetched: usize = 0;
         let mut items_to_add: Vec<GachaLogItem> = Vec::new();
@@ -389,6 +391,7 @@ pub async fn refresh_gacha_log_with_progress(
 
             if resp.envelope.retcode != 0 {
                 authkey_timeout = true;
+                log::warn!("[gacha] {} authkey 失效（retcode={}）", pool_display_name(gacha_type), resp.envelope.retcode);
                 report(GachaProgress {
                     uid: target_uid.clone(),
                     gacha_type,
@@ -464,6 +467,7 @@ pub async fn refresh_gacha_log_with_progress(
         // 保存当前类型（INSERT OR IGNORE 兜底去重）
         if let Some(archive_id) = target_archive_id {
             if !items_to_add.is_empty() {
+                log::info!("[gacha] {} 入库新增 {} 条", pool_display_name(gacha_type), items_to_add.len());
                 insert_items(state, archive_id, &items_to_add)?;
             }
         }

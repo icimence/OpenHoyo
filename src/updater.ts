@@ -10,18 +10,22 @@ let pendingUpdate: Update | null = null;
  * 用户取消（或更新失败）后点亮标题栏徽标作为持续提醒。
  */
 export async function checkForUpdates(silent: boolean): Promise<void> {
+  console.info("[updater] 检查更新…");
   try {
     const { check } = await import("@tauri-apps/plugin-updater");
     const update = await check();
     if (!update) {
+      console.info("[updater] 已是最新版本");
       if (!silent) {
         toast("当前已是最新版本", "success");
       }
       return;
     }
+    console.info(`[updater] 发现新版本 v${update.version}`);
     pendingUpdate = update;
     await showUpdateDialog(update);
   } catch (e) {
+    console.warn(`[updater] 检查更新失败: ${e instanceof Error ? e.message : String(e)}`);
     if (!silent) {
       toast(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
     }

@@ -1,7 +1,7 @@
 // 风控安全验证共享模块（对应 GeetestService.TryVerifyXrpcChallengeAsync）：
 // 请求命中 1034/5003 时自动走 createVerification → 页内极验点选 →
 // verifyVerification 换 xrpc-challenge → 带挑战头重试原请求。
-import { api, isApiError } from "./api";
+import { api, errText, isApiError } from "./api";
 import { closeDialog, onDialogCancel, openDialog, toast } from "./ui";
 
 /** 风控拦截错误码（KnownReturnCode: 实时便签 账号有风险 / 暂无数据） */
@@ -115,9 +115,11 @@ export async function fetchWithVerification<T>(userId: number, request: (challen
     if (!isRiskError(e)) {
       throw e;
     }
+    console.warn(`[verify] 请求被风控拦截（${errText(e)}），发起极验验证`);
     const verification = await api.cardCreateVerification(userId);
     const validated = await runGeetest(verification.gt, verification.challenge);
     if (!validated) {
+      console.warn("[verify] 用户取消或验证未完成");
       throw e;
     }
     const xrpcChallenge = await api.cardVerifyVerification(
@@ -125,6 +127,7 @@ export async function fetchWithVerification<T>(userId: number, request: (challen
       validated.geetest_challenge,
       validated.geetest_validate,
     );
+    console.info("[verify] 拿到挑战头，携带重试原请求");
     return request(xrpcChallenge);
   }
 }
