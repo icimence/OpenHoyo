@@ -6,9 +6,8 @@ import { closeDialog, onDialogCancel, onDialogOk, openDialog, setStatus, toast }
 let pendingUpdate: Update | null = null;
 
 /**
- * 检查更新。
- * silent=true（启动静默检查）：发现新版本只点亮标题栏徽标，不弹窗打扰；
- * silent=false（用户主动检查）：点亮徽标并直接弹出升级对话框。
+ * 检查更新。发现新版本一律弹窗明确告知；
+ * 用户取消（或更新失败）后点亮标题栏徽标作为持续提醒。
  */
 export async function checkForUpdates(silent: boolean): Promise<void> {
   try {
@@ -21,10 +20,7 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
       return;
     }
     pendingUpdate = update;
-    showUpdateBadge(update.version);
-    if (!silent) {
-      await showUpdateDialog(update);
-    }
+    await showUpdateDialog(update);
   } catch (e) {
     if (!silent) {
       toast(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
@@ -64,7 +60,11 @@ async function showUpdateDialog(update: Update): Promise<void> {
     ${update.body ? `<div class="update-notes">${update.body}</div>` : ""}`,
     "立即更新",
   );
-  onDialogCancel(closeDialog);
+  onDialogCancel(() => {
+    closeDialog();
+    // 用户暂不更新：点亮标题栏徽标作为持续提醒
+    showUpdateBadge(update.version);
+  });
   onDialogOk(() =>
     void (async () => {
       try {
@@ -88,6 +88,7 @@ async function showUpdateDialog(update: Update): Promise<void> {
       } catch (e) {
         toast(`更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
         closeDialog();
+        showUpdateBadge(update.version);
       }
     })(),
   );
