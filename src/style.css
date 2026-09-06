@@ -22,10 +22,44 @@
   --accent-light: #4cc2ff;
   --danger: #ff99a4;
   --success: #6ccb5f;
+  --hover-faint: rgba(255, 255, 255, 0.04);
+  --hover-soft: rgba(255, 255, 255, 0.06);
+  --hover-strong: rgba(255, 255, 255, 0.08);
+  --stroke-strong: rgba(255, 255, 255, 0.16);
+  --spinner-track: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
   --radius: 8px;
   --nav-width: 268px;
   --titlebar-height: 40px;
   --font: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+}
+
+/* 浅色主题：对应 WinUI 3 Light 主题 token */
+html[data-theme="light"] {
+  --bg-base: #f9f9f9;
+  --bg-layer: #f3f3f3;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f7f7f7;
+  --bg-nav-item-hover: rgba(0, 0, 0, 0.037);
+  --bg-nav-item-active: #eaeaea;
+  --stroke: rgba(0, 0, 0, 0.078);
+  --divider: rgba(0, 0, 0, 0.08);
+  --text: rgba(0, 0, 0, 0.9);
+  --text-secondary: rgba(0, 0, 0, 0.62);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+  --accent: #0067c0;
+  --accent-hover: #0078d4;
+  --accent-light: #005fb8;
+  --danger: #c42b1c;
+  --success: #0f7b0f;
+  --hover-faint: rgba(0, 0, 0, 0.03);
+  --hover-soft: rgba(0, 0, 0, 0.045);
+  --hover-strong: rgba(0, 0, 0, 0.06);
+  --stroke-strong: rgba(0, 0, 0, 0.12);
+  --spinner-track: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.36);
 }
 
 * {
@@ -112,7 +146,7 @@ body {
 }
 
 .titlebar-actions button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-strong);
 }
 
 .titlebar-actions button.close:hover {
@@ -292,7 +326,7 @@ body {
   position: absolute;
   bottom: calc(100% + 4px);
   left: 10px;
-  background: #2c2c2c;
+  background: var(--bg-card);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
@@ -374,7 +408,7 @@ body {
 }
 
 .flyout-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-soft);
 }
 
 .flyout-item:disabled {
@@ -434,7 +468,7 @@ body {
 }
 
 .role-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-soft);
 }
 
 .role-row.selected {
@@ -474,7 +508,7 @@ body {
 }
 
 .flyout-user-row:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-soft);
 }
 
 .flyout-user-row.current {
@@ -536,7 +570,7 @@ body {
 }
 
 .flyout-user-row .row-btns button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-strong);
   color: var(--text);
 }
 
@@ -746,7 +780,7 @@ body {
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-strong);
   color: var(--text);
 }
 
@@ -857,7 +891,7 @@ button svg {
 .dialog {
   width: 448px;
   max-width: calc(100vw - 48px);
-  background: #2c2c2c;
+  background: var(--bg-card);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   padding: 22px 24px 18px;
@@ -885,7 +919,7 @@ button svg {
   margin-top: 5px;
   background: var(--bg-layer);
   border: 1px solid var(--stroke);
-  border-bottom-color: rgba(255, 255, 255, 0.2);
+  border-bottom-color: var(--stroke-strong);
   border-radius: 5px;
   padding: 9px 11px;
   color: var(--text);
@@ -1010,7 +1044,7 @@ button svg {
   top: calc(100% + 4px);
   left: 0;
   min-width: 170px;
-  background: #2c2c2c;
+  background: var(--bg-card);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
@@ -1061,7 +1095,7 @@ button svg {
 
 .gacha-tab:hover:not(.disabled-tab) {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-soft);
 }
 
 .gacha-tab.active {
@@ -1129,7 +1163,7 @@ button svg {
 .gauge {
   height: 6px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-strong);
   overflow: hidden;
 }
 
@@ -1157,7 +1191,7 @@ button svg {
   flex: 1;
   border-radius: 6px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover-faint);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1309,7 +1343,7 @@ button svg {
 }
 
 .pool-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-soft);
   color: var(--text);
 }
 
@@ -1572,7 +1606,7 @@ button svg {
 .gp-spinner .spin {
   width: 22px;
   height: 22px;
-  border: 2.5px solid rgba(255, 255, 255, 0.15);
+  border: 2.5px solid var(--spinner-track);
   border-top-color: var(--accent-light);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
@@ -1621,7 +1655,7 @@ button svg {
   bottom: 30px;
   left: 50%;
   transform: translateX(-50%);
-  background: #2c2c2c;
+  background: var(--bg-card);
   border: 1px solid var(--stroke);
   border-left: 3px solid var(--accent-light);
   color: var(--text);
@@ -1651,18 +1685,99 @@ button svg {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--scrollbar-thumb);
   border: 4px solid transparent;
   border-radius: 8px;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--scrollbar-thumb-hover);
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ============ 设置页 ============ */
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.setting-card {
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  padding: 2px 18px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 0;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--divider);
+}
+
+.setting-label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.setting-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.setting-version {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent-light);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* WinUI Segmented 风格的主题切换器 */
+.segmented {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--hover-faint);
+  border: 1px solid var(--stroke);
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.segmented button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 12.5px;
+  padding: 6px 14px;
+  border-radius: 5px;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button.active {
+  background: var(--bg-card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }

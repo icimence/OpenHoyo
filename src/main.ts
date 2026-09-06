@@ -12,6 +12,7 @@ import {
   toast,
 } from "./ui";
 import { checkForUpdates } from "./updater";
+import { initTheme, renderSettingsPage } from "./settings";
 
 // ---------------------------------------------------------------------------
 // 导航定义（对应原版 MainView.xaml 的 NavigationView 项与分组）
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "wikiavatar", label: "角色资料", icon: "i-wiki", group: "数据" },
   { id: "wikiweapon", label: "武器资料", icon: "i-weapon", group: "数据" },
   { id: "wikimonster", label: "怪物资料", icon: "i-monster", group: "数据" },
+  { id: "setting", label: "设置", icon: "i-setting" },
 ];
 
 let currentPage = "user";
@@ -100,12 +102,12 @@ function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
   let lastGroup: string | undefined;
-  const implemented = new Set(["user", "gachalog"]);
+  const implemented = new Set(["user", "gachalog", "setting"]);
   for (const item of NAV_ITEMS) {
-    if (item.group !== lastGroup) {
-      html.push(`<div class="nav-group-header">${esc(item.group!)}</div>`);
-      lastGroup = item.group;
+    if (item.group && item.group !== lastGroup) {
+      html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
     }
+    lastGroup = item.group;
     html.push(
       `<button class="nav-item ${item.id === currentPage ? "active" : ""} ${implemented.has(item.id) ? "" : "disabled"}" data-page="${item.id}">` +
         `<svg><use href="#${item.icon}"/></svg><span>${esc(item.label)}</span></button>`,
@@ -137,6 +139,8 @@ function renderPage(): void {
           }
         : null,
     });
+  } else if (currentPage === "setting") {
+    void renderSettingsPage(content);
   } else {
     const item = NAV_ITEMS.find((n) => n.id === currentPage)!;
     content.innerHTML = `
@@ -605,6 +609,9 @@ async function reload(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  // 尽早恢复主题，避免首帧闪烁暗色
+  initTheme();
+
   // 渲染异常直接显示在页面上，避免静默失败导致"某个控件不见了"却无从排查
   window.addEventListener("error", (ev) => {
     const el = document.getElementById("toast");
