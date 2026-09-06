@@ -380,8 +380,8 @@ function orangeListHtml(w: WishSummary): string {
 
   const inner = `<div class="orange-flat">${visible
     .map(
-      (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽 · ${esc(o.time.slice(0, 10))} · ${o.is_up ? "命中UP" : "歪了"}">
-        <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" onerror="this.remove()" loading="lazy"/><span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span></div>
+      (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽 · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
+        <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" onerror="this.remove()" loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
         <span class="flat-count orange">${o.pull}</span>
       </div>`,
     )
@@ -462,13 +462,15 @@ function renderHistory(body: HTMLElement): void {
     .join("");
 
   const pool = s.history.find((p) => p.query_type === activePool)!;
+  // UP 概念仅存在于角色/武器活动池；常驻与集录的历史条目不显示 UP/歪徽标
+  const poolHasUp = pool.query_type === 301 || pool.query_type === 302;
   const groups = pool.groups
     .map((g) => {
       const tiles = g.items
         .map((it) => {
           const q = it.rank_type === 5 ? "orange" : it.rank_type === 4 ? "purple" : "blue";
           const upBadge =
-            it.rank_type === 5 ? `<span class="up-badge ${it.is_up ? "hit" : "lost"}">${it.is_up ? "UP" : "歪"}</span>` : "";
+            poolHasUp && it.rank_type === 5 ? `<span class="up-badge ${it.is_up ? "hit" : "lost"}">${it.is_up ? "UP" : "歪"}</span>` : "";
           return `<div class="wish-tile ${q} ${it.rank_type === 5 ? "five" : ""}" title="${esc(it.name)} · ${esc(it.time)}">
             <div class="tile-face ${q}">${esc(it.name.slice(0, 1))}<img src="${iconSrc(it.name)}" onerror="this.remove()" loading="lazy"/>${upBadge}</div>
             <div class="tile-name">${esc(it.name)}</div>
