@@ -17,6 +17,7 @@
 mod commands;
 mod constants;
 mod cookie;
+mod daily_note;
 mod device_fp;
 mod ds;
 mod gacha;
@@ -76,6 +77,7 @@ pub fn run() {
             commands::gacha_refresh_by_stoken,
             commands::gacha_refresh_by_web_cache,
             commands::gacha_refresh_by_manual,
+            commands::daily_note,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

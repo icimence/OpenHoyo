@@ -67,11 +67,29 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
             avatar                   TEXT,
             game_roles               TEXT    NOT NULL DEFAULT '[]',
             created_at               INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        );
+        CREATE TABLE IF NOT EXISTS meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
         );",
     )?;
     // 旧库迁移：v0.1 前的表没有 avatar 列
     let _ = conn.execute_batch("ALTER TABLE users ADD COLUMN avatar TEXT;");
     Ok(())
+}
+
+/// 读取 meta 键值（设备标识等跨启动持久数据）
+pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
+    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| row.get(0))
+        .ok()
+}
+
+pub fn meta_set(conn: &Connection, key: &str, value: &str) {
+    let _ = conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    );
 }
 
 fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<UserRecord> {

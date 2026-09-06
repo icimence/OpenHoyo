@@ -97,6 +97,11 @@ export const api = {
 
   gachaRefreshByManual: (input: string, aggressive: boolean) =>
     invoke<string>("gacha_refresh_by_manual", { input, aggressive }),
+
+  // ---- 实时便签 ----
+
+  dailyNote: (userId: number, gameUid: string) =>
+    invoke<DailyNoteData>("daily_note", { userId, gameUid }),
 };
 
 // ---------------------------------------------------------------------------
@@ -186,4 +191,47 @@ export interface GachaStatisticsDto {
   history: PoolHistory[];
   avatars: NameCountEntry[];
   weapons: NameCountEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// 实时便签类型（对应后端 daily_note.rs，字段与米哈游 JSON 一致）
+// ---------------------------------------------------------------------------
+
+export interface DailyNoteExpedition {
+  avatar_side_icon: string;
+  status: string;
+  remained_time: number;
+}
+
+export interface DailyNoteData {
+  current_resin: number;
+  max_resin: number;
+  resin_recovery_time: number;
+  finished_task_num: number;
+  total_task_num: number;
+  is_extra_task_reward_received: boolean;
+  remain_resin_discount_num: number;
+  resin_discount_num_limit: number;
+  current_home_coin: number;
+  max_home_coin: number;
+  home_coin_recovery_time: number;
+  current_expedition_num: number;
+  max_expedition_num: number;
+  expeditions: DailyNoteExpedition[];
+  transformer?: {
+    obtained: boolean;
+    recovery_time?: { day: number; hour: number; minute: number; second: number; reached: boolean };
+  };
+  daily_task?: {
+    total_num: number;
+    finished_num: number;
+    is_extra_task_reward_received: boolean;
+    attendance_visible: boolean;
+    stored_attendance: number;
+  };
+  archon_quest_progress?: {
+    list: { status: string; chapter_num: string; chapter_title: string }[];
+    is_finish_all_mainline: boolean;
+  };
+  fetched_at_ms: number;
 }

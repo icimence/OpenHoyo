@@ -152,6 +152,26 @@ pub const URL_GAME_ROLES_BY_COOKIE_OS: &str =
 
 pub const URL_DEVICE_FP: &str = "https://public-data-api.mihoyo.com/device-fp/api/getFp";
 
+// 实时便签（GameRecord）：对应 ApiEndpoints.csv GameRecordDailyNote 行
+pub fn url_daily_note(uid: &str, server: &str, is_oversea: bool) -> String {
+    if is_oversea {
+        format!("https://bbs-api-os.hoyolab.com/game_record/app/genshin/api/dailyNote?role_id={uid}&server={server}")
+    } else {
+        format!("https://api-takumi-record.mihoyo.com/game_record/app/genshin/api/dailyNote?role_id={uid}&server={server}")
+    }
+}
+
+pub fn webstatic_referer(is_oversea: bool) -> &'static str {
+    if is_oversea {
+        "https://webstatic-sea.mihoyo.com"
+    } else {
+        "https://webstatic.mihoyo.com"
+    }
+}
+
+/// GameRecord 请求的 x-rpc-tool_verison（对应 GameRecordClient 中硬编码值）
+pub const TOOL_VERSION_GR: &str = "v5.0.1-ys";
+
 // ---------------------------------------------------------------------------
 // 国服 Passport 接口 RSA 公钥（UIGF 社区文档公开值，用于手机号加密）
 // ---------------------------------------------------------------------------

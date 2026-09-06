@@ -40,6 +40,14 @@ impl Devices {
             id53: crate::random::lower_alnum(53),
         }
     }
+
+    /// 复用持久化的 device_id36（保持与已绑定指纹一致）
+    pub fn with_id36(id36: String) -> Self {
+        Self {
+            id36,
+            id53: crate::random::lower_alnum(53),
+        }
+    }
 }
 
 /// DS 签名规格
@@ -98,6 +106,12 @@ impl RequestSpec {
 
     pub fn with_cookie(mut self, cookie: &crate::cookie::Cookie) -> Self {
         self.cookie = Some(cookie.to_string());
+        self
+    }
+
+    /// 直接注入原始 Cookie 串（实时便签等需要拼接多组凭证的场景）
+    pub fn with_cookie_raw(mut self, cookie: String) -> Self {
+        self.cookie = Some(cookie);
         self
     }
 

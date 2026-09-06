@@ -2,6 +2,7 @@
 
 use crate::constants::Salts;
 use crate::http::Devices;
+use crate::store;
 use std::sync::Mutex;
 use tokio::sync::RwLock;
 
@@ -15,9 +16,19 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db: rusqlite::Connection) -> Self {
+        // device_id 跨启动持久化：设备指纹绑定它，随机重生等于每次启动"换设备"，容易触发风控
+        let existing = store::meta_get(&db, "device_id36");
+        let devices = match existing {
+            Some(id) if !id.is_empty() => Devices::with_id36(id),
+            _ => {
+                let devices = Devices::new();
+                store::meta_set(&db, "device_id36", &devices.id36);
+                devices
+            }
+        };
         Self {
             http: reqwest::Client::new(),
-            devices: Devices::new(),
+            devices,
             salts: RwLock::new(Salts::default()),
             db: Mutex::new(db),
         }

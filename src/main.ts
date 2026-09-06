@@ -13,6 +13,7 @@ import {
 } from "./ui";
 import { checkForUpdates, initUpdateBadge } from "./updater";
 import { initTheme, renderSettingsPage } from "./settings";
+import { renderDailyNotePage } from "./dailynote";
 
 // ---------------------------------------------------------------------------
 // 导航定义（对应原版 MainView.xaml 的 NavigationView 项与分组）
@@ -96,7 +97,7 @@ function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
   let lastGroup: string | undefined;
-  const implemented = new Set(["user", "gachalog", "setting"]);
+  const implemented = new Set(["user", "gachalog", "setting", "dailynote"]);
   for (const item of NAV_ITEMS) {
     if (item.group && item.group !== lastGroup) {
       html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
@@ -135,6 +136,8 @@ function renderPage(): void {
     });
   } else if (currentPage === "setting") {
     void renderSettingsPage(content);
+  } else if (currentPage === "dailynote") {
+    renderDailyNotePage(content, currentUser());
   } else {
     const item = NAV_ITEMS.find((n) => n.id === currentPage)!;
     content.innerHTML = `
