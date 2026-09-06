@@ -172,12 +172,10 @@ function render(content: HTMLElement): void {
     { id: "history", label: "历史" },
     { id: "avatar", label: "角色" },
     { id: "weapon", label: "武器" },
-    { id: "countdown", label: "计时", disabled: true },
-    { id: "global", label: "全球祈愿统计", disabled: true },
   ]
     .map(
       (t) =>
-        `<button class="gacha-tab ${t.id === activeTab ? "active" : ""} ${t.disabled ? "disabled-tab" : ""}" data-tab="${t.id}">${t.label}</button>`,
+        `<button class="gacha-tab ${t.id === activeTab ? "active" : ""}" data-tab="${t.id}">${t.label}</button>`,
     )
     .join("");
 
@@ -546,7 +544,7 @@ function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "av
             <span class="section-title ${q}">${rankNames[rank]}</span>
             <span class="section-count">${items.length} 种</span>
           </div>
-          <div class="section-body">${tiles}</div>
+          <div class="section-body flat">${tiles}</div>
           ${footer}
         </div>`;
     })
