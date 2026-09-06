@@ -112,3 +112,27 @@ jobs:
     with:
       version: ${{ needs.check.outputs.app_version }}
       game_version: ${{ needs.check.outputs.game_version }}
+
+  # 失败告警：任一环节失败（含 gen 脚本双 UP 自检、发版）即微信推送。
+  # 定时任务无人值守（凌晨 04:30），邮件不够显眼。密钥未配置时静默跳过。
+  # 手动单独跑 release.yml 不在此覆盖范围内（交互场景，人盯着）。
+  notify:
+    needs: [check, build-data, release]
+    if: failure()
+    runs-on: ubuntu-latest
+    env:
+      SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+    steps:
+      - name: Server酱微信推送
+        if: env.SENDKEY != ''
+        run: |
+          DESP="**流水线**: ${{ github.workflow }}（${{ github.event_name }} 触发）
+          **游戏版本**: ${{ needs.check.outputs.game_version }}
+          **应用版本**: ${{ needs.check.outputs.app_version }}
+
+          [点击查看失败详情](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          > 凌晨自动发布流水线失败，请尽快检查。"
+          curl -sS -X POST "https://sctapi.ftqq.com/${SENDKEY}.send" \
+            --data-urlencode "title=❌ OpenHoyo CI 失败：Version Release" \
+            --data-urlencode "desp=${DESP}"
