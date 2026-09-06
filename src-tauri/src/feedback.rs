@@ -178,31 +178,61 @@ fn build_issue_title(user_text: &str, app_version: &str) -> String {
     format!("[反馈] {head} - v{app_version}")
 }
 
-fn build_issue_markdown(user_text: &str, app: &tauri::AppHandle, log_excerpt: &str, zip_name: &str, image_names: &[String]) -> String {
-    let pkg = app.package_info();
+/// URL 预填正文的用户描述截断（中文百分号编码后每字符膨胀约 9 倍，
+/// 400 字符 + 元数据表编码后约 5KB，留足 GitHub ~8KB 上限的余量）
+const URL_TEXT_MAX_CHARS: usize = 400;
+
+/// URL 预填正文：只有元数据与用户描述（无日志），打开即可见、无需用户粘贴
+fn build_issue_body_compact(user_text: &str, app: &tauri::AppHandle, zip_name: &str, image_names: &[String]) -> String {
+    build_issue_body_compact_inner(
+        user_text,
+        &app.package_info().version.to_string(),
+        tauri::VERSION,
+        &windows_display_version(),
+        &std::env::var("LANG").unwrap_or_else(|_| "zh-CN".into()),
+        &Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        zip_name,
+        image_names,
+    )
+}
+
+fn build_issue_body_compact_inner(
+    user_text: &str,
+    app_version: &str,
+    tauri_version: &str,
+    os_version: &str,
+    locale: &str,
+    submitted_at: &str,
+    zip_name: &str,
+    image_names: &[String],
+) -> String {
+    let trimmed = user_text.trim();
+    let text: String = trimmed.chars().take(URL_TEXT_MAX_CHARS).collect();
+    let truncated = trimmed.chars().count() > URL_TEXT_MAX_CHARS;
+
     let mut md = String::new();
     md.push_str("### 问题描述\n\n");
-    md.push_str(user_text.trim());
+    md.push_str(&text);
+    if truncated {
+        md.push_str("\n\n> 描述过长已截断，全文见附件 zip 内 issue-body.md。\n");
+    }
     md.push_str("\n\n### 环境信息\n\n");
     md.push_str(&format!(
-        "| 项 | 值 |\n| --- | --- |\n| 应用版本 | v{} |\n| Tauri | {} |\n| 系统 | {} |\n| 区域设置 | {} |\n| 提交时间 | {} |\n\n",
-        pkg.version,
-        tauri::VERSION,
-        windows_display_version(),
-        std::env::var("LANG").unwrap_or_else(|_| "zh-CN".into()),
-        Local::now().format("%Y-%m-%d %H:%M:%S"),
+        "| 项 | 值 |\n| --- | --- |\n| 应用版本 | v{app_version} |\n| Tauri | {tauri_version} |\n| 系统 | {os_version} |\n| 区域设置 | {locale} |\n| 提交时间 | {submitted_at} |\n"
     ));
-    md.push_str("### 最近运行日志\n\n<details>\n\n```\n");
-    md.push_str(log_excerpt);
-    md.push_str("\n```\n\n</details>\n\n");
     md.push_str(&format!(
-        "### 附件\n\n完整诊断包 **`{zip_name}`**（含全部日志、崩溃转储与图片）已在本机生成，\
-         反馈向导已打开所在文件夹，请将其拖入本 Issue 上传。本正文已同时复制到剪贴板。\n"
+        "\n### 附件\n\n完整诊断包 **`{zip_name}`**（含最近 10 分钟运行日志、崩溃转储与图片）\
+         已在本机生成，反馈向导已打开所在文件夹，请拖入本 Issue 上传。\n"
     ));
     if !image_names.is_empty() {
-        md.push_str(&format!("\n已选择图片 {} 张：{}\n", image_names.len(), image_names.join("、")));
+        md.push_str(&format!("\n所选图片 {} 张：{}\n", image_names.len(), image_names.join("、")));
     }
     md
+}
+
+/// 完整正文（URL 版 + 内联日志段）：进剪贴板与 zip 的 issue-body.md
+fn build_issue_body_full(compact: &str, log_excerpt: &str) -> String {
+    format!("{compact}\n\n### 最近运行日志\n\n<details>\n\n```\n{log_excerpt}\n```\n\n</details>\n")
 }
 
 fn percent_encode(s: &str) -> String {
@@ -232,7 +262,7 @@ pub fn build_feedback_zip(
     image_paths: &[String],
     include_logs: bool,
     include_dumps: bool,
-) -> ApiResult<(PathBuf, String, String)> {
+) -> ApiResult<(PathBuf, String, String, String)> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -252,7 +282,8 @@ pub fn build_feedback_zip(
         .iter()
         .map(|p| PathBuf::from(p).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "image".into()))
         .collect();
-    let body = build_issue_markdown(user_text, app, &log_excerpt, &zip_path.file_name().unwrap().to_string_lossy(), &image_names);
+    let compact = build_issue_body_compact(user_text, app, &zip_path.file_name().unwrap().to_string_lossy(), &image_names);
+    let body = build_issue_body_full(&compact, &log_excerpt);
 
     let file = std::fs::File::create(&zip_path)
         .map_err(|e| ApiError::retcode(-22, format!("创建 zip 失败: {e}")))?;
@@ -303,11 +334,12 @@ pub fn build_feedback_zip(
     zip.finish()
         .map_err(|e| ApiError::retcode(-24, format!("完成 zip 失败: {e}")))?;
 
-    Ok((zip_path, title, body))
+    Ok((zip_path, title, compact, body))
 }
 
-/// 提交反馈：打包 → 正文复制剪贴板 → 打开预填标题的 Issue 页 → 资源管理器定位 zip。
-/// 正文不走 URL 预填（GitHub 上限约 8KB，日志正文百分号编码后必然超限）。
+/// 提交反馈：打包 → 弹指引（前端已弹，此处直接执行）→ URL 预填瘦身正文 →
+/// 剪贴板写含日志全文 → 打开 Issue 页 → 资源管理器定位 zip。
+/// URL 只带紧凑正文（元数据+描述，无日志），完整正文走剪贴板与 zip。
 #[tauri::command]
 pub async fn feedback_submit(
     app: tauri::AppHandle,
@@ -326,15 +358,17 @@ pub async fn feedback_submit(
         }
     }
 
-    let (zip_path, title, body) = build_feedback_zip(&app, &text, &image_paths, include_logs, include_dumps)?;
+    let (zip_path, title, compact, body) =
+        build_feedback_zip(&app, &text, &image_paths, include_logs, include_dumps)?;
     let dump_count = scan_dumps(&app).len();
 
-    // 完整正文（含日志）进剪贴板，URL 只带短标题
-    let clipboard_ok = app
-        .clipboard()
-        .write_text(&body)
-        .is_ok();
-    let issue_url = format!("{ISSUE_URL_BASE}?title={}", percent_encode(&title));
+    // URL 预填紧凑正文（无日志），含日志全文进剪贴板作为可选增强
+    let clipboard_ok = app.clipboard().write_text(&body).is_ok();
+    let issue_url = format!(
+        "{ISSUE_URL_BASE}?title={}&body={}",
+        percent_encode(&title),
+        percent_encode(&compact)
+    );
 
     app.opener()
         .open_url(&issue_url, None::<&str>)
@@ -406,5 +440,41 @@ mod tests {
         let b = unique_entry_name("images", "a.png", &mut used);
         assert_eq!(a, "images/a.png");
         assert_ne!(a, b);
+    }
+
+    /// URL 预填正文在最坏情况下（描述打满 400 个中文字符 + 多张图片）
+    /// 编码后也必须显著低于 GitHub ~8KB 的 URL 上限
+    #[test]
+    fn compact_issue_body_fits_url_limit() {
+        let text = "问题".repeat(300); // 600 个中文字符 → 触发 400 截断
+        let images: Vec<String> = (1..=6).map(|i| format!("截图第{i}张.png")).collect();
+        let body = build_issue_body_compact_inner(
+            &text,
+            "0.1.5",
+            "2.11.5",
+            "Windows 10 Pro 25H2 (build 26200)",
+            "zh-CN",
+            "2026-09-07 00:30:00",
+            "feedback-20260907-003000.zip",
+            &images,
+        );
+        assert!(body.contains("已截断"), "超长描述应被截断: {}", &body[..80]);
+        let encoded = format!(
+            "{ISSUE_URL_BASE}?title={}&body={}",
+            percent_encode("[反馈] 测试标题测试标题测试标题测试标题测试标题 - v0.1.5"),
+            percent_encode(&body)
+        );
+        assert!(encoded.len() < 7000, "URL 编码后 {} 字符，超出安全范围", encoded.len());
+    }
+
+    #[test]
+    fn full_body_contains_log_section() {
+        let compact = build_issue_body_compact_inner(
+            "测试", "0.1.5", "2.11.5", "Windows", "zh-CN", "t", "z.zip", &[]
+        );
+        let full = build_issue_body_full(&compact, "[2026-09-07 00:00:00][INFO][app] 日志行");
+        assert!(full.contains("### 最近运行日志"));
+        assert!(full.contains("日志行"));
+        assert!(!compact.contains("最近运行日志"), "紧凑版不应包含日志段");
     }
 }

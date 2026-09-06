@@ -1,7 +1,7 @@
 // 设置页：主题切换（跟随系统/浅色/深色）、当前版本号与手动检查更新、反馈中心
 import { checkForUpdates } from "./updater";
-import { api, errText, type FeedbackResult } from "./api";
-import { toast } from "./ui";
+import { api, errText } from "./api";
+import { confirmDialog, toast } from "./ui";
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -171,11 +171,25 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
     const text = (content.querySelector<HTMLTextAreaElement>("#fb-text")!.value ?? "").trim();
     const includeLogs = (content.querySelector<HTMLInputElement>("#fb-logs")!).checked;
     const includeDumps = (content.querySelector<HTMLInputElement>("#fb-dumps")!).checked;
-    fbSubmitBtn.disabled = true;
-    fbHint.textContent = "正在打包诊断信息…";
-    void api
-      .feedbackSubmit(text, fbImages.slice(), includeLogs, includeDumps)
-      .then((r: FeedbackResult) => {
+
+    void (async () => {
+      // 提交前操作指引：让用户知道浏览器打开后要做什么
+      const go = await confirmDialog(
+        "反馈提交指引",
+        `点击「继续提交」后：<br/><br/>` +
+          `1. 浏览器将打开 GitHub Issue 页面，<b>标题与正文（问题描述 + 系统信息）已自动填好</b>，无需修改<br/>` +
+          `2. 把资源管理器中已定位的 <b>反馈 zip 包</b>拖入 Issue 正文区上传${fbImages.length > 0 ? "（所选图片也一并拖入）" : ""}<br/>` +
+          `3. 点击 <b>Submit new issue</b> 完成提交<br/><br/>` +
+          `完整运行日志在 zip 内；剪贴板已准备含日志的完整正文，如需内联展示可在正文框 Ctrl+V 覆盖。`,
+        "继续提交",
+      );
+      if (!go) {
+        return;
+      }
+      fbSubmitBtn.disabled = true;
+      fbHint.textContent = "正在打包诊断信息…";
+      try {
+        const r = await api.feedbackSubmit(text, fbImages.slice(), includeLogs, includeDumps);
         const parts = [`zip：${r.zipPath.split(/[\\/]/).pop() ?? ""}`];
         if (r.dumpCount > 0) {
           parts.push(`崩溃转储 ${r.dumpCount} 个`);
@@ -183,17 +197,16 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
         if (r.imageCount > 0) {
           parts.push(`图片 ${r.imageCount} 张`);
         }
-        fbHint.textContent = r.clipboardOk
-          ? `Issue 页面已打开：在正文框 Ctrl+V 粘贴反馈正文，再把 ${parts.join("、")}拖入上传后提交`
-          : `Issue 页面已打开（剪贴板写入失败，正文在 zip 的 issue-body.md 里手动复制）；附件：${parts.join("、")}`;
-        toast("反馈包已生成，正文已复制到剪贴板", "success");
-      })
-      .catch((e: unknown) => {
+        fbHint.textContent = `Issue 页面已打开（标题正文已预填）：请把 ${parts.join("、")}拖入上传，点 Submit new issue 提交${
+          r.clipboardOk ? "；含日志全文已复制，可 Ctrl+V 内联" : ""
+        }`;
+        toast("反馈包已生成，Issue 页面已打开", "success");
+      } catch (e: unknown) {
         fbHint.textContent = "";
         toast(errText(e), "error");
-      })
-      .finally(() => {
+      } finally {
         fbSubmitBtn.disabled = false;
-      });
+      }
+    })();
   });
 }
