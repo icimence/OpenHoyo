@@ -132,6 +132,7 @@ export interface FeedbackResult {
   issueUrl: string;
   dumpCount: number;
   imageCount: number;
+  clipboardOk: boolean;
 }
 
 // ---------------------------------------------------------------------------

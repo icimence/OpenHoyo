@@ -87,7 +87,7 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
         <div class="setting-row">
           <div class="setting-text">
             <div class="setting-label">反馈中心</div>
-            <div class="setting-desc">提交时会自动附带应用元数据、最近 10 分钟运行日志与崩溃转储（如有），打包为 zip 并打开预填好的 GitHub Issue 页面，将 zip 与图片拖入即可提交</div>
+            <div class="setting-desc">提交时会自动附带应用元数据、最近 10 分钟运行日志与崩溃转储（如有），打包为 zip；反馈正文复制到剪贴板并打开 GitHub Issue 页面，粘贴后拖入附件即可提交</div>
           </div>
         </div>
         <div class="fb-form">
@@ -183,8 +183,10 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
         if (r.imageCount > 0) {
           parts.push(`图片 ${r.imageCount} 张`);
         }
-        fbHint.textContent = `已打开 GitHub Issue 页面，请将 ${parts.join("，")}拖入 Issue 后提交`;
-        toast("已生成反馈包并打开 GitHub Issue 页面", "success");
+        fbHint.textContent = r.clipboardOk
+          ? `Issue 页面已打开：在正文框 Ctrl+V 粘贴反馈正文，再把 ${parts.join("、")}拖入上传后提交`
+          : `Issue 页面已打开（剪贴板写入失败，正文在 zip 的 issue-body.md 里手动复制）；附件：${parts.join("、")}`;
+        toast("反馈包已生成，正文已复制到剪贴板", "success");
       })
       .catch((e: unknown) => {
         fbHint.textContent = "";

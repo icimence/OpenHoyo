@@ -14,6 +14,7 @@ use serde::Serialize;
 use std::io::Write;
 use std::path::PathBuf;
 use tauri::Manager;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
 
 const ISSUE_URL_BASE: &str = "https://github.com/icimence/OpenHoyo/issues/new";
@@ -29,6 +30,8 @@ pub struct FeedbackResult {
     pub issue_url: String,
     pub dump_count: usize,
     pub image_count: usize,
+    /// 正文是否已成功复制到剪贴板（失败时用户需从 zip 内 issue-body.md 手动复制）
+    pub clipboard_ok: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +197,7 @@ fn build_issue_markdown(user_text: &str, app: &tauri::AppHandle, log_excerpt: &s
     md.push_str("\n```\n\n</details>\n\n");
     md.push_str(&format!(
         "### 附件\n\n完整诊断包 **`{zip_name}`**（含全部日志、崩溃转储与图片）已在本机生成，\
-         反馈向导已打开所在文件夹，请将其拖入本 Issue 上传。\n"
+         反馈向导已打开所在文件夹，请将其拖入本 Issue 上传。本正文已同时复制到剪贴板。\n"
     ));
     if !image_names.is_empty() {
         md.push_str(&format!("\n已选择图片 {} 张：{}\n", image_names.len(), image_names.join("、")));
@@ -261,6 +264,12 @@ pub fn build_feedback_zip(
         .map_err(|e| ApiError::retcode(-23, format!("写入 meta 失败: {e}")))?;
     zip.write_all(meta.as_bytes()).map_err(|e| ApiError::retcode(-23, format!("写入 meta 失败: {e}")))?;
 
+    // Issue 正文快照（剪贴板被占用时的兜底）
+    zip.start_file("issue-body.md", opts)
+        .map_err(|e| ApiError::retcode(-23, format!("写入正文失败: {e}")))?;
+    zip.write_all(body.as_bytes())
+        .map_err(|e| ApiError::retcode(-23, format!("写入正文失败: {e}")))?;
+
     if include_logs {
         zip.start_file("logs/recent.log", opts)
             .map_err(|e| ApiError::retcode(-23, format!("写入日志失败: {e}")))?;
@@ -297,7 +306,8 @@ pub fn build_feedback_zip(
     Ok((zip_path, title, body))
 }
 
-/// 提交反馈：打包 → 打开预填 Issue 的浏览器 → 资源管理器定位 zip
+/// 提交反馈：打包 → 正文复制剪贴板 → 打开预填标题的 Issue 页 → 资源管理器定位 zip。
+/// 正文不走 URL 预填（GitHub 上限约 8KB，日志正文百分号编码后必然超限）。
 #[tauri::command]
 pub async fn feedback_submit(
     app: tauri::AppHandle,
@@ -319,24 +329,31 @@ pub async fn feedback_submit(
     let (zip_path, title, body) = build_feedback_zip(&app, &text, &image_paths, include_logs, include_dumps)?;
     let dump_count = scan_dumps(&app).len();
 
-    let issue_url = format!(
-        "{ISSUE_URL_BASE}?title={}&body={}",
-        percent_encode(&title),
-        percent_encode(&body)
-    );
+    // 完整正文（含日志）进剪贴板，URL 只带短标题
+    let clipboard_ok = app
+        .clipboard()
+        .write_text(&body)
+        .is_ok();
+    let issue_url = format!("{ISSUE_URL_BASE}?title={}", percent_encode(&title));
 
     app.opener()
         .open_url(&issue_url, None::<&str>)
         .map_err(|e| ApiError::retcode(-27, format!("打开浏览器失败: {e}")))?;
     let _ = app.opener().reveal_item_in_dir(&zip_path);
 
-    log::info!("[feedback] 反馈包已生成: {}（转储 {dump_count}，图片 {}）", zip_path.display(), image_paths.len());
+    log::info!(
+        "[feedback] 反馈包已生成: {}（转储 {dump_count}，图片 {}，剪贴板 {}）",
+        zip_path.display(),
+        image_paths.len(),
+        if clipboard_ok { "已写入" } else { "写入失败" }
+    );
 
     Ok(FeedbackResult {
         zip_path: zip_path.to_string_lossy().to_string(),
         issue_url,
         dump_count,
         image_count: image_paths.len(),
+        clipboard_ok,
     })
 }
 
