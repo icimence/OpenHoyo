@@ -28,8 +28,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "user", label: "用户", icon: "i-user" },
   { id: "announcement", label: "主页", icon: "i-home" },
-  { id: "passport", label: "胡桃通行证", icon: "i-passport" },
-  { id: "feedback", label: "反馈中心", icon: "i-feedback" },
   { id: "launchgame", label: "启动游戏", icon: "i-launch", group: "工具" },
   { id: "gachalog", label: "祈愿记录", icon: "i-gacha", group: "工具" },
   { id: "achievement", label: "成就管理", icon: "i-achievement", group: "工具" },
@@ -39,9 +37,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "spiralabyss", label: "深境螺旋", icon: "i-abyss", group: "周期" },
   { id: "rolecombat", label: "幻想真境剧诗", icon: "i-rolecombat", group: "周期" },
   { id: "hardchallenge", label: "幽境危战", icon: "i-hardchallenge", group: "周期" },
-  { id: "wikiavatar", label: "角色资料", icon: "i-wiki", group: "数据" },
-  { id: "wikiweapon", label: "武器资料", icon: "i-weapon", group: "数据" },
-  { id: "wikimonster", label: "怪物资料", icon: "i-monster", group: "数据" },
   { id: "setting", label: "设置", icon: "i-setting" },
 ];
 
