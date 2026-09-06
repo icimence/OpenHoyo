@@ -28,7 +28,6 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "user", label: "用户", icon: "i-user" },
   { id: "announcement", label: "主页", icon: "i-home" },
   { id: "gachalog", label: "祈愿记录", icon: "i-gacha", group: "工具" },
   { id: "dailynote", label: "实时便笺", icon: "i-dailynote", group: "工具" },
@@ -40,7 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "setting", label: "设置", icon: "i-setting", group: "设置" },
 ];
 
-let currentPage = "user";
+let currentPage = "gachalog";
 let users: UserDto[] = [];
 let currentUserId: number | null = null;
 
@@ -54,14 +53,6 @@ function esc(s: string): string {
   return d.innerHTML;
 }
 
-function formatTime(ms: number): string {
-  if (ms <= 0) {
-    return "从未刷新";
-  }
-  const d = new Date(ms);
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 function currentUser(): UserDto | undefined {
   return users.find((u) => u.id === currentUserId) ?? users[0];
@@ -97,7 +88,7 @@ function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
   let lastGroup: string | undefined;
-  const implemented = new Set(["user", "gachalog", "setting", "dailynote", "spiralabyss", "rolecombat", "hardchallenge"]);
+  const implemented = new Set(["gachalog", "setting", "dailynote", "spiralabyss", "rolecombat", "hardchallenge"]);
   for (const item of NAV_ITEMS) {
     if (item.group && item.group !== lastGroup) {
       html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
@@ -121,9 +112,7 @@ function renderNav(): void {
 
 function renderPage(): void {
   const content = document.getElementById("content")!;
-  if (currentPage === "user") {
-    renderUserPage(content);
-  } else if (currentPage === "gachalog") {
+  if (currentPage === "gachalog") {
     const cur = currentUser();
     renderGachaPage(content, {
       currentUser: cur
@@ -158,66 +147,8 @@ function renderPage(): void {
 }
 
 // ---------------------------------------------------------------------------
-// 用户页（唯一已实现的页面）
+// 用户账号卡片操作（用户页与左下角浮窗共用）
 // ---------------------------------------------------------------------------
-
-function renderUserPage(content: HTMLElement): void {
-  if (users.length === 0) {
-    content.innerHTML = `
-      <div class="page-header"><h2>用户</h2><p>管理米哈游账号与登录凭证</p></div>
-      <div class="empty-users">
-        <svg viewBox="0 0 16 16"><use href="#i-user"/></svg>
-        <div class="title">尚未登录</div>
-        <div class="hint">通过左下角的用户菜单，或以下入口添加账号</div>
-        <div class="entry">
-          <button class="primary" id="empty-qr"><svg><use href="#i-qr"/></svg>扫码登录</button>
-          <button id="empty-captcha"><svg><use href="#i-phone"/></svg>手机验证码</button>
-          <button id="empty-cookie"><svg><use href="#i-keyboard"/></svg>手动输入</button>
-        </div>
-      </div>`;
-    document.getElementById("empty-qr")!.addEventListener("click", openQrDialog);
-    document.getElementById("empty-captcha")!.addEventListener("click", openCaptchaDialog);
-    document.getElementById("empty-cookie")!.addEventListener("click", () => openCookieDialog(false));
-    return;
-  }
-
-  const cards = users
-    .map(
-      (u) => `
-      <div class="user-card">
-        ${avatarHtml(u)}
-        <div class="body">
-          <div class="row-1">
-            <span class="nickname">${esc(u.nickname ?? "未知昵称")}</span>
-            <span class="badge ${u.is_oversea ? "os" : "cn"}">${u.is_oversea ? "HoYoLAB" : "米游社"}</span>
-            ${u.id === currentUserId ? '<span class="badge">当前</span>' : ""}
-          </div>
-          <div class="roles">${
-            u.game_roles
-              .map((r) => `${esc(r.nickname)}<span class="uid">${esc(r.game_uid)}</span> · ${esc(r.region_name)} · Lv.${r.level}`)
-              .join("<br/>") || "无游戏角色"
-          }</div>
-          <div class="meta">cookie_token 刷新于 ${formatTime(u.cookie_token_updated_at)}</div>
-        </div>
-        <div class="actions">
-          <button class="icon-btn" data-act="copy" data-id="${u.id}" title="复制 Cookie"><svg><use href="#i-copy"/></svg></button>
-          <button class="icon-btn" data-act="refresh" data-id="${u.id}" title="刷新 Cookie"><svg><use href="#i-refresh"/></svg></button>
-          <button class="icon-btn danger" data-act="remove" data-id="${u.id}" title="移除用户"><svg><use href="#i-delete"/></svg></button>
-        </div>
-      </div>`,
-    )
-    .join("");
-
-  content.innerHTML = `
-    <div class="page-header"><h2>用户</h2><p>共 ${users.length} 个账号，点击左下角用户菜单可添加更多账号</p></div>
-    <div class="user-grid">${cards}</div>`;
-
-  content.querySelectorAll<HTMLButtonElement>(".icon-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      void handleCardAction(btn.dataset.act!, Number(btn.dataset.id), btn);
-    });
-  });
-}
 
 async function handleCardAction(act: string, id: number, btn?: HTMLButtonElement): Promise<void> {
   const u = users.find((x) => x.id === id);
