@@ -29,6 +29,9 @@
   --spinner-track: rgba(255, 255, 255, 0.15);
   --scrollbar-thumb: rgba(255, 255, 255, 0.18);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+  --update-tint: rgba(76, 194, 255, 0.1);
+  --update-tint-hover: rgba(76, 194, 255, 0.17);
+  --update-stroke: rgba(76, 194, 255, 0.26);
   --radius: 8px;
   --nav-width: 268px;
   --titlebar-height: 40px;
@@ -60,6 +63,9 @@ html[data-theme="light"] {
   --spinner-track: rgba(0, 0, 0, 0.12);
   --scrollbar-thumb: rgba(0, 0, 0, 0.22);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.36);
+  --update-tint: rgba(0, 95, 184, 0.07);
+  --update-tint-hover: rgba(0, 95, 184, 0.13);
+  --update-stroke: rgba(0, 95, 184, 0.22);
 }
 
 * {
@@ -152,6 +158,35 @@ body {
 .titlebar-actions button.close:hover {
   background: #c42b1c;
   color: #fff;
+}
+
+/* 更新徽标按钮（最小化左侧）：轻微强调，不抢视觉 */
+.titlebar-actions button.update-btn {
+  width: auto;
+  height: 28px;
+  margin: 6px 10px 6px 0;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: 6px;
+  background: var(--update-tint);
+  border: 1px solid var(--update-stroke);
+  color: var(--accent-light);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.titlebar-actions button.update-btn:hover {
+  background: var(--update-tint-hover);
+}
+
+.titlebar-actions button.update-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 #win-min svg {

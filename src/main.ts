@@ -11,7 +11,7 @@ import {
   setStatus,
   toast,
 } from "./ui";
-import { checkForUpdates } from "./updater";
+import { checkForUpdates, initUpdateBadge } from "./updater";
 import { initTheme, renderSettingsPage } from "./settings";
 
 // ---------------------------------------------------------------------------
@@ -625,6 +625,7 @@ async function main(): Promise<void> {
   // 标题栏窗口控制
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const win = getCurrentWindow();
+  initUpdateBadge();
   document.getElementById("win-min")!.addEventListener("click", () => {
     void win.minimize();
   });

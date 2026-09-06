@@ -2,7 +2,14 @@
 import type { Update } from "@tauri-apps/plugin-updater";
 import { closeDialog, onDialogCancel, onDialogOk, openDialog, setStatus, toast } from "./ui";
 
-/** 检查更新。silent=true 时无更新不打扰；发现新版本弹出升级对话框 */
+/** 待安装的更新：静默检查发现新版本时先挂起，由标题栏徽标触发安装 */
+let pendingUpdate: Update | null = null;
+
+/**
+ * 检查更新。
+ * silent=true（启动静默检查）：发现新版本只点亮标题栏徽标，不弹窗打扰；
+ * silent=false（用户主动检查）：点亮徽标并直接弹出升级对话框。
+ */
 export async function checkForUpdates(silent: boolean): Promise<void> {
   try {
     const { check } = await import("@tauri-apps/plugin-updater");
@@ -13,12 +20,40 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
       }
       return;
     }
-    await showUpdateDialog(update);
+    pendingUpdate = update;
+    showUpdateBadge(update.version);
+    if (!silent) {
+      await showUpdateDialog(update);
+    }
   } catch (e) {
     if (!silent) {
       toast(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
     }
   }
+}
+
+/** 标题栏更新徽标（位于最小化按钮左侧）：轻微高亮提示有新版本 */
+export function showUpdateBadge(version: string): void {
+  const btn = document.getElementById("win-update");
+  if (!btn) {
+    return;
+  }
+  const label = btn.querySelector("span");
+  if (label) {
+    label.textContent = `v${version}`;
+  }
+  btn.title = `发现新版本 v${version}，点击下载更新`;
+  btn.classList.remove("hidden");
+}
+
+export function initUpdateBadge(): void {
+  document.getElementById("win-update")?.addEventListener("click", () => {
+    if (pendingUpdate) {
+      void showUpdateDialog(pendingUpdate);
+    } else {
+      void checkForUpdates(false);
+    }
+  });
 }
 
 async function showUpdateDialog(update: Update): Promise<void> {
