@@ -240,6 +240,16 @@ if (targetRecords.length === 0) throw new Error("挂载目标窗口无任何记�
   }
 }
 
+// 武器池双 UP 不变量：国服自 1.0 起每期「神铸赋形」恒为双五星 UP，名单不足 2
+// 即数据源遗漏（如 6.6 上半镜像漏掉尘光七谕）。历史窗口沿用现有名单不会引入
+// 新错，此断言主要拦截当期公告解析缺漏与人工编辑失误——宁可 CI 红也不发错误数据。
+const badWeapons = out.filter((e) => e.Type === 302 && e.UpOrangeList.length < 2);
+if (badWeapons.length > 0) {
+  throw new Error(
+    `武器池 UP 名单异常（应为双 UP）: ${badWeapons.map((b) => `${b.Version} ${b.From.slice(0, 10)} 仅 ${b.UpOrangeList.length} 个`).join("；")}`,
+  );
+}
+
 writeFileSync(eventsPath, JSON.stringify(out, null, 1));
 console.log(
   `✓ 生成完成：共 ${out.length} 期（公告 ${fromApi}，历史沿用 ${fromHistory}，1.x 原样 ${keptEarly}），今日 ${today}`,
