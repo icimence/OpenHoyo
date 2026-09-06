@@ -346,8 +346,8 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
   }
 
   /**
-   * @param interactive true=用户主动刷新：命中风控时自动走验证流程
-   *                  false=进入页面/定时自动刷新：不弹验证码，错误卡片提供验证按钮
+   * @param interactive true=命中风控时自动弹出安全验证（进入页面/手动刷新）
+   *                  false=定时自动刷新：不弹验证码，错误卡片提供验证按钮
    */
   async function refresh(interactive: boolean): Promise<void> {
     if (refreshing) {
@@ -394,5 +394,6 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
   }, 8 * 60 * 1000);
 
   startTicker();
-  void refresh(false);
+  // 进入页面即拉取；被风控拦截时直接弹出安全验证，无需再点"安全验证"按钮
+  void refresh(true);
 }
