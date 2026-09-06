@@ -221,6 +221,25 @@ const targetRecords = out.filter(
 );
 if (targetRecords.length === 0) throw new Error("挂载目标窗口无任何记录");
 
+// 历史锚点断言（用户口述的已验证时间，防止版本表回归）
+{
+  const byVer = {};
+  for (const e of out) (byVer[e.Version] ??= []).push(e);
+  const expect = [
+    ["3.0", "2022-08-24T06:00:00+08:00", "2022-09-09T17:59:59+08:00"],
+    ["3.0", "2022-09-09T18:00:00+08:00", "2022-09-27T14:59:59+08:00"],
+    ["3.1", "2022-09-28T06:00:00+08:00", "2022-10-14T17:59:59+08:00"],
+    ["3.1", "2022-10-14T18:00:00+08:00", "2022-11-01T14:59:59+08:00"],
+    ["3.3", "2022-12-07T06:00:00+08:00", "2022-12-27T17:59:59+08:00"],
+    ["3.3", "2022-12-27T18:00:00+08:00", "2023-01-17T14:59:59+08:00"],
+    ["2.6", "2022-04-19T18:00:00+08:00", "2022-05-31T05:59:00+08:00"], // 白鹭之庭特例
+  ];
+  for (const [ver, from, to] of expect) {
+    const hit = (byVer[ver] ?? []).some((e) => e.From === from && e.To === to);
+    if (!hit) throw new Error(`历史锚点断言失败: ${ver} ${from} ~ ${to}`);
+  }
+}
+
 writeFileSync(eventsPath, JSON.stringify(out, null, 1));
 console.log(
   `✓ 生成完成：共 ${out.length} 期（公告 ${fromApi}，历史沿用 ${fromHistory}，1.x 原样 ${keptEarly}），今日 ${today}`,

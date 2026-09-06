@@ -67,11 +67,15 @@ export const VERSIONS = [
 ];
 
 // 版本结构例外（默认 42 天/上半 20 天）
+// - 2.6 因项目进度延长至 62 天（03-30 → 05-31），其下半池于 05-31 05:59 提前关池（生成器特例处理）
+// - 2.7 为 43 天（版本日从周三漂移到周二后的校准恢复）
+// - 3.0/3.1/3.2 为补进度缩短至 35 天（5 周），上半 16 天；3.3 起恢复 42 天
 const STRUCT_OVERRIDES = {
+  "2.6": { length: 62 },
   "2.7": { length: 43 },
+  "3.0": { length: 35, firstHalfDays: 16 },
   "3.1": { length: 35, firstHalfDays: 16 },
   "3.2": { length: 35, firstHalfDays: 16 },
-  "3.3": { length: 35, firstHalfDays: 16 },
 };
 
 const DAY = 86400000;
