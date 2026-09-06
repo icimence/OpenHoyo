@@ -107,8 +107,9 @@ pub async fn build_query_from_stoken(
     ))
 }
 
-/// 网页缓存方式：注册表定位游戏目录 → webCaches/<version>/Cache/Cache_Data/data_2
-/// → 找最后一个祈愿页 URL（对应原版 GachaLogQueryWebCacheProvider）
+/// 网页缓存方式（对应原版 GachaLogQueryWebCacheProvider + UnityLogGameLocator）：
+/// Unity 日志反推游戏目录 → webCaches/<version>/Cache/Cache_Data/data_2
+/// → 找最后一个祈愿页 URL
 pub fn build_query_from_web_cache() -> ApiResult<String> {
     let url = extract_gacha_url_from_web_cache()?;
     // URL 形如 https://...index.html?query...#/log
@@ -124,73 +125,172 @@ pub fn build_query_from_web_cache() -> ApiResult<String> {
 }
 
 fn extract_gacha_url_from_web_cache() -> ApiResult<String> {
-    // 国服：HKCU\Software\miHoYo\原神，国际服：HKCU\Software\miHoYo\Genshin Impact
-    let candidates = [
-        (r"Software\miHoYo\原神", "YuanShen.exe", "YuanShen_Data"),
-        (r"Software\miHoYo\Genshin Impact", "GenshinImpact.exe", "GenshinImpact_Data"),
-    ];
-
-    for (reg_path, _default_exe, data_folder) in candidates {
-        let install_path = (|| {
-            let key = winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey(reg_path).ok()?;
-            let path: String = key.get_value("InstallPath").ok()?;
-            Some(path)
-        })();
-        let Some(install_path) = install_path else {
-            continue;
-        };
-
-        let web_caches = std::path::Path::new(&install_path).join(data_folder).join("webCaches");
-        let Some(cache_file) = latest_version_cache_file(&web_caches) else {
-            continue;
-        };
-        if let Some(url) = match_gacha_url_in_cache(&cache_file) {
-            return Ok(url);
+    for (game_dir, data_folder) in game_dir_candidates() {
+        let web_caches = game_dir.join(data_folder).join("webCaches");
+        for cache_file in cache_files_newest_first(&web_caches) {
+            if let Some(url) = match_gacha_url_in_cache(&cache_file) {
+                return Ok(url);
+            }
         }
     }
 
     Err(ApiError::retcode(
         -11,
-        "未找到原神安装目录或网页缓存中没有祈愿记录 URL（请先在游戏内打开一次祈愿记录页面）",
+        "未能定位原神安装目录，或网页缓存中没有祈愿记录 URL（请先在游戏内打开一次祈愿记录页面）",
     ))
 }
 
-fn latest_version_cache_file(web_caches: &std::path::Path) -> Option<std::path::PathBuf> {
-    // 版本目录形如 1.2.3.4，取最大者（对应原版 VersionRegex + MaxBy）
+/// 游戏目录候选：(游戏 exe 所在目录, 数据文件夹名)。
+/// 优先 Unity 日志反推（HoYoPlay 安装时注册表 InstallPath 为空），
+/// 注册表旧键作为兜底（对应原版 UnityLogGameLocator 的定位方式）。
+fn game_dir_candidates() -> Vec<(std::path::PathBuf, &'static str)> {
+    let mut out: Vec<(std::path::PathBuf, &'static str)> = Vec::new();
+
+    // %APPDATA%\..\LocalLow\miHoYo\<游戏名>\output_log.txt
+    if let Some(local_low) = std::env::var("APPDATA")
+        .ok()
+        .and_then(|appdata| std::path::Path::new(&appdata).parent().map(|p| p.join("LocalLow")))
+    {
+        for (sub, data_folder) in [("Genshin Impact", "GenshinImpact_Data"), ("原神", "YuanShen_Data")] {
+            let log = local_low.join("miHoYo").join(sub).join("output_log.txt");
+            if let Some(dir) = game_dir_from_unity_log(&log) {
+                out.push((dir, data_folder));
+            }
+        }
+    }
+
+    for (reg_path, data_folder) in [
+        (r"Software\miHoYo\原神", "YuanShen_Data"),
+        (r"Software\miHoYo\Genshin Impact", "GenshinImpact_Data"),
+    ] {
+        let install_path = (|| {
+            let key = winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey(reg_path).ok()?;
+            let path: String = key.get_value("InstallPath").ok()?;
+            Some(path)
+        })();
+        if let Some(path) = install_path {
+            out.push((std::path::PathBuf::from(path), data_folder));
+        }
+    }
+
+    out
+}
+
+/// Unity 日志中形如 `E:/Games/.../YuanShen_Data/...` 的行反推游戏目录
+/// （对应原版 WarmupFileLine 正则，路径可含空格与正反斜杠）
+fn game_dir_from_unity_log(log: &std::path::Path) -> Option<std::path::PathBuf> {
+    let content = String::from_utf8_lossy(&std::fs::read(log).ok()?).to_string();
+    let dir = game_dir_from_log_content(&content)?;
+    Some(std::path::PathBuf::from(dir))
+}
+
+fn game_dir_from_log_content(content: &str) -> Option<String> {
+    for marker in ["YuanShen_Data", "GenshinImpact_Data"] {
+        let mut from = 0usize;
+        while let Some(marker_pos) = ascii_find_ci(&content[from..], marker).map(|i| from + i) {
+            if let Some(dir) = dir_before_marker(content, marker_pos, marker) {
+                return Some(dir);
+            }
+            from = marker_pos + marker.len();
+        }
+    }
+    None
+}
+
+/// marker 前同一行内找最后一个盘符 X:/ 或 X:\ 作为路径起点，截到 marker 为止
+fn dir_before_marker(content: &str, marker_pos: usize, marker: &str) -> Option<String> {
+    let dir = path_prefix_before_marker(content, marker_pos)?;
+    if dir.len() < 3 {
+        return None;
+    }
+    let exe = if marker == "YuanShen_Data" { "YuanShen.exe" } else { "GenshinImpact.exe" };
+    if std::path::Path::new(&format!("{dir}\\{exe}")).is_file() {
+        Some(dir.to_string())
+    } else {
+        None
+    }
+}
+
+fn path_prefix_before_marker(content: &str, marker_pos: usize) -> Option<&str> {
+    let line_start = content[..marker_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line = &content[line_start..marker_pos];
+    let bytes = line.as_bytes();
+    let mut start = None;
+    for i in 0..bytes.len().saturating_sub(2) {
+        if bytes[i].is_ascii_alphabetic() && bytes[i + 1] == b':' && (bytes[i + 2] == b'/' || bytes[i + 2] == b'\\') {
+            start = Some(i);
+        }
+    }
+    Some(line[start?..].trim_end_matches(['\\', '/']))
+}
+
+/// ASCII 大小写不敏感子串查找
+fn ascii_find_ci(haystack: &str, needle: &str) -> Option<usize> {
+    let h = haystack.as_bytes();
+    let n = needle.as_bytes();
+    if n.is_empty() || h.len() < n.len() {
+        return None;
+    }
+    (0..=h.len() - n.len()).position(|i| h[i..i + n.len()].eq_ignore_ascii_case(n))
+}
+
+/// 版本目录（形如 1.2.3.4）从新到旧的 data_2 候选；
+/// 无版本子目录时回退 webCaches 本身（对应原版 latestVersionCacheFolder ??= webCacheFolder）
+fn cache_files_newest_first(web_caches: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut versions: Vec<(Vec<u64>, std::path::PathBuf)> = Vec::new();
-    for entry in std::fs::read_dir(web_caches).ok()? {
-        let entry = entry.ok()?;
-        if !entry.file_type().ok().is_some_and(|t| t.is_dir()) {
+    let Ok(entries) = std::fs::read_dir(web_caches) else {
+        return Vec::new();
+    };
+    for entry in entries.flatten() {
+        if !entry.file_type().is_ok_and(|t| t.is_dir()) {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        let parts: Vec<Option<u64>> = name.split('.').map(|p| p.parse().ok()).collect();
-        if parts.is_empty() || parts.iter().any(|p| p.is_none()) {
+        let parts: Vec<&str> = name.split('.').collect();
+        if parts.len() != 4 {
             continue;
         }
-        versions.push((parts.into_iter().map(|p| p.unwrap()).collect(), entry.path()));
+        let nums: Vec<u64> = match parts.iter().map(|p| p.parse::<u64>().ok()).collect::<Option<Vec<_>>>() {
+            Some(v) => v,
+            None => continue,
+        };
+        versions.push((nums, entry.path()));
     }
-    versions.sort_by(|a, b| a.0.cmp(&b.0));
-    let latest = versions.last()?.1.clone();
-    Some(latest.join("Cache").join("Cache_Data").join("data_2"))
+    versions.sort_by(|a, b| b.0.cmp(&a.0));
+    if versions.is_empty() {
+        return vec![web_caches.join("Cache").join("Cache_Data").join("data_2")];
+    }
+    versions
+        .into_iter()
+        .map(|(_, dir)| dir.join("Cache").join("Cache_Data").join("data_2"))
+        .collect()
 }
 
+/// 在缓存文件中找最后一个祈愿页 URL。事件名后缀随版本变化
+/// （e20190909gacha-v3 → e20190909gacha-df01aea2），故匹配到事件名后
+/// 向后找 /index.html?（对应原版 Match 的字节级 LastIndexOf）
 fn match_gacha_url_in_cache(path: &std::path::Path) -> Option<String> {
     let bytes = std::fs::read(path).ok()?;
-    let needles: [&[u8]; 2] = [
-        b"https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?",
-        b"https://gs.hoyoverse.com/genshin/event/e20190909gacha-v3/index.html?",
+    match_gacha_url_bytes(&bytes)
+}
+
+fn match_gacha_url_bytes(bytes: &[u8]) -> Option<String> {
+    let prefixes: [&[u8]; 2] = [
+        b"https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-",
+        b"https://gs.hoyoverse.com/genshin/event/e20190909gacha-",
     ];
-    let mut best: Option<usize> = None;
-    for needle in needles {
+    let index_html = b"/index.html?";
+    let mut best: Option<usize> = None; // 完整 URL 起始（https:// 处）
+    for prefix in prefixes {
         let mut search_from = 0usize;
-        while let Some(pos) = find_subslice(&bytes[search_from..], needle) {
-            let abs = search_from + pos + needle.len();
-            best = Some(match best {
-                Some(b) if b >= abs => b,
-                _ => abs,
-            });
-            search_from += pos + needle.len();
+        while let Some(pos) = find_subslice(&bytes[search_from..], prefix) {
+            let abs = search_from + pos;
+            // 事件名后缀 ≤ 32 字节且不含路径分隔符，随后应为 /index.html?
+            let suffix_zone = &bytes[abs + prefix.len()..(abs + prefix.len() + 48).min(bytes.len())];
+            if find_subslice(suffix_zone, index_html).is_some() {
+                best = best.map_or(Some(abs), |b| Some(b.max(abs)));
+            }
+            search_from = abs + prefix.len();
         }
     }
     let start = best?;
@@ -556,6 +656,69 @@ pub fn pool_display_name(gacha_type: i32) -> &'static str {
 }
 
 #[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gacha_url_matches_new_and_old_event_suffix() {
+        // 新版哈希后缀（2.52+ 缓存实测）与旧版 -v3 两种形态都要命中
+        let old = b"junk\0https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?auth_appid=webview_gacha&lang=zh-cn&old=1\0tail";
+        let new = b"junk\0https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?win_mode=fullscreen&auth_appid=webview_gacha&init_type=301\0tail";
+        assert_eq!(
+            match_gacha_url_bytes(old).as_deref(),
+            Some("https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?auth_appid=webview_gacha&lang=zh-cn&old=1")
+        );
+        assert!(match_gacha_url_bytes(new)
+            .as_deref()
+            .unwrap()
+            .starts_with("https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?win_mode=fullscreen"));
+    }
+
+    #[test]
+    fn gacha_url_ignores_resource_urls_and_takes_last() {
+        // 静态资源 URL（css/js）含相同事件名但无 /index.html?，必须被忽略；
+        // 多个命中时取最后一个（对应原版 LastIndexOf）
+        let bytes = b"css https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/1_8338b8e48022f6cb6f85.css\0\
+                      first https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?auth_appid=webview_gacha&first=1\0\
+                      js https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/bundle_7af5ae760bffe15a194d.js\0\
+                      last https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&last=1\0end";
+        assert_eq!(
+            match_gacha_url_bytes(bytes).as_deref(),
+            Some("https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&last=1")
+        );
+    }
+
+    #[test]
+    fn gacha_url_overseas_prefix() {
+        let bytes = b"\0https://gs.hoyoverse.com/genshin/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&os=1\0";
+        assert_eq!(
+            match_gacha_url_bytes(bytes).as_deref(),
+            Some("https://gs.hoyoverse.com/genshin/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&os=1")
+        );
+    }
+
+    #[test]
+    fn unity_log_path_extraction() {
+        // 真实日志形态：路径含空格、正斜杠；行内最后一个盘符为路径起点
+        let content = "[Subsystems] Discovering subsystems at path E:/Program Files/miHoYo Launcher/games/Genshin Impact Game/YuanShen_Data/UnitySubsystems\n\
+                       [Line 2] something else";
+        let pos = ascii_find_ci(content, "YuanShen_Data").unwrap();
+        assert_eq!(
+            path_prefix_before_marker(content, pos),
+            Some("E:/Program Files/miHoYo Launcher/games/Genshin Impact Game")
+        );
+    }
+
+    #[test]
+    fn unity_log_path_prefers_last_drive_letter_on_line() {
+        // 同一行出现两个盘符时取离 marker 最近的一个
+        let content = "compare D:/old/path with E:\\Games\\YuanShen_Data/data.unity3d";
+        let pos = ascii_find_ci(content, "YuanShen_Data").unwrap();
+        assert_eq!(path_prefix_before_marker(content, pos), Some("E:\\Games"));
+    }
+}
+
+#[cfg(test)]
 mod live_tests {
     use super::*;
     use crate::constants::Salts;
@@ -811,5 +974,34 @@ mod live_tests {
         );
 
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    /// 真机验证网页缓存链路：Unity 日志定位游戏目录 → 各版本 data_2 → 提取祈愿 URL。
+    /// 前置：本机装有原神且游戏内打开过一次祈愿记录页。
+    /// 运行：cargo test web_cache_real_machine -- --ignored --nocapture
+    #[test]
+    #[ignore = "需要本机安装原神并打开过祈愿记录页"]
+    fn web_cache_real_machine() {
+        let candidates = game_dir_candidates();
+        assert!(!candidates.is_empty(), "未能定位游戏目录（Unity 日志与注册表均无结果）");
+        for (dir, data_folder) in &candidates {
+            println!("候选游戏目录: {} ({data_folder})", dir.display());
+            for f in cache_files_newest_first(&dir.join(data_folder).join("webCaches")) {
+                match std::fs::read(&f) {
+                    Ok(b) => {
+                        let hit = match_gacha_url_bytes(&b);
+                        println!("  {} ({} 字节) → {:?}", f.display(), b.len(), hit.as_deref().map(|s| &s[..s.len().min(40)]));
+                    }
+                    Err(e) => println!("  {} 读取失败: {e}", f.display()),
+                }
+            }
+        }
+
+        let url = extract_gacha_url_from_web_cache().expect("网页缓存中未找到祈愿 URL");
+        let query = build_query_from_web_cache().expect("URL 解析失败");
+        assert!(url.contains("index.html"), "URL 缺少 index.html: {url}");
+        assert!(query.contains("auth_appid=webview_gacha"), "query 缺少 auth_appid: {query}");
+        let redacted: String = query.chars().take(80).collect();
+        println!("✓ 网页缓存链路通过，query 前 80 字符: {redacted}...");
     }
 }
