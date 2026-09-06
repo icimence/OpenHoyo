@@ -176,6 +176,42 @@ pub const TOOL_VERSION_GR: &str = "v5.0.1-ys";
 pub const DAILY_NOTE_PATH_CN: &str =
     "https://api-takumi-record.mihoyo.com/game_record/app/genshin/api/dailyNote";
 
+fn record_host(is_oversea: bool) -> &'static str {
+    if is_oversea {
+        "https://bbs-api-os.hoyolab.com"
+    } else {
+        "https://api-takumi-record.mihoyo.com"
+    }
+}
+
+pub fn url_spiral_abyss(uid: &str, server: &str, is_oversea: bool, schedule_type: u8) -> String {
+    format!(
+        "{}/game_record/app/genshin/api/spiralAbyss?schedule_type={}&role_id={}&server={}",
+        record_host(is_oversea),
+        schedule_type,
+        uid,
+        server
+    )
+}
+
+pub fn url_role_combat(uid: &str, server: &str, is_oversea: bool) -> String {
+    format!(
+        "{}/game_record/app/genshin/api/role_combat?need_detail=true&role_id={}&server={}",
+        record_host(is_oversea),
+        uid,
+        server
+    )
+}
+
+pub fn url_hard_challenge(uid: &str, server: &str, is_oversea: bool) -> String {
+    format!(
+        "{}/game_record/app/genshin/api/hard_challenge?need_detail=true&role_id={}&server={}",
+        record_host(is_oversea),
+        uid,
+        server
+    )
+}
+
 // ---------------------------------------------------------------------------
 // 国服 Passport 接口 RSA 公钥（UIGF 社区文档公开值，用于手机号加密）
 // ---------------------------------------------------------------------------

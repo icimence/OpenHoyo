@@ -1,8 +1,9 @@
 // 实时便签（对应原版 DailyNotePage.xaml + DailyNoteCard）：进度条卡片布局，
 // 顶栏手动刷新 + 页面停留期间 8 分钟自动刷新 + 30 秒倒计时走针。
-// 遇 1034/5003 账号风控时自动走安全验证（对应 GeetestService.TryVerifyXrpcChallengeAsync）。
+// 遇 1034/5003 账号风控时自动走安全验证（共享 verify.ts）。
 import { api, errText, isApiError, type DailyNoteData, type UserDto } from "./api";
-import { closeDialog, onDialogCancel, openDialog, toast } from "./ui";
+import { toast } from "./ui";
+import { abandonActiveGeetest, fetchWithVerification } from "./verify";
 
 /** 每个角色的最新快照（uid -> data），供倒计时走针就地刷新 */
 const snapshots = new Map<string, DailyNoteData>();
@@ -13,8 +14,6 @@ let autoRefresh: number | undefined;
 
 /** 单飞守卫：同一时刻只允许一轮刷新/验证流程 */
 let refreshing = false;
-/** 放弃当前未完成的验证对话框（页面被重渲染时调用，避免悬挂的 Promise 卡死后续刷新） */
-let abandonGeetest: (() => void) | null = null;
 
 function esc(s: string): string {
   const d = document.createElement("div");
@@ -168,116 +167,6 @@ function cardHtml(uid: string, role: { nickname: string; region_name: string }, 
   </div>`;
 }
 
-/** gt.js 只加载一次；后续直接使用 window.initGeetest */
-function ensureGtJs(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if ((window as unknown as { initGeetest?: unknown }).initGeetest) {
-      resolve();
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://static.geetest.com/static/js/gt.0.5.2.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("gt.js 加载失败"));
-    document.head.appendChild(script);
-  });
-}
-
-/**
- * 页内极验滑块（对应 GeetestWebView2ContentProvider 的 NavigateToString 页面）：
- * product=bind 模式 onReady 自动弹出，成功后 resolve getValidate() 结果。
- */
-function runGeetest(gt: string, challenge: string): Promise<{ geetest_challenge: string; geetest_validate: string } | null> {
-  return new Promise((resolve) => {
-    openDialog("安全验证", '<div id="geetest-div"></div><p class="hint">请完成滑块验证以继续获取实时便签</p>', null);
-    let settled = false;
-    const finish = (v: { geetest_challenge: string; geetest_validate: string } | null): void => {
-      if (!settled) {
-        settled = true;
-        if (abandonGeetest === finishAbandon) {
-          abandonGeetest = null;
-        }
-        closeDialog();
-        resolve(v);
-      }
-    };
-    const finishAbandon = (): void => finish(null);
-    abandonGeetest = finishAbandon;
-    onDialogCancel(() => finish(null));
-
-    void ensureGtJs()
-      .then(() => {
-        const init = (window as unknown as { initGeetest?: (opts: Record<string, unknown>, cb: (obj: GeetestObj) => void) => void }).initGeetest;
-        if (!init) {
-          finish(null);
-          return;
-        }
-        init(
-          {
-            protocol: "https://",
-            gt,
-            challenge,
-            new_captcha: true,
-            product: "bind",
-            api_server: "api.geetest.com",
-          },
-          (captchaObj) => {
-            captchaObj.onReady(() => {
-              captchaObj.verify();
-            });
-            captchaObj.onSuccess(() => {
-              const validate = captchaObj.getValidate();
-              if (validate) {
-                finish({
-                  geetest_challenge: validate.geetest_challenge,
-                  geetest_validate: validate.geetest_validate,
-                });
-              }
-            });
-            captchaObj.onError(() => {
-              toast("验证出错，请稍后重试", "error");
-              finish(null);
-            });
-          },
-        );
-      })
-      .catch(() => {
-        toast("极验脚本加载失败，请检查网络", "error");
-        finish(null);
-      });
-  });
-}
-
-interface GeetestObj {
-  onReady: (cb: () => void) => void;
-  onSuccess: (cb: () => void) => void;
-  onError: (cb: () => void) => void;
-  verify: () => void;
-  getValidate: () => { geetest_challenge: string; geetest_validate: string } | undefined;
-}
-
-/** 风控（1034/5003）时：申请验证 → 滑块 → 换 xrpc-challenge → 重试原请求 */
-async function fetchWithVerification(userId: number, gameUid: string): Promise<DailyNoteData> {
-  try {
-    return await api.dailyNote(userId, gameUid);
-  } catch (e) {
-    if (!isApiError(e) || (e.code !== 1034 && e.code !== 5003)) {
-      throw e;
-    }
-    const verification = await api.cardCreateVerification(userId);
-    const validated = await runGeetest(verification.gt, verification.challenge);
-    if (!validated) {
-      throw e;
-    }
-    const xrpcChallenge = await api.cardVerifyVerification(
-      userId,
-      validated.geetest_challenge,
-      validated.geetest_validate,
-    );
-    return api.dailyNote(userId, gameUid, xrpcChallenge);
-  }
-}
-
 /** 30 秒走针：只更新目标时刻文本（树脂/宝钱恢复时间随时间推移变为"已恢复完成"） */
 function startTicker(): void {
   window.clearInterval(ticker);
@@ -309,7 +198,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
   const roles = currentUser.game_roles;
 
   // 页面重渲染（切换页签/HMR）时放弃上一轮未完成的验证流程并复位单飞守卫
-  abandonGeetest?.();
+  abandonActiveGeetest();
   refreshing = false;
 
   content.innerHTML = `
@@ -333,7 +222,10 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
         void (async () => {
           btn.disabled = true;
           try {
-            snapshots.set(btn.dataset.uid!, await fetchWithVerification(currentUser!.id, btn.dataset.uid!));
+            snapshots.set(
+              btn.dataset.uid!,
+              await fetchWithVerification(currentUser!.id, (ch) => api.dailyNote(currentUser!.id, btn.dataset.uid!, ch)),
+            );
             errors.delete(btn.dataset.uid!);
             renderCards();
           } catch (e2) {
@@ -359,7 +251,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
       for (const role of roles) {
         try {
           const data = interactive
-            ? await fetchWithVerification(currentUser!.id, role.game_uid)
+            ? await fetchWithVerification(currentUser!.id, (ch) => api.dailyNote(currentUser!.id, role.game_uid, ch))
             : await api.dailyNote(currentUser!.id, role.game_uid);
           snapshots.set(role.game_uid, data);
           errors.delete(role.game_uid);

@@ -108,6 +108,17 @@ export const api = {
 
   cardVerifyVerification: (userId: number, challenge: string, validate: string) =>
     invoke<string>("card_verify_verification", { userId, challenge, validate }),
+
+  // ---- 周期挑战记录 ----
+
+  spiralAbyss: (userId: number, gameUid: string, scheduleType: number, challenge?: string) =>
+    invoke<SpiralAbyss>("spiral_abyss", { userId, gameUid, scheduleType, challenge: challenge ?? null }),
+
+  roleCombat: (userId: number, gameUid: string, challenge?: string) =>
+    invoke<RoleCombat>("role_combat", { userId, gameUid, challenge: challenge ?? null }),
+
+  hardChallenge: (userId: number, gameUid: string, challenge?: string) =>
+    invoke<HardChallenge>("hard_challenge", { userId, gameUid, challenge: challenge ?? null }),
 };
 
 // ---------------------------------------------------------------------------
@@ -240,4 +251,168 @@ export interface DailyNoteData {
     is_finish_all_mainline: boolean;
   };
   fetched_at_ms: number;
+}
+
+// ---------------------------------------------------------------------------
+// 周期挑战记录类型（对应后端 game_record.rs）
+// ---------------------------------------------------------------------------
+
+export interface SpiralAbyss {
+  schedule_id: number;
+  start_time: number;
+  end_time: number;
+  total_battle_times: number;
+  total_win_times: number;
+  max_floor: string;
+  reveal_rank: RankAvatar[];
+  defeat_rank: RankAvatar[];
+  damage_rank: RankAvatar[];
+  take_damage_rank: RankAvatar[];
+  normal_skill_rank: RankAvatar[];
+  energy_skill_rank: RankAvatar[];
+  floors: AbyssFloor[];
+  total_star: number;
+  is_unlock: boolean;
+  is_just_skipped_floor: boolean;
+  skipped_floor: string | null;
+}
+
+export interface RankAvatar {
+  avatar_icon: string;
+  value: number;
+  rarity: number;
+}
+
+export interface AbyssFloor {
+  index: number;
+  icon: string;
+  is_unlock: boolean;
+  settle_time: number;
+  star: number;
+  max_star: number;
+  levels: AbyssLevel[];
+  ley_line_disorder: string[] | null;
+}
+
+export interface AbyssLevel {
+  index: number;
+  star: number;
+  max_star: number;
+  battles: AbyssBattle[];
+  top_half_floor_monster: AbyssMonster[] | null;
+  bottom_half_floor_monster: AbyssMonster[] | null;
+}
+
+export interface AbyssBattle {
+  index: number;
+  timestamp: number;
+  avatars: { icon: string; level: number; rarity: number }[];
+}
+
+export interface AbyssMonster {
+  name: string;
+  icon: string;
+  level: number;
+}
+
+export interface RoleCombat {
+  data: RoleCombatData[];
+  is_unlock: boolean;
+}
+
+export interface RoleCombatData {
+  detail: {
+    rounds_data: TheaterRound[];
+    detail_stat: TheaterStat | null;
+    backup_avatars: TheaterAvatar[];
+    fight_statistics: TheaterFightStats;
+  };
+  stat: TheaterStat;
+  schedule: { start_time: number; end_time: number; schedule_id: number };
+  has_data: boolean;
+  has_detail_data: boolean;
+}
+
+export interface TheaterStat {
+  difficulty_id: number;
+  max_round_id: number;
+  heraldry: number;
+  get_medal_round_list: number[];
+  medal_num: number;
+  coin_num: number;
+  avatar_bonus_num: number;
+  rent_cnt: number;
+  tarot_finished_cnt: number;
+}
+
+export interface TheaterRound {
+  avatars: TheaterAvatar[];
+  choice_cards: TheaterBuff[];
+  buffs: TheaterBuff[];
+  is_get_medal: boolean;
+  round_id: number;
+  finish_time: number;
+  enemies: { name: string; icon: string; level: number }[];
+  splendour_buff: {
+    summary: { icon: string; name: string; desc: string } | null;
+    buffs: { icon: string; name: string; desc: string; level: number }[];
+  } | null;
+}
+
+export interface TheaterAvatar {
+  name: string;
+  /** 1=正常 2=试用 3=支援 */
+  avatar_type: number;
+  image: string;
+  level: number;
+  rarity: number;
+}
+
+export interface TheaterBuff {
+  icon: string;
+  name: string;
+  desc: string;
+  is_enhanced: boolean;
+}
+
+export interface TheaterFightStats {
+  max_defeat_avatar: StatAvatar | null;
+  max_damage_avatar: StatAvatar | null;
+  max_take_damage_avatar: StatAvatar | null;
+  total_coin_consumed: StatAvatar | null;
+  shortest_avatar_list: StatAvatar[];
+  total_use_time: number;
+  is_show_battle_stats: boolean;
+}
+
+export interface StatAvatar {
+  avatar_icon: string;
+  value: string;
+  rarity: number;
+}
+
+export interface HardChallenge {
+  data: HcScheduleData[];
+  is_unlock: boolean;
+}
+
+export interface HcScheduleData {
+  schedule: { schedule_id: number; start_time: number; end_time: number; is_valid: boolean; name: string };
+  single: HcEntry;
+  mp: HcEntry;
+  blings: { name: string; image: string; is_plus: boolean; rarity: number }[];
+}
+
+export interface HcEntry {
+  best: { difficulty: number; seconds: number; icon: string } | null;
+  challenge: HcChallenge[];
+  has_data: boolean;
+}
+
+export interface HcChallenge {
+  name: string;
+  second: number;
+  teams: { name: string; image: string; level: number; rank: number; rarity: number }[];
+  best_avatar: { side_icon: string; dps: number; kind: number }[];
+  monster: { name: string; level: number; icon: string; desc: string[]; tags: { description: string }[] };
 }

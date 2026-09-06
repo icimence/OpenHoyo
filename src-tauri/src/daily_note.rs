@@ -92,17 +92,17 @@ pub struct Transformer {
     pub recovery_time: Option<RecoveryTime>,
 }
 
-/// 注意：该结构的字段在 JSON 中为大写（与米哈游 API 实际返回一致）
+/// 注意：该结构的字段米哈游以大写返回，对外序列化统一为小写
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct RecoveryTime {
-    #[serde(rename = "Day", deserialize_with = "de_i32_flexible")]
+    #[serde(rename(serialize = "day", deserialize = "Day"), deserialize_with = "de_i32_flexible")]
     pub day: i32,
-    #[serde(rename = "Hour", deserialize_with = "de_i32_flexible")]
+    #[serde(rename(serialize = "hour", deserialize = "Hour"), deserialize_with = "de_i32_flexible")]
     pub hour: i32,
-    #[serde(rename = "Minute", deserialize_with = "de_i32_flexible")]
+    #[serde(rename(serialize = "minute", deserialize = "Minute"), deserialize_with = "de_i32_flexible")]
     pub minute: i32,
-    #[serde(rename = "Second", deserialize_with = "de_i32_flexible")]
+    #[serde(rename(serialize = "second", deserialize = "Second"), deserialize_with = "de_i32_flexible")]
     pub second: i32,
     pub reached: bool,
 }
@@ -144,7 +144,7 @@ pub struct ArchonQuest {
 // ---------------------------------------------------------------------------
 
 /// 组合 CookieType.Cookie（cookie_token;ltoken），对应 SetUserCookieAndFpHeader
-fn combined_cookie(user: &UserRecord) -> ApiResult<String> {
+pub(crate) fn combined_cookie(user: &UserRecord) -> ApiResult<String> {
     let cookie_token = user
         .cookie_token
         .as_ref()
@@ -157,7 +157,7 @@ fn combined_cookie(user: &UserRecord) -> ApiResult<String> {
 }
 
 /// GameRecord 系接口的公共请求规格：XRpc + 组合 Cookie + 指纹 + webstatic Referer + DS Gen2(X4)
-fn record_spec(user: &UserRecord, url: String, method: reqwest::Method, body: Option<serde_json::Value>) -> ApiResult<RequestSpec> {
+pub(crate) fn record_spec(user: &UserRecord, url: String, method: reqwest::Method, body: Option<serde_json::Value>) -> ApiResult<RequestSpec> {
     let mut spec = match (method, body) {
         (reqwest::Method::POST, Some(b)) => RequestSpec::post(url, Profile::XRpc, b),
         _ => RequestSpec::get(url, Profile::XRpc),

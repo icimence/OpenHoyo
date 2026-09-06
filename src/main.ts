@@ -14,6 +14,7 @@ import {
 import { checkForUpdates, initUpdateBadge } from "./updater";
 import { initTheme, renderSettingsPage } from "./settings";
 import { renderDailyNotePage } from "./dailynote";
+import { renderAbyssPage, renderHardChallengePage, renderTheaterPage } from "./chronicle";
 
 // ---------------------------------------------------------------------------
 // 导航定义（对应原版 MainView.xaml 的 NavigationView 项与分组）
@@ -37,7 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "spiralabyss", label: "深境螺旋", icon: "i-abyss", group: "周期" },
   { id: "rolecombat", label: "幻想真境剧诗", icon: "i-rolecombat", group: "周期" },
   { id: "hardchallenge", label: "幽境危战", icon: "i-hardchallenge", group: "周期" },
-  { id: "setting", label: "设置", icon: "i-setting" },
+  { id: "setting", label: "设置", icon: "i-setting", group: "设置" },
 ];
 
 let currentPage = "user";
@@ -97,7 +98,7 @@ function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
   let lastGroup: string | undefined;
-  const implemented = new Set(["user", "gachalog", "setting", "dailynote"]);
+  const implemented = new Set(["user", "gachalog", "setting", "dailynote", "spiralabyss", "rolecombat", "hardchallenge"]);
   for (const item of NAV_ITEMS) {
     if (item.group && item.group !== lastGroup) {
       html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
@@ -138,6 +139,12 @@ function renderPage(): void {
     void renderSettingsPage(content);
   } else if (currentPage === "dailynote") {
     renderDailyNotePage(content, currentUser());
+  } else if (currentPage === "spiralabyss") {
+    renderAbyssPage(content, currentUser());
+  } else if (currentPage === "rolecombat") {
+    renderTheaterPage(content, currentUser());
+  } else if (currentPage === "hardchallenge") {
+    renderHardChallengePage(content, currentUser());
   } else {
     const item = NAV_ITEMS.find((n) => n.id === currentPage)!;
     content.innerHTML = `

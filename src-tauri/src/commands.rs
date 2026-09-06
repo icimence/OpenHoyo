@@ -365,3 +365,91 @@ pub async fn card_verify_verification(
     let salts = salts(&state).await;
     crate::daily_note::verify_verification(&state.http, &salts, &state.devices, &rec, &challenge, &validate).await
 }
+
+// ---------------------------------------------------------------------------
+// 周期挑战记录（深境螺旋/幻想真境剧诗/幽境危战）
+// ---------------------------------------------------------------------------
+
+async fn prepare_record_user(state: &State<'_, AppState>, user_id: i64, game_uid: &str) -> ApiResult<(UserRecord, crate::models::GameRole)> {
+    let mut rec = find_user(state, user_id)?;
+    let role = rec
+        .game_roles
+        .iter()
+        .find(|r| r.game_uid == game_uid)
+        .cloned()
+        .ok_or_else(|| ApiError::retcode(-6, "用户没有该游戏角色"))?;
+    if let Err(e) = service::initialize_user(state, &mut rec, false).await {
+        eprintln!("[game_record] 凭证刷新失败: {e}");
+    } else {
+        let _ = service::save(state, &mut rec);
+    }
+    Ok((rec, role))
+}
+
+/// 深境螺旋：schedule_type 1=本期 2=上期
+#[tauri::command]
+pub async fn spiral_abyss(
+    state: State<'_, AppState>,
+    user_id: i64,
+    game_uid: String,
+    schedule_type: u8,
+    challenge: Option<String>,
+) -> ApiResult<crate::game_record::SpiralAbyss> {
+    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
+    let salts = salts(&state).await;
+    crate::game_record::fetch_spiral_abyss(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &role.game_uid,
+        &role.region,
+        schedule_type,
+        challenge.as_deref(),
+    )
+    .await
+}
+
+/// 幻想真境剧诗
+#[tauri::command]
+pub async fn role_combat(
+    state: State<'_, AppState>,
+    user_id: i64,
+    game_uid: String,
+    challenge: Option<String>,
+) -> ApiResult<crate::game_record::RoleCombat> {
+    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
+    let salts = salts(&state).await;
+    crate::game_record::fetch_role_combat(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &role.game_uid,
+        &role.region,
+        challenge.as_deref(),
+    )
+    .await
+}
+
+/// 幽境危战
+#[tauri::command]
+pub async fn hard_challenge(
+    state: State<'_, AppState>,
+    user_id: i64,
+    game_uid: String,
+    challenge: Option<String>,
+) -> ApiResult<crate::game_record::HardChallenge> {
+    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
+    let salts = salts(&state).await;
+    crate::game_record::fetch_hard_challenge(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &role.game_uid,
+        &role.region,
+        challenge.as_deref(),
+    )
+    .await
+}

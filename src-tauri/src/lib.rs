@@ -23,6 +23,7 @@ mod ds;
 mod gacha;
 mod gacha_events;
 mod gacha_stats;
+mod game_record;
 mod http;
 mod models;
 mod passport;
@@ -80,6 +81,9 @@ pub fn run() {
             commands::daily_note,
             commands::card_create_verification,
             commands::card_verify_verification,
+            commands::spiral_abyss,
+            commands::role_combat,
+            commands::hard_challenge,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
