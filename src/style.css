@@ -2103,6 +2103,8 @@ button svg {
   font-weight: 600;
   display: flex;
   align-items: center;
+  /* 数值居左、头像统一贴右：避免头像跟随数值宽度跳动（短数值悬中、长数值顶边） */
+  justify-content: space-between;
   gap: 6px;
   font-variant-numeric: tabular-nums;
 }
