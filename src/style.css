@@ -2001,6 +2001,12 @@ button svg {
 }
 
 .ch-entry {
+  /* 覆盖全局 button 规则（inline-flex/gap 会破坏列表项布局） */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  width: 100%;
   text-align: left;
   border: 1px solid var(--stroke);
   background: var(--bg-card);
@@ -2009,6 +2015,7 @@ button svg {
   cursor: default;
   font-family: var(--font);
   color: var(--text);
+  box-sizing: border-box;
 }
 
 .ch-entry:hover {
@@ -2138,6 +2145,8 @@ button svg {
   display: block;
   border-radius: 50%;
   object-fit: cover;
+  flex: none;
+  max-width: none;
 }
 
 .ch-avatar img.r5 {
@@ -2169,6 +2178,15 @@ button svg {
   white-space: nowrap;
 }
 
+/* 等级角标（Lv.xx）与身份角标（试用/支援） */
+.ch-badge.lv {
+  font-variant-numeric: tabular-nums;
+}
+
+.ch-badge.trial {
+  color: #9ee6ff;
+}
+
 .ch-badge.plus {
   color: #ffd77e;
 }
@@ -2180,6 +2198,9 @@ button svg {
 }
 
 .ch-tab {
+  /* 覆盖全局 button 规则 */
+  display: inline-block;
+  gap: 0;
   border: 1px solid var(--stroke);
   background: var(--bg-card);
   color: var(--text-secondary);
@@ -2308,6 +2329,11 @@ button svg {
 }
 
 .ch-round-col {
+  min-width: 0;
+}
+
+.ch-hc-challenge {
+  /* 危战 Boss 卡片（grid 单元） */
   min-width: 0;
 }
 

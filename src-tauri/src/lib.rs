@@ -51,6 +51,7 @@ pub fn run() {
                 .expect("无法打开数据库");
             store::init(&conn).expect("无法初始化数据库");
             gacha::init_tables(&conn).expect("无法初始化祈愿记录表");
+            game_record::init_tables(&conn).expect("无法初始化周期记录表");
 
             app.manage(state::AppState::new(conn));
 
@@ -81,9 +82,8 @@ pub fn run() {
             commands::daily_note,
             commands::card_create_verification,
             commands::card_verify_verification,
-            commands::spiral_abyss,
-            commands::role_combat,
-            commands::hard_challenge,
+            commands::chronicle_list,
+            commands::chronicle_refresh,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

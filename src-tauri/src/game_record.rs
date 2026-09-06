@@ -12,6 +12,54 @@ use crate::response::{unwrap_envelope, ApiError, ApiResult};
 use crate::store::UserRecord;
 use serde::{Deserialize, Serialize};
 
+// ---------------------------------------------------------------------------
+// 持久化：官方 API 只返回近期期数，历史期由客户端按 (uid, kind, 期号) 落库保存
+// （对应原版 SpiralAbyssEntry / RoleCombatEntry / HardChallengeEntry 实体）
+// ---------------------------------------------------------------------------
+
+pub fn init_tables(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS game_records (
+            uid        TEXT    NOT NULL,
+            kind       TEXT    NOT NULL,
+            period_id  INTEGER NOT NULL,
+            data       TEXT    NOT NULL,
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY (uid, kind, period_id)
+        );",
+    )
+}
+
+fn db_err(e: rusqlite::Error) -> ApiError {
+    ApiError::retcode(-4, format!("数据库错误: {e}"))
+}
+
+/// upsert 一期记录
+pub fn save_period(conn: &rusqlite::Connection, uid: &str, kind: &str, period_id: i64, data: &serde_json::Value) -> ApiResult<()> {
+    let json = serde_json::to_string(data).map_err(|e| ApiError::transport(format!("序列化失败: {e}")))?;
+    conn.execute(
+        "INSERT INTO game_records (uid, kind, period_id, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(uid, kind, period_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+        rusqlite::params![uid, kind, period_id, json, crate::service::now_ms()],
+    )
+    .map_err(db_err)?;
+    Ok(())
+}
+
+/// 读取某 uid 某玩法的全部历史期（期号倒序，最新在前）
+pub fn list_periods(conn: &rusqlite::Connection, uid: &str, kind: &str) -> ApiResult<Vec<serde_json::Value>> {
+    let mut stmt = conn
+        .prepare("SELECT data FROM game_records WHERE uid = ?1 AND kind = ?2 ORDER BY period_id DESC")
+        .map_err(db_err)?;
+    let rows = stmt
+        .query_map(rusqlite::params![uid, kind], |row| {
+            let raw: String = row.get(0)?;
+            Ok(serde_json::from_str::<serde_json::Value>(&raw).unwrap_or(serde_json::Value::Null))
+        })
+        .map_err(db_err)?;
+    Ok(rows.filter_map(|r| r.ok()).filter(|v| !v.is_null()).collect())
+}
+
 /// 通用拉取：GameRecord 系 GET 接口，返回整个 data JSON
 async fn fetch_record(
     client: &reqwest::Client,

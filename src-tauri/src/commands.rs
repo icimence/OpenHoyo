@@ -368,6 +368,7 @@ pub async fn card_verify_verification(
 
 // ---------------------------------------------------------------------------
 // 周期挑战记录（深境螺旋/幻想真境剧诗/幽境危战）
+// 官方 API 只返回近期期数；刷新后按期落库，历史由本地保存
 // ---------------------------------------------------------------------------
 
 async fn prepare_record_user(state: &State<'_, AppState>, user_id: i64, game_uid: &str) -> ApiResult<(UserRecord, crate::models::GameRole)> {
@@ -386,70 +387,79 @@ async fn prepare_record_user(state: &State<'_, AppState>, user_id: i64, game_uid
     Ok((rec, role))
 }
 
-/// 深境螺旋：schedule_type 1=本期 2=上期
+/// 本地历史（秒回，不触网）：kind = abyss | theater | hard
 #[tauri::command]
-pub async fn spiral_abyss(
+pub async fn chronicle_list(
     state: State<'_, AppState>,
     user_id: i64,
     game_uid: String,
-    schedule_type: u8,
-    challenge: Option<String>,
-) -> ApiResult<crate::game_record::SpiralAbyss> {
-    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
-    let salts = salts(&state).await;
-    crate::game_record::fetch_spiral_abyss(
-        &state.http,
-        &salts,
-        &state.devices,
-        &rec,
-        &role.game_uid,
-        &role.region,
-        schedule_type,
-        challenge.as_deref(),
-    )
-    .await
+    kind: String,
+) -> ApiResult<Vec<serde_json::Value>> {
+    let db = state.db.lock().unwrap();
+    crate::game_record::list_periods(&db, &game_uid, &kind).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
 }
 
-/// 幻想真境剧诗
+/// 拉取官方数据并合并入库，返回合并后的全部历史期
 #[tauri::command]
-pub async fn role_combat(
+pub async fn chronicle_refresh(
     state: State<'_, AppState>,
     user_id: i64,
     game_uid: String,
+    kind: String,
     challenge: Option<String>,
-) -> ApiResult<crate::game_record::RoleCombat> {
+) -> ApiResult<Vec<serde_json::Value>> {
     let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
     let salts = salts(&state).await;
-    crate::game_record::fetch_role_combat(
-        &state.http,
-        &salts,
-        &state.devices,
-        &rec,
-        &role.game_uid,
-        &role.region,
-        challenge.as_deref(),
-    )
-    .await
-}
+    let uid = role.game_uid.clone();
+    let region = role.region.clone();
 
-/// 幽境危战
-#[tauri::command]
-pub async fn hard_challenge(
-    state: State<'_, AppState>,
-    user_id: i64,
-    game_uid: String,
-    challenge: Option<String>,
-) -> ApiResult<crate::game_record::HardChallenge> {
-    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
-    let salts = salts(&state).await;
-    crate::game_record::fetch_hard_challenge(
-        &state.http,
-        &salts,
-        &state.devices,
-        &rec,
-        &role.game_uid,
-        &role.region,
-        challenge.as_deref(),
-    )
-    .await
+    let fetched: Vec<serde_json::Value> = match kind.as_str() {
+        // 深境螺旋：本期(schedule 1)与上期(2)各拉一次
+        "abyss" => {
+            let mut out = Vec::new();
+            for schedule_type in [1u8, 2u8] {
+                let data = crate::game_record::fetch_spiral_abyss(
+                    &state.http, &salts, &state.devices, &rec, &uid, &region, schedule_type, challenge.as_deref(),
+                )
+                .await?;
+                out.push(serde_json::to_value(&data).unwrap_or(serde_json::Value::Null));
+            }
+            out.into_iter().filter(|v| !v.is_null()).collect()
+        }
+        "theater" => {
+            let data = crate::game_record::fetch_role_combat(&state.http, &salts, &state.devices, &rec, &uid, &region, challenge.as_deref()).await?;
+            serde_json::to_value(&data)
+                .ok()
+                .and_then(|v| v.get("data").cloned())
+                .and_then(|d| d.as_array().cloned())
+                .unwrap_or_default()
+        }
+        "hard" => {
+            let data = crate::game_record::fetch_hard_challenge(&state.http, &salts, &state.devices, &rec, &uid, &region, challenge.as_deref()).await?;
+            serde_json::to_value(&data)
+                .ok()
+                .and_then(|v| v.get("data").cloned())
+                .and_then(|d| d.as_array().cloned())
+                .unwrap_or_default()
+        }
+        _ => return Err(ApiError::retcode(-7, "未知的记录类型")),
+    };
+
+    // 按期号 upsert 入库
+    {
+        let db = state.db.lock().unwrap();
+        for period in &fetched {
+            let period_id = period
+                .get("schedule_id")
+                .and_then(|v| v.as_i64())
+                .or_else(|| period.get("schedule").and_then(|s| s.get("schedule_id")).and_then(|v| v.as_i64()))
+                .unwrap_or(0);
+            if period_id > 0 {
+                crate::game_record::save_period(&db, &uid, &kind, period_id, period)?;
+            }
+        }
+    }
+
+    let db = state.db.lock().unwrap();
+    crate::game_record::list_periods(&db, &uid, &kind).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
 }

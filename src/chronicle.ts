@@ -158,9 +158,23 @@ function resetGuards(): void {
 // 深境螺旋
 // ---------------------------------------------------------------------------
 
-const abyssCache = new Map<number, SpiralAbyss>(); // schedule_type -> data
-let abyssCurrent = 1;
+/** 全部历史期（持久化，期号倒序） */
+let abyssPeriods: SpiralAbyss[] = [];
+let abyssIdx = 0;
 let abyssFloorIdx = 12;
+
+/** @internal 仅供离线渲染测试注入数据（构建产物不含调用方） */
+export const __testHooks = {
+  setAbyss(list: SpiralAbyss[]): void {
+    abyssPeriods = list;
+  },
+  setTheater(list: RoleCombatData[]): void {
+    theaterPeriods = list;
+  },
+  setHc(list: HcScheduleData[]): void {
+    hcPeriods = list;
+  },
+};
 
 export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | undefined): void {
   if (!currentUser || currentUser.game_roles.length === 0) {
@@ -171,21 +185,26 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
   }
   resetGuards();
   const role = currentUser.game_roles[0];
-  const shell = pageShell(content, "深境螺旋", "每期挑战记录与统计", entryItem("本期", "", "", true) + entryItem("上期", "", "", false), "abyss-root");
+  const shell = pageShell(content, "深境螺旋", "每期挑战记录与统计（历史保存在本地）", "", "abyss-root");
 
   function renderList(): void {
-    shell.list.innerHTML = [1, 2]
-      .map((t) => {
-        const d = abyssCache.get(t);
-        const title = t === 1 ? "本期" : "上期";
-        const caption = d ? d.max_floor : "";
-        const time = d ? `${fmtTime(d.start_time)} - ${fmtTime(d.end_time)}` : "";
-        return entryItem(d ? `第 ${d.schedule_id} 期 · ${title}` : title, caption, time, abyssCurrent === t);
-      })
+    if (abyssPeriods.length === 0) {
+      shell.list.innerHTML = '<div class="ch-entry-time" style="padding:8px">暂无数据</div>';
+      return;
+    }
+    shell.list.innerHTML = abyssPeriods
+      .map((d, i) =>
+        entryItem(
+          `第 ${d.schedule_id} 期${i === 0 ? " · 最新" : ""}`,
+          d.is_unlock ? d.max_floor : "未挑战",
+          `${fmtTime(d.start_time)} - ${fmtTime(d.end_time)}`,
+          abyssIdx === i,
+        ),
+      )
       .join("");
     shell.list.querySelectorAll<HTMLButtonElement>(".ch-entry").forEach((btn, i) => {
       btn.addEventListener("click", () => {
-        abyssCurrent = i === 0 ? 1 : 2;
+        abyssIdx = i;
         renderList();
         renderDetail();
       });
@@ -232,7 +251,7 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
   }
 
   function renderDetail(): void {
-    const data = abyssCache.get(abyssCurrent);
+    const data = abyssPeriods[abyssIdx];
     if (!data) {
       shell.main.innerHTML = '<div class="ch-empty">尚未刷新</div>';
       return;
@@ -294,17 +313,16 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
     refreshing = true;
     shell.refreshBtn.disabled = true;
     try {
-      for (const t of [1, 2]) {
-        try {
-          abyssCache.set(t, await fetchWithVerification(currentUser!.id, (ch) => api.spiralAbyss(currentUser!.id, role.game_uid, t, ch)));
-        } catch (e) {
-          if (!isRiskError(e)) {
-            toast(`深境螺旋刷新失败: ${errText(e)}`, "error");
-          }
-        }
-      }
+      abyssPeriods = await fetchWithVerification(currentUser!.id, (ch) =>
+        api.chronicleRefresh<SpiralAbyss>(currentUser!.id, role.game_uid, "abyss", ch),
+      );
+      abyssIdx = 0;
       renderList();
       renderDetail();
+    } catch (e) {
+      if (!isRiskError(e)) {
+        toast(`深境螺旋刷新失败: ${errText(e)}`, "error");
+      }
     } finally {
       refreshing = false;
       shell.refreshBtn.disabled = false;
@@ -314,8 +332,19 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
   shell.refreshBtn.addEventListener("click", () => {
     void refresh();
   });
+  // 先秒读本地历史，再后台拉新合并
   renderList();
   renderDetail();
+  void api
+    .chronicleList<SpiralAbyss>(currentUser.id, role.game_uid, "abyss")
+    .then((list) => {
+      if (abyssPeriods.length === 0 && list.length > 0) {
+        abyssPeriods = list;
+        renderList();
+        renderDetail();
+      }
+    })
+    .catch(() => undefined);
   void refresh();
 }
 
@@ -323,7 +352,8 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
 // 幻想真境剧诗
 // ---------------------------------------------------------------------------
 
-let theaterCache: import("./api").RoleCombat | null = null;
+/** 全部历史期（持久化，期号倒序） */
+let theaterPeriods: RoleCombatData[] = [];
 let theaterIdx = 0;
 
 export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | undefined): void {
@@ -338,7 +368,7 @@ export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | u
   const shell = pageShell(content, "幻想真境剧诗", "每期挑战记录与统计", "", "theater-root");
 
   function renderList(): void {
-    const entries = theaterCache?.data ?? [];
+    const entries = theaterPeriods;
     if (entries.length === 0) {
       shell.list.innerHTML = '<div class="ch-entry-time" style="padding:8px">暂无数据</div>';
       return;
@@ -370,7 +400,7 @@ export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | u
   }
 
   function renderDetail(): void {
-    const entry: RoleCombatData | undefined = theaterCache?.data[theaterIdx];
+    const entry: RoleCombatData | undefined = theaterPeriods[theaterIdx];
     if (!entry) {
       shell.main.innerHTML = '<div class="ch-empty">尚未刷新</div>';
       return;
@@ -460,9 +490,11 @@ export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | u
     refreshing = true;
     shell.refreshBtn.disabled = true;
     try {
-      theaterCache = await fetchWithVerification(currentUser!.id, (ch) => api.roleCombat(currentUser!.id, role.game_uid, ch));
+      theaterPeriods = await fetchWithVerification(currentUser!.id, (ch) =>
+        api.chronicleRefresh<RoleCombatData>(currentUser!.id, role.game_uid, "theater", ch),
+      );
       // 默认选中最近一个有数据的期
-      const idx = theaterCache.data.findIndex((d) => d.has_data);
+      const idx = theaterPeriods.findIndex((d) => d.has_data);
       theaterIdx = idx >= 0 ? idx : 0;
       renderList();
       renderDetail();
@@ -479,8 +511,23 @@ export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | u
   shell.refreshBtn.addEventListener("click", () => {
     void refresh();
   });
+  // 先秒读本地历史，再后台拉新合并
   renderList();
   renderDetail();
+  void api
+    .chronicleList<RoleCombatData>(currentUser.id, role.game_uid, "theater")
+    .then((list) => {
+      if (theaterPeriods.length === 0 && list.length > 0) {
+        theaterPeriods = list;
+        theaterIdx = list.findIndex((d) => d.has_data);
+        if (theaterIdx < 0) {
+          theaterIdx = 0;
+        }
+        renderList();
+        renderDetail();
+      }
+    })
+    .catch(() => undefined);
   void refresh();
 }
 
@@ -488,7 +535,8 @@ export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | u
 // 幽境危战
 // ---------------------------------------------------------------------------
 
-let hcCache: import("./api").HardChallenge | null = null;
+/** 全部历史期（持久化，期号倒序） */
+let hcPeriods: HcScheduleData[] = [];
 let hcIdx = 0;
 let hcMode = "single";
 
@@ -504,7 +552,7 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
   const shell = pageShell(content, "幽境危战", "每期挑战记录与统计", "", "hc-root");
 
   function renderList(): void {
-    const entries = hcCache?.data ?? [];
+    const entries = hcPeriods;
     if (entries.length === 0) {
       shell.list.innerHTML = '<div class="ch-entry-time" style="padding:8px">暂无数据</div>';
       return;
@@ -529,7 +577,7 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
   }
 
   function renderDetail(): void {
-    const entry: HcScheduleData | undefined = hcCache?.data[hcIdx];
+    const entry: HcScheduleData | undefined = hcPeriods[hcIdx];
     if (!entry) {
       shell.main.innerHTML = '<div class="ch-empty">尚未刷新</div>';
       return;
@@ -603,8 +651,10 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
     refreshing = true;
     shell.refreshBtn.disabled = true;
     try {
-      hcCache = await fetchWithVerification(currentUser!.id, (ch) => api.hardChallenge(currentUser!.id, role.game_uid, ch));
-      const idx = hcCache.data.findIndex((d) => d.single.has_data || d.mp.has_data);
+      hcPeriods = await fetchWithVerification(currentUser!.id, (ch) =>
+        api.chronicleRefresh<HcScheduleData>(currentUser!.id, role.game_uid, "hard", ch),
+      );
+      const idx = hcPeriods.findIndex((d) => d.single.has_data || d.mp.has_data);
       hcIdx = idx >= 0 ? idx : 0;
       renderList();
       renderDetail();
@@ -621,7 +671,22 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
   shell.refreshBtn.addEventListener("click", () => {
     void refresh();
   });
+  // 先秒读本地历史，再后台拉新合并
   renderList();
   renderDetail();
+  void api
+    .chronicleList<HcScheduleData>(currentUser.id, role.game_uid, "hard")
+    .then((list) => {
+      if (hcPeriods.length === 0 && list.length > 0) {
+        hcPeriods = list;
+        hcIdx = list.findIndex((d) => d.single.has_data || d.mp.has_data);
+        if (hcIdx < 0) {
+          hcIdx = 0;
+        }
+        renderList();
+        renderDetail();
+      }
+    })
+    .catch(() => undefined);
   void refresh();
 }

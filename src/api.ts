@@ -111,14 +111,13 @@ export const api = {
 
   // ---- 周期挑战记录 ----
 
-  spiralAbyss: (userId: number, gameUid: string, scheduleType: number, challenge?: string) =>
-    invoke<SpiralAbyss>("spiral_abyss", { userId, gameUid, scheduleType, challenge: challenge ?? null }),
+  /** 本地历史（kind: abyss | theater | hard），返回该玩法全部期快照 */
+  chronicleList: <T>(userId: number, gameUid: string, kind: string) =>
+    invoke<T[]>("chronicle_list", { userId, gameUid, kind }),
 
-  roleCombat: (userId: number, gameUid: string, challenge?: string) =>
-    invoke<RoleCombat>("role_combat", { userId, gameUid, challenge: challenge ?? null }),
-
-  hardChallenge: (userId: number, gameUid: string, challenge?: string) =>
-    invoke<HardChallenge>("hard_challenge", { userId, gameUid, challenge: challenge ?? null }),
+  /** 拉官方数据合并入库，返回合并后全部期 */
+  chronicleRefresh: <T>(userId: number, gameUid: string, kind: string, challenge?: string) =>
+    invoke<T[]>("chronicle_refresh", { userId, gameUid, kind, challenge: challenge ?? null }),
 };
 
 // ---------------------------------------------------------------------------
