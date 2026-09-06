@@ -10,39 +10,53 @@
 
 use crate::constants::{self, Salts};
 use crate::http::{self, Devices, DsSpec, Profile, RequestSpec};
+use crate::models::{de_f64_flexible, de_i32_flexible, de_i64_flexible};
 use crate::response::{unwrap_envelope, ApiError, ApiResult};
 use crate::store::UserRecord;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // 数据模型（字段名与米哈游 JSON 完全一致，对应 DailyNote/DailyNoteCommon 等）
+// 注意：该接口大量数字字段以字符串返回，统一使用弹性反序列化
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DailyNoteData {
     /// 原粹树脂
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub current_resin: i32,
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub max_resin: i32,
     /// 距离回满的秒数
+    #[serde(deserialize_with = "de_i64_flexible")]
     pub resin_recovery_time: i64,
 
     /// 每日委托（顶层字段，部分版本在 daily_task 内）
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub finished_task_num: i32,
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub total_task_num: i32,
     pub is_extra_task_reward_received: bool,
 
     /// 周本减半次数已用/剩余
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub remain_resin_discount_num: i32,
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub resin_discount_num_limit: i32,
 
     /// 洞天宝钱（尘歌壶未开时 max 为 0）
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub current_home_coin: i32,
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub max_home_coin: i32,
+    #[serde(deserialize_with = "de_i64_flexible")]
     pub home_coin_recovery_time: i64,
 
     /// 探索派遣
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub current_expedition_num: i32,
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub max_expedition_num: i32,
     pub expeditions: Vec<Expedition>,
 
@@ -67,6 +81,7 @@ pub struct Expedition {
     /// Finished | Ongoing
     pub status: String,
     /// 剩余秒数
+    #[serde(deserialize_with = "de_i64_flexible")]
     pub remained_time: i64,
 }
 
@@ -81,9 +96,13 @@ pub struct Transformer {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct RecoveryTime {
+    #[serde(rename = "Day", deserialize_with = "de_i32_flexible")]
     pub day: i32,
+    #[serde(rename = "Hour", deserialize_with = "de_i32_flexible")]
     pub hour: i32,
+    #[serde(rename = "Minute", deserialize_with = "de_i32_flexible")]
     pub minute: i32,
+    #[serde(rename = "Second", deserialize_with = "de_i32_flexible")]
     pub second: i32,
     pub reached: bool,
 }
@@ -91,11 +110,14 @@ pub struct RecoveryTime {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DailyTask {
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub total_num: i32,
+    #[serde(deserialize_with = "de_i32_flexible")]
     pub finished_num: i32,
     pub is_extra_task_reward_received: bool,
-    /// 旅行札记（PC 端每日签到替代）
+    /// 旅行札记（PC 端每日签到替代）；米哈游以字符串返回浮点（"382.7"）
     pub attendance_visible: bool,
+    #[serde(deserialize_with = "de_f64_flexible")]
     pub stored_attendance: f64,
 }
 
@@ -217,14 +239,16 @@ struct VerificationResultDto {
     challenge: String,
 }
 
-/// 第一步：向米哈游申请极验验证会话，返回 gt/challenge 供前端渲染滑块
+/// 第一步：向米哈游申请极验验证会话，返回 gt/challenge 供前端渲染滑块。
+/// is_high=false：与 gsuid_core 等社区实现对齐（game_record 链路用普通难度题目；
+/// is_high=true 的高风险题经人工滑块解出后会被 verifyVerification 判 10306）
 pub async fn create_verification(
     client: &reqwest::Client,
     salts: &Salts,
     devices: &Devices,
     user: &UserRecord,
 ) -> ApiResult<GeetestVerificationDto> {
-    let url = "https://api-takumi-record.mihoyo.com/game_record/app/card/wapi/createVerification?is_high=true".to_string();
+    let url = "https://api-takumi-record.mihoyo.com/game_record/app/card/wapi/createVerification?is_high=false".to_string();
     let spec = record_spec(user, url, reqwest::Method::GET, None)?
         .with_header("x-rpc-challenge_game", "2")
         .with_header("x-rpc-challenge_path", constants::DAILY_NOTE_PATH_CN);

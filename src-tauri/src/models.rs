@@ -40,6 +40,24 @@ where
     }
 }
 
+/// 同上，f64 版本（实时便签 stored_attendance:"382.7" 等浮点以字符串返回）
+pub fn de_f64_flexible<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v = serde_json::Value::deserialize(deserializer)?;
+    match v {
+        serde_json::Value::Number(n) => n
+            .as_f64()
+            .ok_or_else(|| serde::de::Error::custom("invalid number")),
+        serde_json::Value::String(s) => s
+            .parse::<f64>()
+            .map_err(|_| serde::de::Error::custom(format!("invalid numeric string: {s}"))),
+        serde_json::Value::Null => Ok(0.0),
+        other => Err(serde::de::Error::custom(format!("expected number or string, got {other}"))),
+    }
+}
+
 fn empty_str() -> String {
     String::new()
 }
