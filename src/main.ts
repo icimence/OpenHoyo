@@ -31,7 +31,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "user", label: "用户", icon: "i-user" },
   { id: "announcement", label: "主页", icon: "i-home" },
   { id: "gachalog", label: "祈愿记录", icon: "i-gacha", group: "工具" },
-  { id: "achievement", label: "成就管理", icon: "i-achievement", group: "工具" },
   { id: "dailynote", label: "实时便笺", icon: "i-dailynote", group: "工具" },
   { id: "avatarproperty", label: "我的角色", icon: "i-avatarprop", group: "工具" },
   { id: "cultivation", label: "养成计划", icon: "i-cultivation", group: "工具" },
