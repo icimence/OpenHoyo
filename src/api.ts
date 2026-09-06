@@ -100,8 +100,14 @@ export const api = {
 
   // ---- 实时便签 ----
 
-  dailyNote: (userId: number, gameUid: string) =>
-    invoke<DailyNoteData>("daily_note", { userId, gameUid }),
+  dailyNote: (userId: number, gameUid: string, challenge?: string) =>
+    invoke<DailyNoteData>("daily_note", { userId, gameUid, challenge: challenge ?? null }),
+
+  cardCreateVerification: (userId: number) =>
+    invoke<{ gt: string; challenge: string }>("card_create_verification", { userId }),
+
+  cardVerifyVerification: (userId: number, challenge: string, validate: string) =>
+    invoke<string>("card_verify_verification", { userId, challenge, validate }),
 };
 
 // ---------------------------------------------------------------------------

@@ -121,18 +121,8 @@ pub struct ArchonQuest {
 // API（对应 GameRecordClient.GetDailyNoteAsync / GameRecordClientOversea）
 // ---------------------------------------------------------------------------
 
-/// 拉取实时便签。调用方需保证 cookie_token 不过期（service::initialize_user 懒刷新）。
-pub async fn fetch(
-    client: &reqwest::Client,
-    salts: &Salts,
-    devices: &Devices,
-    user: &UserRecord,
-    uid: &str,
-    region: &str,
-) -> ApiResult<DailyNoteData> {
-    let url = constants::url_daily_note(uid, region, user.is_oversea);
-
-    // CookieType.Cookie = cookie_token ; ltoken（对应 SetUserCookieAndFpHeader）
+/// 组合 CookieType.Cookie（cookie_token;ltoken），对应 SetUserCookieAndFpHeader
+fn combined_cookie(user: &UserRecord) -> ApiResult<String> {
     let cookie_token = user
         .cookie_token
         .as_ref()
@@ -141,23 +131,48 @@ pub async fn fetch(
         .ltoken
         .as_ref()
         .ok_or_else(|| ApiError::retcode(-3, "缺少 ltoken，请重新登录"))?;
-    let cookie = format!("{cookie_token};{ltoken}");
+    Ok(format!("{cookie_token};{ltoken}"))
+}
 
-    let mut spec = RequestSpec::get(url, Profile::XRpc)
-        .with_cookie_raw(cookie)
-        .with_referer(constants::webstatic_referer(user.is_oversea))
-        .with_header("x-rpc-tool_verison", constants::TOOL_VERSION_GR)
-        .with_ds(DsSpec::Gen2 {
-            salt: if user.is_oversea {
-                constants::SALT_OS_X4.to_string()
-            } else {
-                constants::SALT_CN_X4.to_string()
-            },
-            include_chars: false,
-            is_prod_body: false,
-        });
+/// GameRecord 系接口的公共请求规格：XRpc + 组合 Cookie + 指纹 + webstatic Referer + DS Gen2(X4)
+fn record_spec(user: &UserRecord, url: String, method: reqwest::Method, body: Option<serde_json::Value>) -> ApiResult<RequestSpec> {
+    let mut spec = match (method, body) {
+        (reqwest::Method::POST, Some(b)) => RequestSpec::post(url, Profile::XRpc, b),
+        _ => RequestSpec::get(url, Profile::XRpc),
+    }
+    .with_cookie_raw(combined_cookie(user)?)
+    .with_referer(constants::webstatic_referer(user.is_oversea))
+    .with_header("x-rpc-tool_verison", constants::TOOL_VERSION_GR)
+    .with_ds(DsSpec::Gen2 {
+        salt: if user.is_oversea {
+            constants::SALT_OS_X4.to_string()
+        } else {
+            constants::SALT_CN_X4.to_string()
+        },
+        include_chars: false,
+        is_prod_body: false,
+    });
     if let Some(fp) = user.fingerprint.as_deref().filter(|f| !f.is_empty()) {
         spec = spec.with_device_fp(fp);
+    }
+    Ok(spec)
+}
+
+/// 拉取实时便签。xrpc_challenge 来自安全验证（createVerification→verifyVerification），
+/// 带上后可绕过账号风控标记（对应原版 RetryIf1034Async 的重试请求）。
+pub async fn fetch(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+    uid: &str,
+    region: &str,
+    xrpc_challenge: Option<&str>,
+) -> ApiResult<DailyNoteData> {
+    let url = constants::url_daily_note(uid, region, user.is_oversea);
+    let mut spec = record_spec(user, url, reqwest::Method::GET, None)?;
+    if let Some(challenge) = xrpc_challenge {
+        spec = spec.with_header("x-rpc-challenge", challenge);
     }
 
     // 响应 data 即便签本体；个别形态会再包一层 daily_note（小组件源），两者都兼容
@@ -165,10 +180,9 @@ pub async fn fetch(
         Ok(r) => r,
         Err(e) if e.code == 1034 || e.code == 5003 => {
             // 账号级风控标记（原版 KnownReturnCode 注释：当前账号存在风险）
-            // 社区通用解法：在米游社 App 中打开一次"实时便签"即可解除
             return Err(ApiError::retcode(
                 e.code,
-                "当前账号被标记风险，实时便签暂不可用；请在手机米游社 App 中打开一次\"实时便签\"后重试",
+                "当前账号被标记风险，需要完成安全验证后重试",
             ));
         }
         Err(e) => return Err(e),
@@ -183,4 +197,71 @@ pub async fn fetch(
     };
     note.fetched_at_ms = crate::service::now_ms();
     Ok(note)
+}
+
+// ---------------------------------------------------------------------------
+// 安全验证（对应 CardClient.CreateVerificationAsync / VerifyVerificationAsync
+//          + GeetestService.TryVerifyXrpcChallengeAsync）
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct GeetestVerificationDto {
+    pub gt: String,
+    pub challenge: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct VerificationResultDto {
+    challenge: String,
+}
+
+/// 第一步：向米哈游申请极验验证会话，返回 gt/challenge 供前端渲染滑块
+pub async fn create_verification(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+) -> ApiResult<GeetestVerificationDto> {
+    let url = "https://api-takumi-record.mihoyo.com/game_record/app/card/wapi/createVerification?is_high=true".to_string();
+    let spec = record_spec(user, url, reqwest::Method::GET, None)?
+        .with_header("x-rpc-challenge_game", "2")
+        .with_header("x-rpc-challenge_path", constants::DAILY_NOTE_PATH_CN);
+    let resp = http::request::<GeetestVerificationDto>(client, salts, devices, spec).await?;
+    let data = unwrap_envelope(resp.envelope, "createVerification")?;
+    if data.gt.is_empty() || data.challenge.is_empty() {
+        return Err(ApiError::empty_data("gt/challenge"));
+    }
+    Ok(data)
+}
+
+/// 第三步：提交极验结果换取 xrpc-challenge（第二步的人工滑块在前端完成）
+pub async fn verify_verification(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+    challenge: &str,
+    validate: &str,
+) -> ApiResult<String> {
+    let body = serde_json::json!({
+        "geetest_challenge": challenge,
+        "geetest_validate": validate,
+        "geetest_seccode": format!("{validate}|jordan"),
+    });
+    let spec = record_spec(
+        user,
+        "https://api-takumi-record.mihoyo.com/game_record/app/card/wapi/verifyVerification".to_string(),
+        reqwest::Method::POST,
+        Some(body),
+    )?
+    .with_header("x-rpc-challenge_game", "2")
+    .with_header("x-rpc-challenge_path", constants::DAILY_NOTE_PATH_CN);
+    let resp = http::request::<VerificationResultDto>(client, salts, devices, spec).await?;
+    let data = unwrap_envelope(resp.envelope, "verifyVerification")?;
+    if data.challenge.is_empty() {
+        return Err(ApiError::empty_data("challenge"));
+    }
+    Ok(data.challenge)
 }

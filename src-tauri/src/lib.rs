@@ -78,6 +78,8 @@ pub fn run() {
             commands::gacha_refresh_by_web_cache,
             commands::gacha_refresh_by_manual,
             commands::daily_note,
+            commands::card_create_verification,
+            commands::card_verify_verification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

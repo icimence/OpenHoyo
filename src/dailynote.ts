@@ -1,12 +1,20 @@
 // 实时便签（对应原版 DailyNotePage.xaml + DailyNoteCard）：进度条卡片布局，
 // 顶栏手动刷新 + 页面停留期间 8 分钟自动刷新 + 30 秒倒计时走针。
-import { api, errText, type DailyNoteData, type UserDto } from "./api";
-import { toast } from "./ui";
+// 遇 1034/5003 账号风控时自动走安全验证（对应 GeetestService.TryVerifyXrpcChallengeAsync）。
+import { api, errText, isApiError, type DailyNoteData, type UserDto } from "./api";
+import { closeDialog, onDialogCancel, openDialog, toast } from "./ui";
 
 /** 每个角色的最新快照（uid -> data），供倒计时走针就地刷新 */
 const snapshots = new Map<string, DailyNoteData>();
+/** 每个角色的最近错误（uid -> 展示信息），随快照一起参与卡片渲染，避免重渲染丢失 */
+const errors = new Map<string, { text: string; needVerify: boolean }>();
 let ticker: number | undefined;
 let autoRefresh: number | undefined;
+
+/** 单飞守卫：同一时刻只允许一轮刷新/验证流程 */
+let refreshing = false;
+/** 放弃当前未完成的验证对话框（页面被重渲染时调用，避免悬挂的 Promise 卡死后续刷新） */
+let abandonGeetest: (() => void) | null = null;
 
 function esc(s: string): string {
   const d = document.createElement("div");
@@ -74,7 +82,7 @@ function rowHtml(
   </div>`;
 }
 
-function cardHtml(uid: string, role: { nickname: string; region_name: string }, data: DailyNoteData | undefined, error: string | undefined): string {
+function cardHtml(uid: string, role: { nickname: string; region_name: string }, data: DailyNoteData | undefined, error: { text: string; needVerify: boolean } | undefined): string {
   const fetched = data ? `数据更新于 ${new Date(data.fetched_at_ms).toLocaleTimeString("zh-CN", { hour12: false })}` : "尚未刷新";
 
   // 魔神任务：无元数据，按章节序号近似进度
@@ -138,7 +146,9 @@ function cardHtml(uid: string, role: { nickname: string; region_name: string }, 
   }).join("");
 
   const rows = !data
-    ? `<div class="dn-error">${error ? esc(error) : "尚未刷新"}</div>`
+    ? error
+      ? `<div class="dn-error">${esc(error.text)}${error.needVerify ? `<br/><button class="dn-verify" data-uid="${esc(uid)}">安全验证</button>` : ""}</div>`
+      : '<div class="dn-error">尚未刷新</div>'
     : `
     ${rowHtml("i-dn-quest", archonTitle, archonCaption, archonValue, archonMax)}
     ${rowHtml("i-dn-resin", `${data.current_resin}/${data.max_resin}`, `预计 <span data-cd-target="${resinFullAt}">${targetTime(resinFullAt - Date.now() <= 0 ? 0 : resinFullAt)}</span> 全部恢复`, data.current_resin, data.max_resin)}
@@ -156,6 +166,116 @@ function cardHtml(uid: string, role: { nickname: string; region_name: string }, 
     </div>
     <div class="dn-card-body">${rows}</div>
   </div>`;
+}
+
+/** gt.js 只加载一次；后续直接使用 window.initGeetest */
+function ensureGtJs(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if ((window as unknown as { initGeetest?: unknown }).initGeetest) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://static.geetest.com/static/js/gt.0.5.2.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("gt.js 加载失败"));
+    document.head.appendChild(script);
+  });
+}
+
+/**
+ * 页内极验滑块（对应 GeetestWebView2ContentProvider 的 NavigateToString 页面）：
+ * product=bind 模式 onReady 自动弹出，成功后 resolve getValidate() 结果。
+ */
+function runGeetest(gt: string, challenge: string): Promise<{ geetest_challenge: string; geetest_validate: string } | null> {
+  return new Promise((resolve) => {
+    openDialog("安全验证", '<div id="geetest-div"></div><p class="hint">请完成滑块验证以继续获取实时便签</p>', null);
+    let settled = false;
+    const finish = (v: { geetest_challenge: string; geetest_validate: string } | null): void => {
+      if (!settled) {
+        settled = true;
+        if (abandonGeetest === finishAbandon) {
+          abandonGeetest = null;
+        }
+        closeDialog();
+        resolve(v);
+      }
+    };
+    const finishAbandon = (): void => finish(null);
+    abandonGeetest = finishAbandon;
+    onDialogCancel(() => finish(null));
+
+    void ensureGtJs()
+      .then(() => {
+        const init = (window as unknown as { initGeetest?: (opts: Record<string, unknown>, cb: (obj: GeetestObj) => void) => void }).initGeetest;
+        if (!init) {
+          finish(null);
+          return;
+        }
+        init(
+          {
+            protocol: "https://",
+            gt,
+            challenge,
+            new_captcha: true,
+            product: "bind",
+            api_server: "api.geetest.com",
+          },
+          (captchaObj) => {
+            captchaObj.onReady(() => {
+              captchaObj.verify();
+            });
+            captchaObj.onSuccess(() => {
+              const validate = captchaObj.getValidate();
+              if (validate) {
+                finish({
+                  geetest_challenge: validate.geetest_challenge,
+                  geetest_validate: validate.geetest_validate,
+                });
+              }
+            });
+            captchaObj.onError(() => {
+              toast("验证出错，请稍后重试", "error");
+              finish(null);
+            });
+          },
+        );
+      })
+      .catch(() => {
+        toast("极验脚本加载失败，请检查网络", "error");
+        finish(null);
+      });
+  });
+}
+
+interface GeetestObj {
+  onReady: (cb: () => void) => void;
+  onSuccess: (cb: () => void) => void;
+  onError: (cb: () => void) => void;
+  verify: () => void;
+  getValidate: () => { geetest_challenge: string; geetest_validate: string } | undefined;
+}
+
+/** 风控（1034/5003）时：申请验证 → 滑块 → 换 xrpc-challenge → 重试原请求 */
+async function fetchWithVerification(userId: number, gameUid: string): Promise<DailyNoteData> {
+  try {
+    return await api.dailyNote(userId, gameUid);
+  } catch (e) {
+    if (!isApiError(e) || (e.code !== 1034 && e.code !== 5003)) {
+      throw e;
+    }
+    const verification = await api.cardCreateVerification(userId);
+    const validated = await runGeetest(verification.gt, verification.challenge);
+    if (!validated) {
+      throw e;
+    }
+    const xrpcChallenge = await api.cardVerifyVerification(
+      userId,
+      validated.geetest_challenge,
+      validated.geetest_validate,
+    );
+    return api.dailyNote(userId, gameUid, xrpcChallenge);
+  }
 }
 
 /** 30 秒走针：只更新目标时刻文本（树脂/宝钱恢复时间随时间推移变为"已恢复完成"） */
@@ -188,6 +308,10 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
 
   const roles = currentUser.game_roles;
 
+  // 页面重渲染（切换页签/HMR）时放弃上一轮未完成的验证流程并复位单飞守卫
+  abandonGeetest?.();
+  refreshing = false;
+
   content.innerHTML = `
     <div class="page-header"><h2>实时便签</h2><p>树脂、委托、派遣等游戏内实时数据</p></div>
     <div class="dn-toolbar">
@@ -195,37 +319,68 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
       <span class="dn-hint">页面停留期间每 8 分钟自动刷新</span>
     </div>
     <div id="dn-root" class="dn-grid">
-      ${roles.map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), undefined)).join("")}
+      ${roles.map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), errors.get(r.game_uid))).join("")}
     </div>`;
 
   const root = document.getElementById("dn-root")!;
   const refreshBtn = document.getElementById("dn-refresh") as HTMLButtonElement;
 
-  async function refresh(): Promise<void> {
+  function renderCards(): void {
+    root.innerHTML = roles.map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), errors.get(r.game_uid))).join("");
+    // 风控错误卡片上的"安全验证"入口
+    root.querySelectorAll<HTMLButtonElement>(".dn-verify").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void (async () => {
+          btn.disabled = true;
+          try {
+            snapshots.set(btn.dataset.uid!, await fetchWithVerification(currentUser!.id, btn.dataset.uid!));
+            errors.delete(btn.dataset.uid!);
+            renderCards();
+          } catch (e2) {
+            toast(`安全验证后仍失败: ${errText(e2)}`, "error");
+            btn.disabled = false;
+          }
+        })();
+      });
+    });
+  }
+
+  /**
+   * @param interactive true=用户主动刷新：命中风控时自动走验证流程
+   *                  false=进入页面/定时自动刷新：不弹验证码，错误卡片提供验证按钮
+   */
+  async function refresh(interactive: boolean): Promise<void> {
+    if (refreshing) {
+      return;
+    }
+    refreshing = true;
     refreshBtn.disabled = true;
     try {
       for (const role of roles) {
         try {
-          snapshots.set(role.game_uid, await api.dailyNote(currentUser!.id, role.game_uid));
+          const data = interactive
+            ? await fetchWithVerification(currentUser!.id, role.game_uid)
+            : await api.dailyNote(currentUser!.id, role.game_uid);
+          snapshots.set(role.game_uid, data);
+          errors.delete(role.game_uid);
         } catch (e) {
-          // 单个角色失败不影响其它角色卡片
-          const holder = root.querySelector<HTMLElement>(`.dn-card[data-uid="${role.game_uid}"] .dn-card-body`);
-          if (holder) {
-            holder.innerHTML = `<div class="dn-error">${esc(errText(e))}</div>`;
-          }
-          if (roles.length === 1) {
+          // 单个角色失败不影响其它角色卡片；错误状态入映射，随卡片一起渲染
+          const needVerify = isApiError(e) && (e.code === 1034 || e.code === 5003);
+          errors.set(role.game_uid, { text: errText(e), needVerify });
+          if (!needVerify && roles.length === 1) {
             toast(`实时便签刷新失败: ${errText(e)}`, "error");
           }
         }
       }
-      root.innerHTML = roles.map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), undefined)).join("");
+      renderCards();
     } finally {
+      refreshing = false;
       refreshBtn.disabled = false;
     }
   }
 
   refreshBtn.addEventListener("click", () => {
-    void refresh();
+    void refresh(true);
   });
 
   window.clearInterval(autoRefresh);
@@ -235,9 +390,9 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
       autoRefresh = undefined;
       return;
     }
-    void refresh();
+    void refresh(false);
   }, 8 * 60 * 1000);
 
   startTicker();
-  void refresh();
+  void refresh(false);
 }

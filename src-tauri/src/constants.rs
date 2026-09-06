@@ -172,6 +172,10 @@ pub fn webstatic_referer(is_oversea: bool) -> &'static str {
 /// GameRecord 请求的 x-rpc-tool_verison（对应 GameRecordClient 中硬编码值）
 pub const TOOL_VERSION_GR: &str = "v5.0.1-ys";
 
+/// 安全验证用的 challenge_path（对应 CardVerificationHeaders.CreateForDailyNote）
+pub const DAILY_NOTE_PATH_CN: &str =
+    "https://api-takumi-record.mihoyo.com/game_record/app/genshin/api/dailyNote";
+
 // ---------------------------------------------------------------------------
 // 国服 Passport 接口 RSA 公钥（UIGF 社区文档公开值，用于手机号加密）
 // ---------------------------------------------------------------------------

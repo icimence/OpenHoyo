@@ -26,6 +26,12 @@ impl AppState {
                 devices
             }
         };
+        // 自愈：存量指纹若绑定的是其它 device_id（历史上随机重生时期遗留），一并失效重换
+        let bound = store::meta_get(&db, "fp_bound_id36");
+        if bound.as_deref() != Some(devices.id36.as_str()) {
+            let _ = db.execute("UPDATE users SET fingerprint = NULL, fingerprint_updated_at = 0", []);
+            store::meta_set(&db, "fp_bound_id36", &devices.id36);
+        }
         Self {
             http: reqwest::Client::new(),
             devices,

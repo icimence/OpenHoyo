@@ -295,22 +295,24 @@ pub async fn gacha_refresh_by_manual(
 // 实时便签
 // ---------------------------------------------------------------------------
 
+fn find_user(state: &State<'_, AppState>, user_id: i64) -> ApiResult<UserRecord> {
+    let db = state.db.lock().unwrap();
+    let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    records
+        .into_iter()
+        .find(|r| r.id == user_id)
+        .ok_or_else(|| ApiError::retcode(-5, "用户不存在"))
+}
+
 /// 拉取实时便签（对应原版 DailyNoteService.RefreshDailyNoteAsync：先懒刷新凭证再请求）
 #[tauri::command]
 pub async fn daily_note(
     state: State<'_, AppState>,
-    handle: AppHandle,
     user_id: i64,
     game_uid: String,
+    challenge: Option<String>,
 ) -> ApiResult<crate::daily_note::DailyNoteData> {
-    let mut rec = {
-        let db = state.db.lock().unwrap();
-        let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
-        records
-            .into_iter()
-            .find(|r| r.id == user_id)
-            .ok_or_else(|| ApiError::retcode(-5, "用户不存在"))?
-    };
+    let mut rec = find_user(&state, user_id)?;
     let role = rec
         .game_roles
         .iter()
@@ -318,15 +320,48 @@ pub async fn daily_note(
         .cloned()
         .ok_or_else(|| ApiError::retcode(-6, "用户没有该游戏角色"))?;
 
-    // 懒刷新 cookie_token/ltoken（超过 1 天自动用 SToken 重换）
+    // 懒刷新 cookie_token/ltoken（超过 1 天自动用 SToken 重换）。
+    // 注意：这里绝不广播 users://changed —— 那会触发前端整页重载→再次请求→事件回环
     if let Err(e) = service::initialize_user(&state, &mut rec, false).await {
         // 凭证刷新失败不必然致命（本地可能仍有有效缓存凭证），记录后继续尝试
         eprintln!("[daily_note] 凭证刷新失败: {e}");
     } else {
         let _ = service::save(&state, &mut rec);
-        let _ = handle.emit("users://changed", ());
     }
 
     let salts = salts(&state).await;
-    crate::daily_note::fetch(&state.http, &salts, &state.devices, &rec, &role.game_uid, &role.region).await
+    crate::daily_note::fetch(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &role.game_uid,
+        &role.region,
+        challenge.as_deref(),
+    )
+    .await
+}
+
+/// 安全验证第一步：申请极验会话（对应 CardClient.CreateVerificationAsync）
+#[tauri::command]
+pub async fn card_create_verification(
+    state: State<'_, AppState>,
+    user_id: i64,
+) -> ApiResult<crate::daily_note::GeetestVerificationDto> {
+    let rec = find_user(&state, user_id)?;
+    let salts = salts(&state).await;
+    crate::daily_note::create_verification(&state.http, &salts, &state.devices, &rec).await
+}
+
+/// 安全验证第三步：提交滑块结果换 xrpc-challenge（对应 CardClient.VerifyVerificationAsync）
+#[tauri::command]
+pub async fn card_verify_verification(
+    state: State<'_, AppState>,
+    user_id: i64,
+    challenge: String,
+    validate: String,
+) -> ApiResult<String> {
+    let rec = find_user(&state, user_id)?;
+    let salts = salts(&state).await;
+    crate::daily_note::verify_verification(&state.http, &salts, &state.devices, &rec, &challenge, &validate).await
 }
