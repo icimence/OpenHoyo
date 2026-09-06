@@ -13,6 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)] // Name/Version/Order 等字段为数据文件结构保留，运行时仅使用窗口与 UP 名单
 pub struct GachaEvent {
     #[serde(rename = "Name")]
     pub name: String,

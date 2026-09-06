@@ -88,11 +88,15 @@ App 启动 5 秒后静默检查 ← latest.json + 签名安装包 ←───�
   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：空字符串（本项目密钥未设密码）
 - **`src-tauri/tauri.conf.json`** 的 `plugins.updater.endpoints` 需改为你的实际仓库地址（当前为 `icimence/OpenHoyo`）
 
-### 数据维护节奏
+### 数据维护节奏（全自研，无社区依赖）
 
-| 数据 | 来源 | Action | 频率 |
-|---|---|---|---|
-| 卡池事件 + 物品名称 | Snap.Metadata 镜像 | update-banners.yml | 每日 |
-| 角色/武器图标 | 米哈游官方观测枢 wiki | update-icons.yml | 每两周（版本周期 42 天） |
+| 数据 | 来源 | 说明 |
+|---|---|---|
+| 卡池时间 | 纯算术（scripts/version-table.mjs 版本表） | 版本日表 + 上半20天/下半至版本末日；含 1.1/2.7/2.8/3.1-3.3 历史例外与 2.6 特例 |
+| UP 名单 | 米哈游官方公告 API | 版本日前 2~5 天发布，版本日 04:30 自动拉取 |
+| 物品图标 | 米哈游官方观测枢 wiki | 随版本日流水线增量同步 |
 
-米哈游版本节奏约 6 周（42 天）一个版本；新卡池数据在上游开池后 2~5 天内可用。
+自动化：version-release.yml 每天 04:30（上海）自检，命中版本日或半池切换日即：
+生成元数据 → 增量图标 → 校验 → 提交 → 自动发版，用户早晨 7 点前收到更新。
+手动兜底：推 v* 标签 / 手动运行 release.yml / version-release.yml（force=true）。
+社区镜像已退役（曾发现系统性时间错误，仅历史 UP 名单沿用其数据）。

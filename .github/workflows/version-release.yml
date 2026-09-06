@@ -1,0 +1,114 @@
+# 版本日自动发布流水线
+#
+# 触发时机（上海时间）：每天 04:30 自检，命中以下任一情形才执行：
+#   1. 版本日（周三）：新版本上线，注入上半卡池数据 + 新角色图标
+#   2. 半池切换日（周二）：下半卡池开放，注入下半数据
+# 流程：生成元数据（时间=纯算术，UP=官方公告）→ 增量拉图标 → 校验 → 提交 → 发版
+# 用户早上 7 点醒来前，新版本已可用。
+#
+# 手动兜底：workflow_dispatch 可强制执行（force=true 跳过日期判定）；
+#           推 v* 标签或手动运行 release.yml 依然有效。
+name: Version Release
+
+on:
+  schedule:
+    # 每天 20:30 UTC = 上海 04:30
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "跳过版本日判定强制执行"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      app_version: ${{ steps.check.outputs.app_version }}
+      game_version: ${{ steps.check.outputs.game_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version day or half-switch day
+        id: check
+        run: |
+          node -e "
+            import('./scripts/version-table.mjs').then(({ VERSIONS, structFor, futureVersions }) => {
+              const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+              const fs = require('node:fs');
+              const force = '${{ github.event.inputs.force }}' === 'true';
+
+              const futures = futureVersions(today, 3);
+              const all = [...VERSIONS, ...futures];
+              const idx = all.reduce((acc, v, i) => (v.date <= today ? i : acc), 0);
+              const ver = all[idx];
+              const { firstHalfDays } = structFor(ver.version);
+              const addDays = (d, n) => new Date(new Date(d + 'T00:00:00Z').getTime() + n * 86400000).toISOString().slice(0, 10);
+              const halfSwitch = addDays(ver.date, firstHalfDays);
+              const isVerDay = all.some(v => v.date === today);
+              const isHalfDay = today === halfSwitch;
+              console.log('today:', today, '| 活跃版本:', ver.version, '| 切换日:', halfSwitch, '| 版本日:', isVerDay, '| 半池日:', isHalfDay);
+
+              if (!force && !isVerDay && !isHalfDay) {
+                console.log('非版本日/切换日，跳过');
+                fs.appendFileSync(process.env.GITHUB_OUTPUT, 'should_run=false\n');
+                process.exit(0);
+              }
+              const bump = (require('./package.json').version.split('.').map((v, i) => (i === 2 ? Number(v) + 1 : v))).join('.');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'should_run=true\n');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'app_version=' + bump + '\n');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'game_version=' + ver.version + '\n');
+            });
+          "
+
+  build-data:
+    needs: check
+    if: needs.check.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Generate gacha events (时间=算术, UP=官方公告)
+        run: node scripts/gen-gacha-events.mjs
+
+      - name: Sync icons
+        run: node scripts/fetch-wiki-icons.mjs
+
+      - name: Validate
+        run: |
+          COUNT=$(ls public/gacha-icons/*.webp | wc -l)
+          [ "$COUNT" -lt 370 ] && echo "图标数量异常: $COUNT" && exit 1
+          node -e "
+            const evs = require('./src-tauri/src/data/gacha_events.json');
+            if (evs.length < 250) throw new Error('事件数异常');
+            console.log('OK,', evs.length, '期');
+          "
+
+      - name: Commit data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/src/data/gacha_events.json public/gacha-icons
+          git diff --cached --quiet && echo "数据无变化" && exit 0
+          git commit -m "chore(data): gacha events + icons for ${{ needs.check.outputs.game_version }}"
+          git push
+
+  release:
+    needs: [check, build-data]
+    if: needs.check.outputs.should_run == 'true'
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.check.outputs.app_version }}
+      game_version: ${{ needs.check.outputs.game_version }}
