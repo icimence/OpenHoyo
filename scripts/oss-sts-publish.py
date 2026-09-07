@@ -45,11 +45,19 @@ def fetch_oidc_token() -> str:
 
 
 def assume_sts(oidc_token: str):
-    """AssumeRoleWithOIDC（匿名接口）换取 1 小时 STS 凭证"""
+    """AssumeRoleWithOIDC（免签名的匿名 RPC 接口，但公共参数仍必填）换取 1 小时 STS 凭证"""
+    import datetime
+    import uuid
+
     form = urllib.parse.urlencode(
         {
             "Action": "AssumeRoleWithOIDC",
             "Version": "2015-04-01",
+            "Format": "JSON",
+            "SignatureMethod": "HMAC-SHA1",
+            "SignatureVersion": "1.0",
+            "SignatureNonce": uuid.uuid4().hex,
+            "Timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "RoleArn": ROLE_ARN,
             "OIDCProviderArn": OIDC_PROVIDER_ARN,
             "OIDCToken": oidc_token,
