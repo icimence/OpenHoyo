@@ -81,7 +81,12 @@ def create_or_get_release(tag: str, title: str, body: str) -> str:
 
 def upload_asset(release_id: str, tag: str, path: str) -> str:
     name = os.path.basename(path)
-    info = api("GET", f"/{REPO}/-/releases/{release_id}/asset-upload-url?name={name}")
+    size = os.path.getsize(path)
+    info = api(
+        "POST",
+        f"/{REPO}/-/releases/{release_id}/asset-upload-url",
+        {"asset_name": name, "overwrite": True, "size": size},
+    )
     upload_url = info.get("upload_url")
     if not upload_url:
         die(f"未取得 {name} 的上传地址: {json.dumps(info)[:200]}")
