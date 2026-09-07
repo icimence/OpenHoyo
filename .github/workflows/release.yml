@@ -94,9 +94,6 @@ jobs:
       VERSION: ${{ needs.release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          # git log 回退与 tag 提取需要完整历史
-          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -111,16 +108,11 @@ jobs:
           mkdir -p dist
           # ① CHANGELOG.md 的 vX 段落（发版前人工编写，客户端首启弹窗展示）
           node scripts/extract-changelog.mjs "${VERSION}" > dist/notes.md || true
-          if [ -s dist/notes.md ]; then
-            echo "notes 来源: CHANGELOG.md"
-          else
-            # ② 回退：上个 tag 以来的提交记录（自动发版未编写段落时）
-            PREV=$(git tag --sort=-v:refname | grep -v "^v${VERSION}$" | head -1 || true)
-            RANGE="${PREV:+$PREV..}HEAD"
-            git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges > dist/notes.md
-            echo "notes 来源: git log ${RANGE}"
+          if [ ! -s dist/notes.md ]; then
+            # ② 未编写段落时的用户侧兜底文案（git log 是开发者视角，不对用户透出）
+            echo "更新到 v${VERSION}，修复了一些问题并优化了使用体验。" > dist/notes.md
           fi
-          head -5 dist/notes.md
+          head -3 dist/notes.md
           # 同步 GitHub Release 正文（tauri-action 建的是占位模板）
           gh release edit "v${VERSION}" --notes-file dist/notes.md --repo "$GITHUB_REPOSITORY"
 
