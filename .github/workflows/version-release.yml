@@ -107,6 +107,11 @@ jobs:
   release:
     needs: [check, build-data]
     if: needs.check.outputs.should_run == 'true'
+    # 可复用工作流的权限只能是调用方授权的子集：必须显式授予 id-token，
+    # 否则 release.yml 的 distribute job（OIDC→STS→OSS）拿不到令牌
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/release.yml
     secrets: inherit
     with:
