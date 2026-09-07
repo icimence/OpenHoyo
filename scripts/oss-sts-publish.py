@@ -15,6 +15,7 @@
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -45,7 +46,7 @@ def fetch_oidc_token() -> str:
 
 def assume_sts(oidc_token: str):
     """AssumeRoleWithOIDC（匿名接口）换取 1 小时 STS 凭证"""
-    query = urllib.parse.urlencode(
+    form = urllib.parse.urlencode(
         {
             "Action": "AssumeRoleWithOIDC",
             "Version": "2015-04-01",
@@ -54,10 +55,17 @@ def assume_sts(oidc_token: str):
             "OIDCToken": oidc_token,
             "RoleSessionName": "github-actions-openhoyo",
         }
+    ).encode()
+    req = urllib.request.Request(
+        f"https://sts.{OSS_REGION}.aliyuncs.com/",
+        data=form,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-    req = urllib.request.Request(f"https://sts.{OSS_REGION}.aliyuncs.com/?{query}")
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = json.load(resp)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.load(resp)
+    except urllib.error.HTTPError as e:
+        die(f"AssumeRoleWithOIDC HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:500]}")
     creds = data["Credentials"]
     return creds["AccessKeyId"], creds["AccessKeySecret"], creds["SecurityToken"]
 
