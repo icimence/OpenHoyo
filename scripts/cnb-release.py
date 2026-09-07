@@ -88,14 +88,26 @@ def upload_asset(release_id: str, tag: str, path: str) -> str:
         {"asset_name": name, "overwrite": True, "size": size},
     )
     upload_url = info.get("upload_url")
-    if not upload_url:
-        die(f"未取得 {name} 的上传地址: {json.dumps(info)[:200]}")
+    verify_url = info.get("verify_url")
+    if not upload_url or not verify_url:
+        die(f"未取得 {name} 的上传/确认地址: {json.dumps(info)[:200]}")
     with open(path, "rb") as f:
         raw = f.read()
     req = urllib.request.Request(upload_url, data=raw, method="PUT")
     req.add_header("Content-Type", "application/octet-stream")
+    req.add_header("Accept", "application/json")
+    req.add_header("Authorization", f"Bearer {TOKEN}")
     with urllib.request.urlopen(req, timeout=600) as resp:
         resp.read()
+    # 上传后必须调用 verify 确认，资产才会挂到 release 上
+    if verify_url.startswith("http"):
+        req = urllib.request.Request(verify_url, method="POST")
+        req.add_header("Authorization", f"Bearer {TOKEN}")
+        req.add_header("Accept", "application/json")
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            resp.read()
+    else:
+        api("POST", verify_url)
     url = f"https://cnb.cool/{REPO}/-/releases/download/{tag}/{name}"
     print(f"✓ 上传 {name}（{len(raw)}B）→ {url}")
     return url
