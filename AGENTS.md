@@ -55,6 +55,9 @@ authkey、设备指纹原文。
     仓库不存任何阿里云长期密钥；发版后灰度恒为 0，由 `update-gray.yml`（workflow_dispatch）
     手动放量，出问题调回 0 熔断
   - 完整性由 minisign 签名保证（私钥仅在 GitHub Secrets），任一分发渠道被篡改均验签失败
+  - **更新说明（首启弹窗）的唯一编写处是根目录 `CHANGELOG.md`**：发版前为本次版本
+    编写 `## vX.Y.Z` 段落并推送；CI distribute 环节提取该段落上传 OSS 并同步
+    GitHub Release 正文，段落缺失时回退为 git 提交记录（自动发版路径）
 - **serde 方向性 rename**：米哈游接口的错拼/大写字段（如 `fight_statisic`、`Day`）用
   `#[serde(rename(serialize = "规范名", deserialize = "错拼名"))]`——入库容忍错拼，
   出站给前端规范化。

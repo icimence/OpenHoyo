@@ -87,19 +87,42 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      contents: read
+      contents: write
     env:
       ROLE_ARN: acs:ram::1203685464265895:role/openhoyo-github-ci
       OIDC_PROVIDER_ARN: acs:ram::1203685464265895:oidc-provider/GitHub-action
       VERSION: ${{ needs.release.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # git log 回退与 tag 提取需要完整历史
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
       - run: pip install oss2
+
+      - name: Compose release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          # ① CHANGELOG.md 的 vX 段落（发版前人工编写，客户端首启弹窗展示）
+          node scripts/extract-changelog.mjs "${VERSION}" > dist/notes.md || true
+          if [ -s dist/notes.md ]; then
+            echo "notes 来源: CHANGELOG.md"
+          else
+            # ② 回退：上个 tag 以来的提交记录（自动发版未编写段落时）
+            PREV=$(git tag --sort=-v:refname | grep -v "^v${VERSION}$" | head -1 || true)
+            RANGE="${PREV:+$PREV..}HEAD"
+            git log "$RANGE" --pretty=format:"- %s (%h)" --no-merges > dist/notes.md
+            echo "notes 来源: git log ${RANGE}"
+          fi
+          head -5 dist/notes.md
+          # 同步 GitHub Release 正文（tauri-action 建的是占位模板）
+          gh release edit "v${VERSION}" --notes-file dist/notes.md --repo "$GITHUB_REPOSITORY"
 
       - name: Download release assets
         env:
@@ -108,11 +131,6 @@ jobs:
           gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" \
             --pattern "hoyo-auth_*_x64-setup.exe" --pattern "latest.json" --dir dist
           ls -la dist/
-
-      - name: Release notes to file
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh api "repos/$GITHUB_REPOSITORY/releases/tags/v${VERSION}" --jq .body > dist/notes.md
 
       - name: Upload installer to CNB
         env:
