@@ -41,7 +41,7 @@ jobs:
         run: python scripts/oss-sts-publish.py notice "${{ inputs.version }}" "${{ inputs.gray }}"
 
       - name: Verify public readable
-        run: python scripts/oss-sts-publish.py verify notice.json
+        run: python scripts/oss-sts-publish.py verify updates/notice.json
         env:
           ROLE_ARN: acs:ram::1203685464265895:role/openhoyo-github-ci
           OIDC_PROVIDER_ARN: acs:ram::1203685464265895:oidc-provider/GitHub-action
