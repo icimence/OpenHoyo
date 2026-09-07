@@ -183,7 +183,7 @@ function cardHtml(
         ? skeletonRows()
         : '<div class="dn-error">尚未刷新</div>'
     : `
-    ${rowHtml("/icons/ui/UI_MarkQuest.png", archonTitle, archonCaption, archonValue, archonMax)}
+    ${rowHtml("/icons/ui/UI_MarkQuest_Main_Proce.png", archonTitle, archonCaption, archonValue, archonMax)}
     ${rowHtml("/icons/ui/UI_ItemIcon_106.png", `${data.current_resin}/${data.max_resin}`, `预计 <span data-cd-target="${resinFullAt}">${targetTime(resinFullAt - Date.now() <= 0 ? 0 : resinFullAt)}</span> 全部恢复`, data.current_resin, data.max_resin)}
     ${rowHtml("/icons/ui/UI_ItemIcon_204.png", data.max_home_coin === 0 ? "未解锁" : `${data.current_home_coin}/${data.max_home_coin}`, data.max_home_coin === 0 ? "尚未开启尘歌壶系统" : `预计 <span data-cd-target="${coinFullAt}">${targetTime(coinFullAt - Date.now() <= 0 ? 0 : coinFullAt)}</span> 全部恢复`, data.current_home_coin, data.max_home_coin)}
     ${rowHtml("/icons/ui/UI_MarkQuest_Events_Proce.png", `${taskDone}/${taskTotal}`, taskCaption, taskDone, taskTotal)}
