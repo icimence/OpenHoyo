@@ -32,6 +32,8 @@ def die(msg: str) -> None:
 
 def fetch_oidc_token() -> str:
     """从 runner 环境换取 GitHub OIDC Token（audience 为阿里云固定要求值）"""
+    import base64
+
     url = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_URL")
     token = os.environ.get("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
     if not url or not token:
@@ -41,7 +43,13 @@ def fetch_oidc_token() -> str:
         headers={"Authorization": f"bearer {token}"},
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.load(resp)["value"]
+        value = json.load(resp)["value"]
+    # 调试：打印 claims（不含签名，token 数分钟过期）用于对照信任策略
+    payload = value.split(".")[1]
+    payload += "=" * (-len(payload) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(payload))
+    print(f"OIDC claims: iss={claims.get('iss')} aud={claims.get('aud')} sub={claims.get('sub')}")
+    return value
 
 
 def assume_sts(oidc_token: str):
@@ -73,7 +81,7 @@ def assume_sts(oidc_token: str):
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.load(resp)
     except urllib.error.HTTPError as e:
-        die(f"AssumeRoleWithOIDC HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:500]}")
+        die(f"AssumeRoleWithOIDC HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:2000]}")
     creds = data["Credentials"]
     return creds["AccessKeyId"], creds["AccessKeySecret"], creds["SecurityToken"]
 
