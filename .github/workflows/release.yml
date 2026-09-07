@@ -27,6 +27,8 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,13 +37,16 @@ jobs:
           node-version: 22
 
       - name: Resolve version
+        id: ver
         shell: bash
         run: |
           if [ -n "${{ inputs.version }}" ]; then
-            echo "VERSION=${{ inputs.version }}" >> $GITHUB_ENV
+            V="${{ inputs.version }}"
           else
-            echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+            V="${GITHUB_REF_NAME#v}"
           fi
+          echo "VERSION=$V" >> $GITHUB_ENV
+          echo "version=$V" >> "$GITHUB_OUTPUT"
 
       - name: Bump version files
         run: node scripts/bump-version.mjs ${{ env.VERSION }}
@@ -74,3 +79,69 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
+
+  # 分发：安装包上传 CNB（国内下载源）→ OSS 元数据（latest.json 指向 CNB）
+  # → notice.json（灰度 0）→ 更新说明 md。OSS 访问用 OIDC→STS，无长期密钥。
+  distribute:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ROLE_ARN: acs:ram::1203685464265895:role/openhoyo-github-ci
+      OIDC_PROVIDER_ARN: acs:ram::1203685464265895:oidc-provider/GitHub-action
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - run: pip install oss2
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" \
+            --pattern "hoyo-auth_*_x64-setup.exe" --pattern "latest.json" --dir dist
+          ls -la dist/
+
+      - name: Release notes to file
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api "repos/$GITHUB_REPOSITORY/releases/tags/v${VERSION}" --jq .body > dist/notes.md
+
+      - name: Upload installer to CNB
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+        run: |
+          python scripts/cnb-release.py "v${VERSION}" "OpenHoyo v${VERSION}" dist/notes.md dist/hoyo-auth_*_x64-setup.exe \
+            | tee dist/cnb-urls.txt
+          grep -m1 "ASSET_URL=" dist/cnb-urls.txt | sed 's/^ASSET_URL=//' > dist/cnb-url.txt
+          cat dist/cnb-url.txt
+
+      - name: Build OSS latest.json (download URL → CNB)
+        run: |
+          python - <<'EOF'
+          import glob, json
+          with open("dist/latest.json", encoding="utf-8") as f:
+              manifest = json.load(f)
+          with open("dist/cnb-url.txt", encoding="utf-8") as f:
+              cnb_url = f.read().strip()
+          for platform in manifest.get("platforms", {}).values():
+              platform["url"] = cnb_url
+          with open("dist/latest-oss.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          print(json.dumps(manifest, ensure_ascii=False)[:400])
+          EOF
+
+      - name: Publish to OSS (STS via OIDC)
+        run: |
+          python scripts/oss-sts-publish.py latest dist/latest-oss.json
+          python scripts/oss-sts-publish.py notes "${VERSION}" dist/notes.md
+          python scripts/oss-sts-publish.py notice "${VERSION}" 0
+          python scripts/oss-sts-publish.py verify notice.json
+          python scripts/oss-sts-publish.py verify latest.json

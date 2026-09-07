@@ -12,6 +12,7 @@ import {
   toast,
 } from "./ui";
 import { checkForUpdates, initUpdateBadge } from "./updater";
+import { initChangelog } from "./changelog";
 import { initTheme, renderSettingsPage } from "./settings";
 import { renderDailyNotePage } from "./dailynote";
 import { renderAbyssPage, renderHardChallengePage, renderTheaterPage } from "./chronicle";
@@ -556,6 +557,9 @@ async function main(): Promise<void> {
   // console.* → 后端日志文件（反馈中心采集用；不要改用 attachConsole，方向相反）
   const { initFrontendLog } = await import("./log");
   initFrontendLog();
+
+  // 新版本首次启动展示更新说明（失败静默）
+  void initChangelog();
 
   // 渲染异常直接显示在页面上，避免静默失败导致"某个控件不见了"却无从排查
   window.addEventListener("error", (ev) => {

@@ -124,6 +124,14 @@ export const api = {
   /** 打包诊断信息并打开 GitHub Issue 页面，返回 zip 路径与 Issue 链接 */
   feedbackSubmit: (text: string, imagePaths: string[], includeLogs: boolean, includeDumps: boolean) =>
     invoke<FeedbackResult>("feedback_submit", { text, imagePaths, includeLogs, includeDumps }),
+
+  // ---- 更新体系 ----
+
+  /** OSS 版本通告（灰度门控主源，失败时前端回退 GitHub 直查） */
+  updateNotice: () => invoke<UpdateNotice>("update_notice"),
+
+  /** 指定版本的更新说明 markdown（OSS 主源，GitHub 兜底） */
+  updateNotes: (version: string) => invoke<string>("update_notes", { version }),
 };
 
 /** feedback_submit 命令的返回（后端 serde rename_all = camelCase） */
@@ -133,6 +141,12 @@ export interface FeedbackResult {
   dumpCount: number;
   imageCount: number;
   clipboardOk: boolean;
+}
+
+/** OSS notice.json（update_notice 命令返回） */
+export interface UpdateNotice {
+  version: string;
+  gray: number;
 }
 
 // ---------------------------------------------------------------------------

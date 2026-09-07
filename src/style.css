@@ -1904,6 +1904,47 @@ button svg {
   min-height: 16px;
 }
 
+/* ---- 新版本首启更新说明弹窗 ---- */
+
+.changelog-body {
+  max-height: 46vh;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.changelog-body h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 12px 0 6px;
+  color: var(--text);
+}
+
+.changelog-body h3:first-child {
+  margin-top: 0;
+}
+
+.changelog-body p {
+  margin: 6px 0;
+}
+
+.changelog-body ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.changelog-body li {
+  margin: 3px 0;
+}
+
+.changelog-body code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--hover-soft);
+}
+
 /* WinUI Segmented 风格的主题切换器 */
 .segmented {
   display: flex;

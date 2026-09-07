@@ -33,6 +33,7 @@ mod response;
 mod service;
 mod state;
 mod store;
+mod update;
 mod user_api;
 
 use tauri::Manager;
@@ -120,6 +121,8 @@ pub fn run() {
             commands::chronicle_list,
             commands::chronicle_refresh,
             feedback::feedback_submit,
+            update::update_notice,
+            update::update_notes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

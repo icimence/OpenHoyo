@@ -46,6 +46,15 @@ authkey、设备指纹原文。
 
 ## 其他强制约定
 
+- **更新分发体系**（对齐 BetterGI 的多渠道模型）：
+  - 版本检查主源 = 阿里云 OSS `openhoyo-updates/updates/notice.json`（version + gray 灰度），
+    前端按 deviceId 哈希 %10 < gray 门控；OSS 不可达回退 GitHub（endpoints 第二顺位）
+  - 安装包国内下载源 = CNB（`openhoyo/openhoyo-release` 仓库 release 资产，免费）；
+    OSS 上的 `latest.json` 的 download.url 指向 CNB——**改 OSS 这个 json 即可切换下载源，无需发版**
+  - CI 访问 OSS 用 GitHub OIDC → STS 临时凭证（`scripts/oss-sts-publish.py`），
+    仓库不存任何阿里云长期密钥；发版后灰度恒为 0，由 `update-gray.yml`（workflow_dispatch）
+    手动放量，出问题调回 0 熔断
+  - 完整性由 minisign 签名保证（私钥仅在 GitHub Secrets），任一分发渠道被篡改均验签失败
 - **serde 方向性 rename**：米哈游接口的错拼/大写字段（如 `fight_statisic`、`Day`）用
   `#[serde(rename(serialize = "规范名", deserialize = "错拼名"))]`——入库容忍错拼，
   出站给前端规范化。
