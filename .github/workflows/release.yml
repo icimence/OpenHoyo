@@ -109,8 +109,13 @@ jobs:
           # ① CHANGELOG.md 的 vX 段落（发版前人工编写，客户端首启弹窗展示）
           node scripts/extract-changelog.mjs "${VERSION}" > dist/notes.md || true
           if [ ! -s dist/notes.md ]; then
-            # ② 未编写段落时的用户侧兜底文案（git log 是开发者视角，不对用户透出）
-            echo "更新到 v${VERSION}，修复了一些问题并优化了使用体验。" > dist/notes.md
+            # ② 未编写段落时的用户侧兜底文案（git log 是开发者视角，不对用户透出）：
+            #    自动发版（带 game_version）明确说明是同步新版本卡池，手动发版用通用文案
+            if [ -n "${{ inputs.game_version }}" ]; then
+              echo "随原神 ${{ inputs.game_version }} 版本发布：同步新版本卡池信息与物品图标。" > dist/notes.md
+            else
+              echo "更新到 v${VERSION}，修复了一些问题并优化了使用体验。" > dist/notes.md
+            fi
           fi
           head -3 dist/notes.md
           # 同步 GitHub Release 正文（tauri-action 建的是占位模板）
