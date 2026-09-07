@@ -1,0 +1,14 @@
+# 临时：验证 cnb-release.py 的建 release + 传资产链路（测完删除）
+name: CNB Smoke
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run CNB upload smoke
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+        run: |
+          echo "smoke test asset for cnb-release.py" > smoke.txt
+          python scripts/cnb-release.py "v0.0.0-smoke" "OpenHoyo 冒烟测试" smoke.txt smoke.txt
