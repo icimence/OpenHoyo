@@ -71,6 +71,7 @@ def create_or_get_release(tag: str, title: str, body: str) -> str:
             "body": body,
             "draft": False,
             "prerelease": False,
+            "target_commitish": "main",
             "make_latest": "true",
         },
     )
