@@ -69,10 +69,14 @@ function rowHtml(
   extra = "",
 ): string {
   const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  // icon 以 "/" 开头时是本地米哈游原版图标（public/icons），否则是内联 SVG symbol
+  const iconHtml = icon.startsWith("/")
+    ? `<img class="dn-row-icon" src="${icon}" alt="" onerror="this.remove()"/>`
+    : `<svg class="dn-row-icon"><use href="#${icon}"/></svg>`;
   return `
   <div class="dn-row">
     <div class="dn-row-bar" style="width:${pct}%"></div>
-    <svg class="dn-row-icon"><use href="#${icon}"/></svg>
+    ${iconHtml}
     <div class="dn-row-text">
       <div class="dn-row-title">${title}</div>
       <div class="dn-row-caption">${caption}</div>
@@ -81,8 +85,36 @@ function rowHtml(
   </div>`;
 }
 
-function cardHtml(uid: string, role: { nickname: string; region_name: string }, data: DailyNoteData | undefined, error: { text: string; needVerify: boolean } | undefined): string {
-  const fetched = data ? `数据更新于 ${new Date(data.fetched_at_ms).toLocaleTimeString("zh-CN", { hour12: false })}` : "尚未刷新";
+/** 加载骨架：与真实卡片同结构的 shimmer 占位（对应原版 Skeleton 加载态） */
+function skeletonRows(): string {
+  const row = `
+  <div class="dn-row sk">
+    <div class="sk-bar sk-icon"></div>
+    <div class="sk-lines">
+      <div class="sk-bar sk-line-title"></div>
+      <div class="sk-bar sk-line-cap"></div>
+    </div>
+  </div>`;
+  const exp = `
+  <div class="dn-exp sk">
+    <div class="sk-bar sk-avatar"></div>
+    <div class="sk-bar sk-text"></div>
+  </div>`;
+  return `${row.repeat(5)}<div class="dn-exp-grid">${exp.repeat(4)}</div>`;
+}
+
+function cardHtml(
+  uid: string,
+  role: { nickname: string; region_name: string },
+  data: DailyNoteData | undefined,
+  error: { text: string; needVerify: boolean } | undefined,
+  loading = false,
+): string {
+  const fetched = data
+    ? `数据更新于 ${new Date(data.fetched_at_ms).toLocaleTimeString("zh-CN", { hour12: false })}`
+    : loading
+      ? "加载中…"
+      : "尚未刷新";
 
   // 魔神任务：无元数据，按章节序号近似进度
   const quests = data?.archon_quest_progress?.list ?? [];
@@ -147,14 +179,16 @@ function cardHtml(uid: string, role: { nickname: string; region_name: string }, 
   const rows = !data
     ? error
       ? `<div class="dn-error">${esc(error.text)}${error.needVerify ? `<br/><button class="dn-verify" data-uid="${esc(uid)}">安全验证</button>` : ""}</div>`
-      : '<div class="dn-error">尚未刷新</div>'
+      : loading
+        ? skeletonRows()
+        : '<div class="dn-error">尚未刷新</div>'
     : `
     ${rowHtml("i-dn-quest", archonTitle, archonCaption, archonValue, archonMax)}
-    ${rowHtml("i-dn-resin", `${data.current_resin}/${data.max_resin}`, `预计 <span data-cd-target="${resinFullAt}">${targetTime(resinFullAt - Date.now() <= 0 ? 0 : resinFullAt)}</span> 全部恢复`, data.current_resin, data.max_resin)}
-    ${rowHtml("i-dn-coin", data.max_home_coin === 0 ? "未解锁" : `${data.current_home_coin}/${data.max_home_coin}`, data.max_home_coin === 0 ? "尚未开启尘歌壶系统" : `预计 <span data-cd-target="${coinFullAt}">${targetTime(coinFullAt - Date.now() <= 0 ? 0 : coinFullAt)}</span> 全部恢复`, data.current_home_coin, data.max_home_coin)}
+    ${rowHtml("/icons/ui/UI_ItemIcon_106.png", `${data.current_resin}/${data.max_resin}`, `预计 <span data-cd-target="${resinFullAt}">${targetTime(resinFullAt - Date.now() <= 0 ? 0 : resinFullAt)}</span> 全部恢复`, data.current_resin, data.max_resin)}
+    ${rowHtml("/icons/ui/UI_ItemIcon_204.png", data.max_home_coin === 0 ? "未解锁" : `${data.current_home_coin}/${data.max_home_coin}`, data.max_home_coin === 0 ? "尚未开启尘歌壶系统" : `预计 <span data-cd-target="${coinFullAt}">${targetTime(coinFullAt - Date.now() <= 0 ? 0 : coinFullAt)}</span> 全部恢复`, data.current_home_coin, data.max_home_coin)}
     ${rowHtml("i-dn-task", `${taskDone}/${taskTotal}`, taskCaption, taskDone, taskTotal)}
     ${rowHtml("i-dn-weekly", `${discountUsed}/${data.resin_discount_num_limit}`, "今日已用周本减免次数", discountUsed, data.resin_discount_num_limit)}
-    ${rowHtml("i-dn-trans", trTitle, trCaption, trValue, trMax)}
+    ${rowHtml("/icons/ui/UI_ItemIcon_220021.png", trTitle, trCaption, trValue, trMax)}
     ${exps ? `<div class="dn-exp-grid">${exps}</div>` : ""}`;
 
   return `
@@ -208,14 +242,23 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
       <span class="dn-hint">页面停留期间每 8 分钟自动刷新</span>
     </div>
     <div id="dn-root" class="dn-grid">
-      ${roles.map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), errors.get(r.game_uid))).join("")}
+      ${roles
+        .map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), errors.get(r.game_uid), !snapshots.has(r.game_uid) && !errors.has(r.game_uid)))
+        .join("")}
     </div>`;
 
   const root = document.getElementById("dn-root")!;
   const refreshBtn = document.getElementById("dn-refresh") as HTMLButtonElement;
 
-  function renderCards(): void {
-    root.innerHTML = roles.map((r) => cardHtml(r.game_uid, r, snapshots.get(r.game_uid), errors.get(r.game_uid))).join("");
+  /** pending=true 时无数据且无错误的卡片渲染为骨架屏（刷新进行中） */
+  function renderCards(pending: boolean): void {
+    root.innerHTML = roles
+      .map((r) => {
+        const data = snapshots.get(r.game_uid);
+        const err = errors.get(r.game_uid);
+        return cardHtml(r.game_uid, r, data, err, pending && !data && !err);
+      })
+      .join("");
     // 风控错误卡片上的"安全验证"入口
     root.querySelectorAll<HTMLButtonElement>(".dn-verify").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -227,7 +270,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
               await fetchWithVerification(currentUser!.id, (ch) => api.dailyNote(currentUser!.id, btn.dataset.uid!, ch)),
             );
             errors.delete(btn.dataset.uid!);
-            renderCards();
+            renderCards(false);
           } catch (e2) {
             toast(`安全验证后仍失败: ${errText(e2)}`, "error");
             btn.disabled = false;
@@ -264,8 +307,10 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
             toast(`实时便签刷新失败: ${errText(e)}`, "error");
           }
         }
+        // 每完成一个角色即重渲染：已完成的展示数据，未完成的保持骨架屏
+        renderCards(true);
       }
-      renderCards();
+      renderCards(false);
     } finally {
       refreshing = false;
       refreshBtn.disabled = false;

@@ -252,7 +252,20 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   flex-shrink: 0;
-  opacity: 0.9;
+  opacity: 0.9;}
+
+/* 米哈游原版导航图标（胡桃 Resource/Navigation 同源） */
+.nav-item .nav-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
+.nav-item:hover .nav-icon,
+.nav-item.active .nav-icon {
+  opacity: 1;
 }
 
 .nav-item:hover {
@@ -2092,6 +2105,76 @@ button svg {
   margin-top: 8px;
 }
 
+/* ---- 加载骨架屏（刷新进行中的动态占位） ---- */
+
+.sk-bar {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--hover-soft, rgba(127, 127, 127, 0.12));
+}
+
+.sk-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--shimmer-highlight, rgba(255, 255, 255, 0.09)), transparent);
+  animation: sk-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes sk-sweep {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.dn-row.sk {
+  pointer-events: none;
+}
+
+.dn-row.sk .sk-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dn-row.sk .sk-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dn-row.sk .sk-line-title {
+  height: 12px;
+  width: 38%;
+}
+
+.dn-row.sk .sk-line-cap {
+  height: 10px;
+  width: 62%;
+}
+
+.dn-exp.sk .sk-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dn-exp.sk .sk-text {
+  height: 10px;
+  width: 72px;
+}
+
+.dn-row-icon {
+  object-fit: contain;
+  border-radius: 6px;
+}
+
 /* ============ 周期挑战记录（深境螺旋/幻想真境剧诗/幽境危战） ============ */
 
 .ch-shell {
@@ -2332,17 +2415,32 @@ button svg {
 }
 
 .ch-star {
-  color: var(--text-tertiary);
-  font-size: 13px;
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
 }
 
-.ch-star.on {
-  color: #ffd45c;
+.ch-star img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.28;
+  filter: grayscale(1);
 }
 
-.ch-stars.big .ch-star,
-.ch-stars.big span {
-  font-size: 17px;
+.ch-star.on img {
+  opacity: 1;
+  filter: none;
+}
+
+.ch-stars.big .ch-star {
+  width: 17px;
+  height: 17px;
+}
+
+.ch-stars.big .ch-star img {
+  width: 100%;
+  height: 100%;
 }
 
 .ch-stars {

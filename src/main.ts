@@ -23,19 +23,22 @@ import { renderAbyssPage, renderHardChallengePage, renderTheaterPage } from "./c
 interface NavItem {
   id: string;
   label: string;
+  /** 内联 SVG symbol id（设置项等无原版资源时使用） */
   icon: string;
+  /** 米哈游原版导航图标（public/icons/nav，源自胡桃 Resource/Navigation） */
+  iconImg?: string;
   group?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "announcement", label: "主页", icon: "i-home" },
-  { id: "gachalog", label: "祈愿记录", icon: "i-gacha", group: "工具" },
-  { id: "dailynote", label: "实时便笺", icon: "i-dailynote", group: "工具" },
-  { id: "avatarproperty", label: "我的角色", icon: "i-avatarprop", group: "工具" },
-  { id: "cultivation", label: "养成计划", icon: "i-cultivation", group: "工具" },
-  { id: "spiralabyss", label: "深境螺旋", icon: "i-abyss", group: "周期" },
-  { id: "rolecombat", label: "幻想真境剧诗", icon: "i-rolecombat", group: "周期" },
-  { id: "hardchallenge", label: "幽境危战", icon: "i-hardchallenge", group: "周期" },
+  { id: "announcement", label: "主页", icon: "i-home", iconImg: "/icons/nav/Announcement.png" },
+  { id: "gachalog", label: "祈愿记录", icon: "i-gacha", iconImg: "/icons/nav/GachaLog.png", group: "工具" },
+  { id: "dailynote", label: "实时便笺", icon: "i-dailynote", iconImg: "/icons/nav/DailyNote.png", group: "工具" },
+  { id: "avatarproperty", label: "我的角色", icon: "i-avatarprop", iconImg: "/icons/nav/AvatarProperty.png", group: "工具" },
+  { id: "cultivation", label: "养成计划", icon: "i-cultivation", iconImg: "/icons/nav/Cultivation.png", group: "工具" },
+  { id: "spiralabyss", label: "深境螺旋", icon: "i-abyss", iconImg: "/icons/nav/SpiralAbyss.png", group: "周期" },
+  { id: "rolecombat", label: "幻想真境剧诗", icon: "i-rolecombat", iconImg: "/icons/nav/RoleCombat.png", group: "周期" },
+  { id: "hardchallenge", label: "幽境危战", icon: "i-hardchallenge", iconImg: "/icons/nav/HardChallenge.png", group: "周期" },
   { id: "setting", label: "设置", icon: "i-setting", group: "设置" },
 ];
 
@@ -96,7 +99,10 @@ function renderNav(): void {
     lastGroup = item.group;
     html.push(
       `<button class="nav-item ${item.id === currentPage ? "active" : ""} ${implemented.has(item.id) ? "" : "disabled"}" data-page="${item.id}">` +
-        `<svg><use href="#${item.icon}"/></svg><span>${esc(item.label)}</span></button>`,
+        (item.iconImg
+          ? `<img class="nav-icon" src="${item.iconImg}" alt="" onerror="this.outerHTML='<svg><use href=\\'#${item.icon}\\'</svg>'"/>`
+          : `<svg><use href="#${item.icon}"/></svg>`) +
+        `<span>${esc(item.label)}</span></button>`,
     );
   }
   holder.innerHTML = html.join("");

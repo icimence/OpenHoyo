@@ -73,7 +73,7 @@ function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeC
 function stars(count: number, max: number): string {
   let html = "";
   for (let i = 0; i < max; i++) {
-    html += `<span class="ch-star ${i < count ? "on" : ""}">★</span>`;
+    html += `<span class="ch-star ${i < count ? "on" : ""}"><img src="/icons/ui/UI_Icon_Tower_Star.png" alt="${i < count ? "★" : ""}" onerror="this.replaceWith(document.createTextNode('★'))"/></span>`;
   }
   return html;
 }
