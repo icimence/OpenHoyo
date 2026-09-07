@@ -121,9 +121,21 @@ def main() -> None:
         key = sys.argv[2]
         url = f"https://{OSS_BUCKET}.oss-{OSS_REGION}.aliyuncs.com/{urllib.parse.quote(key)}"
         req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = resp.read()
-        print(f"✓ {key} 可匿名读取 ({len(data)}B)")
+        # 刚写入后跨节点读取可能短暂 404，重试兜底
+        import time
+
+        last_err = None
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                print(f"✓ {key} 可匿名读取 ({len(data)}B)")
+                return
+            except urllib.error.HTTPError as e:
+                last_err = e
+                if attempt < 2:
+                    time.sleep(2)
+        die(f"verify {key} 失败: HTTP {last_err.code if last_err else 'unknown'}")
     else:
         die(f"未知子命令: {mode}")
 
