@@ -25,6 +25,12 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
+class CnbApiError(Exception):
+    def __init__(self, method: str, path: str, code: int, detail: str):
+        super().__init__(f"CNB API {method} {path} → HTTP {code}: {detail[:300]}")
+        self.code = code
+
+
 def api(method: str, path: str, data=None, raw=None, content_type="application/json"):
     body = raw if raw is not None else (json.dumps(data).encode() if data is not None else None)
     req = urllib.request.Request(BASE + path, data=body, method=method)
@@ -36,19 +42,19 @@ def api(method: str, path: str, data=None, raw=None, content_type="application/j
         with urllib.request.urlopen(req, timeout=300) as resp:
             payload = resp.read()
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")
-        die(f"CNB API {method} {path} → HTTP {e.code}: {detail[:300]}")
+        raise CnbApiError(method, path, e.code, e.read().decode("utf-8", "replace")) from None
     return json.loads(payload) if payload else {}
 
 
 def find_release_id(tag: str) -> str:
+    """release 已存在返回其 id，不存在（404）返回空串"""
     try:
         release = api("GET", f"/{REPO}/-/releases/tags/{tag}")
         return release["id"]
-    except SystemExit:
+    except CnbApiError as e:
+        if e.code == 404:
+            return ""
         raise
-    except Exception:
-        return ""
 
 
 def create_or_get_release(tag: str, title: str, body: str) -> str:
@@ -98,8 +104,11 @@ def main() -> None:
     with open(body_file, "rb") as f:
         body = f.read().decode("utf-8")
 
-    release_id = create_or_get_release(tag, title, body)
-    urls = [upload_asset(release_id, tag, asset) for asset in assets]
+    try:
+        release_id = create_or_get_release(tag, title, body)
+        urls = [upload_asset(release_id, tag, asset) for asset in assets]
+    except CnbApiError as e:
+        die(str(e))
     for url in urls:
         print(f"ASSET_URL={url}")
 
