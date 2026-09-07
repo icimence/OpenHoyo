@@ -256,8 +256,8 @@ body {
 
 /* 米哈游原版导航图标（胡桃 Resource/Navigation 同源） */
 .nav-item .nav-icon {
-  width: 18px;
-  height: 18px;
+  width: 21px;
+  height: 21px;
   object-fit: contain;
   flex-shrink: 0;
   opacity: 0.92;
