@@ -120,22 +120,28 @@ def main() -> None:
     elif mode == "verify":
         key = sys.argv[2]
         url = f"https://{OSS_BUCKET}.oss-{OSS_REGION}.aliyuncs.com/{urllib.parse.quote(key)}"
-        req = urllib.request.Request(url)
-        # 刚写入后跨节点读取可能短暂 404，重试兜底
+        # OSS 写入后经公网匿名读取可能出现秒级~分钟级的传播延迟（跨前端节点），
+        # 指数退避重试，总窗口约 2 分钟；每次失败打日志避免 CI 里"莫名"红叉
         import time
 
-        last_err = None
-        for attempt in range(3):
+        waits = [2, 3, 5, 8, 10, 15, 15, 15, 15, 15]
+        last_code = "unknown"
+        for attempt, wait in enumerate(waits, start=1):
             try:
+                req = urllib.request.Request(url)
                 with urllib.request.urlopen(req, timeout=15) as resp:
                     data = resp.read()
                 print(f"✓ {key} 可匿名读取 ({len(data)}B)")
                 return
             except urllib.error.HTTPError as e:
-                last_err = e
-                if attempt < 2:
-                    time.sleep(2)
-        die(f"verify {key} 失败: HTTP {last_err.code if last_err else 'unknown'}")
+                last_code = str(e.code)
+                print(f"… {key} 暂不可读（HTTP {e.code}），{wait}s 后重试（第 {attempt}/{len(waits)} 次）")
+                time.sleep(wait)
+            except urllib.error.URLError as e:
+                last_code = str(e.reason)
+                print(f"… {key} 读取异常（{e.reason}），{wait}s 后重试（第 {attempt}/{len(waits)} 次）")
+                time.sleep(wait)
+        die(f"verify {key} 在 {sum(waits)}s 重试窗口后仍失败（最后状态: HTTP {last_code}）")
     else:
         die(f"未知子命令: {mode}")
 
