@@ -47,13 +47,12 @@ function fmtDuration(sec: number): string {
   return m > 0 ? `${m}分${s}秒` : `${s}秒`;
 }
 
-/** 幽境危战最短用时：接口 best.seconds 恒为 0，实际数据在各次挑战的 second 里，取最小值兜底 */
-function hcBestSeconds(bestSeconds: number, challenges: { second: number }[]): number {
+/** 幽境危战用时：接口 best.seconds 恒为 0，实际数据在各间的 second 里，取三间之和 */
+function hcTotalSeconds(bestSeconds: number, challenges: { second: number }[]): number {
   if (bestSeconds > 0) {
     return bestSeconds;
   }
-  const valid = challenges.map((c) => c.second).filter((s) => s > 0);
-  return valid.length > 0 ? Math.min(...valid) : 0;
+  return challenges.reduce((sum, c) => sum + Math.max(0, c.second), 0);
 }
 
 /** 大数值缩写：1234567 → 123.4w（对应原版 ValueFormatter） */
@@ -652,7 +651,7 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
         !cur.has_data
           ? '<div class="ch-empty">本期限未挑战</div>'
           : `
-        ${best ? `<div class="ch-stats-grid">${renderStatCard("最高难度", HC_DIFFICULTY[best.difficulty] ?? `难度${best.difficulty}`)}${renderStatCard("最短用时", fmtDuration(hcBestSeconds(best.seconds, cur.challenge)))}</div>` : ""}
+        ${best ? `<div class="ch-stats-grid">${renderStatCard("最高难度", HC_DIFFICULTY[best.difficulty] ?? `难度${best.difficulty}`)}${renderStatCard("最短用时", fmtDuration(hcTotalSeconds(best.seconds, cur.challenge)))}</div>` : ""}
         <div class="ch-hc-grid">${challenges}</div>`
       }`;
 
