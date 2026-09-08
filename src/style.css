@@ -1383,8 +1383,16 @@ button svg {
 }
 
 .section-toggle.orange-toggle {
-  margin-top: 8px;
-  padding: 3px 10px;
+  padding: 5px 16px;
+  border-color: rgba(233, 162, 59, 0.35);
+  background: rgba(233, 162, 59, 0.07);
+  color: #e9a23b;
+}
+
+.section-toggle.orange-toggle:hover {
+  background: rgba(233, 162, 59, 0.14);
+  border-color: rgba(233, 162, 59, 0.6);
+  color: #e9a23b;
 }
 
 /* ---- 历史分组 ---- */
@@ -1603,11 +1611,31 @@ button svg {
   gap: 12px;
 }
 
+/* 展开/收起：居中胶囊，比纯文字按钮显眼但不喧宾夺主 */
 .section-toggle {
-  margin-top: 10px;
-  padding: 4px 12px;
+  margin: 12px auto 0;
+  display: flex;
+  gap: 5px;
+  padding: 5px 16px;
   font-size: 12px;
+  border-radius: 999px;
+  background: var(--bg-layer);
   color: var(--text-secondary);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.section-toggle::after {
+  font-size: 10px;
+  content: "▾";
+}
+
+.section-toggle[data-open="0"]::after {
+  content: "▴";
+}
+
+.section-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* ---- 拉取进度对话框（对应原版 GachaLogRefreshProgressDialog） ---- */

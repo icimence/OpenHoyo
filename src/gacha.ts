@@ -356,6 +356,7 @@ function renderOverview(body: HTMLElement): void {
   const s = stats!;
   const cards: WishSummary[] = [s.avatar_wish, s.weapon_wish, s.standard_wish, s.chronicled_wish];
   body.innerHTML = `<div class="stats-cards">${cards.map((w) => statsCard(w)).join("")}</div>`;
+  clampCollapsedGrids(body);
 
   // 五星列表的展开/收起
   body.querySelectorAll<HTMLButtonElement>(".orange-toggle").forEach((btn) => {
@@ -376,9 +377,10 @@ function orangeListHtml(w: WishSummary): string {
   const key = `orange-${w.name}`;
   const smartOpen = entries.length <= ORANGE_COLLAPSE_THRESHOLD;
   const isExpanded = explicitSectionState.get(key) ?? smartOpen;
-  const visible = isExpanded ? entries : entries.slice(0, ORANGE_COLLAPSE_THRESHOLD);
 
-  const inner = `<div class="orange-flat">${visible
+  // 收起态也渲染全部条目，由 clampCollapsedGrids 按整两行动态隐藏——
+  // 列数随卡片宽度变化，固定数量必然出现"一行半"
+  const inner = `<div class="orange-flat${isExpanded ? "" : " collapsible"}">${entries
     .map(
       (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽 · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
         <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" onerror="this.remove()" loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
@@ -502,8 +504,46 @@ function renderHistory(body: HTMLElement): void {
 /** 显式展开/收起状态（未设置时用智能默认） */
 const explicitSectionState = new Map<string, boolean>();
 const COLLAPSE_THRESHOLD = 12;
-/** 总览卡五星列表的展开阈值（平铺一行约 4 个，两行起步） */
+/** 总览卡五星列表的展开阈值：超过此数量才收起并显示按钮（实际收起数量按整行动态裁剪） */
 const ORANGE_COLLAPSE_THRESHOLD = 8;
+
+/**
+ * 收起态整行裁剪：网格列数随容器宽度变化（auto-fill），固定数量必然出现"一行半"。
+ * 渲染全部条目后按实际列数隐藏第 3 行起的内容，收起恒为整两行；两行装得下时移除展开按钮。
+ */
+function clampCollapsedGrids(root: ParentNode): void {
+  bindClampOnResize();
+  root.querySelectorAll<HTMLElement>(".collapsible").forEach((grid) => {
+    if (grid.clientWidth === 0) {
+      return; // 隐藏 tab 里的容器量不到宽度，跳过
+    }
+    const tile = (grid.firstElementChild as HTMLElement | null)?.offsetWidth ?? 64;
+    const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 8;
+    const cols = Math.max(1, Math.floor((grid.clientWidth + gap) / (tile + gap)));
+    const keep = cols * 2;
+    const tiles = Array.from(grid.children) as HTMLElement[];
+    tiles.forEach((t, i) => {
+      t.style.display = i < keep ? "" : "none";
+    });
+    if (tiles.length <= keep) {
+      grid.parentElement?.querySelector(":scope > .section-toggle")?.remove();
+    }
+  });
+}
+
+/** 窗口尺寸变化后重新裁剪（列数变了半行会重新出现），防抖只绑一次 */
+let clampResizeBound = false;
+function bindClampOnResize(): void {
+  if (clampResizeBound) {
+    return;
+  }
+  clampResizeBound = true;
+  let timer = 0;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => clampCollapsedGrids(document), 150);
+  });
+}
 
 function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "avatar" | "weapon"): void {
   if (entries.length === 0) {
@@ -524,9 +564,8 @@ function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "av
       const q = rank === 5 ? "orange" : rank === 4 ? "purple" : "blue";
       const smartOpen = items.length <= COLLAPSE_THRESHOLD;
       const isExpanded = explicitSectionState.get(key) ?? smartOpen;
-      const visible = isExpanded ? items : items.slice(0, COLLAPSE_THRESHOLD);
 
-      const tiles = visible
+      const tiles = items
         .map(
           (e) => `<div class="flat-tile" title="${esc(e.name)} × ${e.count}">
             <div class="tile-face ${q}">${esc(e.name.slice(0, 1))}<img src="${iconSrc(e.name)}" onerror="this.remove()" loading="lazy"/></div>
@@ -546,13 +585,14 @@ function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "av
             <span class="section-title ${q}">${rankNames[rank]}</span>
             <span class="section-count">${items.length} 种</span>
           </div>
-          <div class="section-body flat">${tiles}</div>
+          <div class="section-body flat${isExpanded ? "" : " collapsible"}">${tiles}</div>
           ${footer}
         </div>`;
     })
     .join("");
 
   body.innerHTML = sections;
+  clampCollapsedGrids(body);
 
   body.querySelectorAll<HTMLButtonElement>(".section-toggle").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
