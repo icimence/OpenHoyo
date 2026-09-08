@@ -1756,6 +1756,36 @@ button svg {
   margin: 3px 0;
 }
 
+/* 前台下载进度条（更新弹窗内） */
+.dl-progress {
+  margin-top: 14px;
+}
+
+.dl-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bg-layer);
+  border: 1px solid var(--stroke);
+  overflow: hidden;
+}
+
+.dl-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  transition: width 0.25s ease;
+}
+
+.dl-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
 #dialog-ok.danger {
   background: #c42b1c;
   border-color: #c42b1c;
