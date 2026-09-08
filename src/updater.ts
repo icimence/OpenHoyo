@@ -2,10 +2,18 @@
 import type { Update } from "@tauri-apps/plugin-updater";
 import { api } from "./api";
 import { mdToHtml } from "./md";
-import { closeDialog, onDialogCancel, onDialogOk, openDialog, setStatus, toast } from "./ui";
+import { closeDialog, onDialogCancel, onDialogOk, openDialog, toast } from "./ui";
 
 /** 待安装的更新：静默检查发现新版本时先挂起，由标题栏徽标触发安装 */
 let pendingUpdate: Update | null = null;
+
+/**
+ * 徽标状态机：notify（有新版本）→ downloading（后台下载，徽标显示进度）
+ * → ready（下载完成，徽标变「安装更新」按钮）。失败回 notify 可重试。
+ */
+type BadgePhase = "notify" | "downloading" | "ready";
+let badgePhase: BadgePhase = "notify";
+let downloadPct = 0;
 
 // ---------------------------------------------------------------------------
 // 版本比较与灰度门控（对应 BetterGI UpdateFromOss 的 Gray 逻辑）
@@ -97,23 +105,37 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
   }
 }
 
-/** 标题栏更新徽标（位于最小化按钮左侧）：轻微高亮提示有新版本 */
-export function showUpdateBadge(version: string): void {
+/** 设置标题栏更新徽标（位于最小化按钮左侧）的文案/提示/状态样式 */
+function setBadge(text: string, title: string, phase: BadgePhase): void {
   const btn = document.getElementById("win-update");
   if (!btn) {
     return;
   }
   const label = btn.querySelector("span");
   if (label) {
-    label.textContent = `v${version}`;
+    label.textContent = text;
   }
-  btn.title = `发现新版本 v${version}，点击下载更新`;
-  btn.classList.remove("hidden");
+  btn.title = title;
+  btn.classList.remove("hidden", "downloading", "ready");
+  if (phase !== "notify") {
+    btn.classList.add(phase);
+  }
+}
+
+/** 有新版本待处理：徽标轻微高亮，点击弹确认窗 */
+export function showUpdateBadge(version: string): void {
+  badgePhase = "notify";
+  downloadPct = 0;
+  setBadge(`v${version}`, `发现新版本 v${version}，点击下载更新`, "notify");
 }
 
 export function initUpdateBadge(): void {
   document.getElementById("win-update")?.addEventListener("click", () => {
-    if (pendingUpdate) {
+    if (badgePhase === "ready" && pendingUpdate) {
+      void installPendingUpdate();
+    } else if (badgePhase === "downloading") {
+      toast(`正在后台下载更新（${downloadPct > 0 ? `${downloadPct}%` : "进行中"}），完成后点击此处安装`);
+    } else if (pendingUpdate) {
       void showUpdateDialog(pendingUpdate);
     } else {
       void checkForUpdates(false);
@@ -134,31 +156,58 @@ async function showUpdateDialog(update: Update): Promise<void> {
     // 用户暂不更新：点亮标题栏徽标作为持续提醒
     showUpdateBadge(update.version);
   });
-  onDialogOk(() =>
-    void (async () => {
-      try {
-        setStatus("正在下载更新…");
-        let downloaded = 0;
-        let total = 0;
-        await update.downloadAndInstall((event) => {
-          if (event.event === "Started" && event.data.contentLength) {
-            total = event.data.contentLength;
-          } else if (event.event === "Progress" && event.data.chunkLength) {
-            downloaded += event.data.chunkLength;
-            if (total > 0) {
-              const pct = Math.min(100, Math.round((downloaded / total) * 100));
-              setStatus(`正在下载更新… ${pct}%`);
-            }
+  onDialogOk(() => {
+    // 确认后立即回到应用，下载在后台进行——进度显示在标题栏徽标，完成后徽标变「安装更新」
+    closeDialog();
+    void startBackgroundDownload(update);
+  });
+}
+
+/** 后台下载更新：进度实时反映在标题栏徽标（下载期间不阻塞任何操作） */
+async function startBackgroundDownload(update: Update): Promise<void> {
+  badgePhase = "downloading";
+  downloadPct = 0;
+  setBadge("下载中…", `正在后台下载 v${update.version}…`, "downloading");
+  try {
+    let received = 0;
+    let total = 0;
+    await update.download((event) => {
+      if (event.event === "Started" && event.data.contentLength) {
+        total = event.data.contentLength;
+      } else if (event.event === "Progress" && event.data.chunkLength) {
+        received += event.data.chunkLength;
+        if (total > 0) {
+          const pct = Math.min(100, Math.round((received / total) * 100));
+          if (pct !== downloadPct) {
+            downloadPct = pct;
+            setBadge(`${pct}%`, `正在后台下载 v${update.version}（${pct}%）…`, "downloading");
           }
-        });
-        setStatus("下载完成，正在重启应用…");
-        const { relaunch } = await import("@tauri-apps/plugin-process");
-        await relaunch();
-      } catch (e) {
-        toast(`更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
-        closeDialog();
-        showUpdateBadge(update.version);
+        }
       }
-    })(),
-  );
+    });
+    badgePhase = "ready";
+    setBadge("安装更新", `v${update.version} 已下载完成，点击安装并重启应用`, "ready");
+    console.info(`[updater] v${update.version} 下载完成，等待用户安装`);
+    toast(`v${update.version} 下载完成，点击右上角「安装更新」完成升级`, "success");
+  } catch (e) {
+    badgePhase = "notify";
+    setBadge(`v${update.version}`, `下载失败，点击重试`, "notify");
+    toast(`更新下载失败: ${e instanceof Error ? e.message : String(e)}`, "error");
+  }
+}
+
+/** 安装已下载的更新。Windows 下 install() 启动安装器后会自动退出并重启应用 */
+async function installPendingUpdate(): Promise<void> {
+  const update = pendingUpdate;
+  if (!update) {
+    return;
+  }
+  setBadge("安装中…", "正在安装更新，应用即将重启", "ready");
+  try {
+    await update.install();
+  } catch (e) {
+    badgePhase = "notify";
+    setBadge(`v${update.version}`, "安装失败，点击重试", "notify");
+    toast(`安装更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
+  }
 }

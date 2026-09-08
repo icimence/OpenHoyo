@@ -179,6 +179,29 @@ body {
   background: var(--update-tint-hover);
 }
 
+/* 后台下载中：呼吸动画提示进行时 */
+.titlebar-actions button.update-btn.downloading {
+  animation: update-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes update-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* 下载完成：绿色实心，引导点击安装 */
+.titlebar-actions button.update-btn.ready {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.titlebar-actions button.update-btn.ready:hover {
+  background: var(--success);
+  filter: brightness(1.12);
+}
+
 .titlebar-actions button.update-btn svg {
   width: 13px;
   height: 13px;
