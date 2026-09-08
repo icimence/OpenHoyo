@@ -365,6 +365,17 @@ body {
   inset: 0;
 }
 
+/* 真实头像（米游社透明底 PNG）加载成功后：去掉占位底色与首字母，避免蓝色透出 */
+.user-avatar.has-img,
+.flyout-user-row .mini-avatar.has-img,
+.user-card .avatar.has-img {
+  background: transparent;
+}
+
+.has-img .initial {
+  display: none;
+}
+
 .user-menu-text {
   flex: 1;
   min-width: 0;

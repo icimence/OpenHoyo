@@ -66,9 +66,10 @@ function avatarHtml(u: UserDto, mini = false): string {
   const cls = mini ? "mini-avatar" : "avatar";
   const initial = esc((u.nickname ?? u.mid).slice(0, 1).toUpperCase());
   if (u.avatar) {
-    return `<div class="${cls}">${initial}<img src="${esc(u.avatar)}" onerror="this.remove()"/></div>`;
+    // 米游社头像是透明底 PNG：加载成功后去掉占位底色与首字母（has-img）
+    return `<div class="${cls}"><span class="initial">${initial}</span><img src="${esc(u.avatar)}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/></div>`;
   }
-  return `<div class="${cls}">${initial}</div>`;
+  return `<div class="${cls}"><span class="initial">${initial}</span></div>`;
 }
 
 async function copyText(text: string): Promise<void> {
@@ -204,8 +205,8 @@ function renderFooterUser(): void {
     nickEl.textContent = cur.nickname ?? "未知昵称";
     const initial = esc((cur.nickname ?? cur.mid).slice(0, 1).toUpperCase());
     avatarEl.innerHTML = cur.avatar
-      ? `${initial}<img src="${esc(cur.avatar)}" onerror="this.remove()"/>`
-      : initial;
+      ? `<span class="initial">${initial}</span><img src="${esc(cur.avatar)}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/>`
+      : `<span class="initial">${initial}</span>`;
   } else {
     nickEl.textContent = "尚未登录";
     avatarEl.textContent = "-";
