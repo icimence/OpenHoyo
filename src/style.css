@@ -2506,27 +2506,6 @@ button svg {
   max-width: none;
 }
 
-/* 统计卡头像素材：温和放大裁剪（素材头顶留白约 10~25%，稍作聚焦即可） */
-.ch-avatar .bust {
-  border-radius: 50%;
-  background-size: 150%;
-  background-position: 50% 24%;
-  background-repeat: no-repeat;
-  background-color: var(--bg-layer);
-}
-
-.ch-avatar .bust.r5 {
-  box-shadow: 0 0 0 2px var(--gold, #d3bc8e);
-}
-
-.ch-avatar .bust.r4 {
-  box-shadow: 0 0 0 2px #a256e1;
-}
-
-.ch-avatar .bust.r3 {
-  box-shadow: 0 0 0 2px var(--stroke-strong);
-}
-
 .ch-avatar img.r5 {
   box-shadow: 0 0 0 2px var(--gold, #d3bc8e);
 }

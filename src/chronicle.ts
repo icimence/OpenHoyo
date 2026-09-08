@@ -68,17 +68,12 @@ function fmtValue(v: number | string): string {
 }
 
 /** 角色头像方块：稀有度描边 + 可选角标（命座/试用/支援） */
-function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeCls?: string; dim?: boolean; size?: number; bustCrop?: boolean } = {}): string {
+function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeCls?: string; dim?: boolean; size?: number } = {}): string {
   const size = opts.size ?? 48;
   const cls = rarity >= 5 ? "r5" : rarity >= 4 ? "r4" : "r3";
-  // 统计卡（最多击破等）的头像素材四周留白很多，原尺寸塞圆框头小悬空；
-  // 仅在 bustCrop 显式开启时用背景放大裁剪，其余头像（出场角色等）原样显示
-  const visual = opts.bustCrop
-    ? `<div class="bust ${cls}" style="width:${size}px;height:${size}px;background-image:url('${esc(icon)}')"></div>`
-    : `<img class="${cls}" src="${esc(icon)}" style="width:${size}px;height:${size}px" loading="lazy" onerror="this.style.opacity=0.2"/>`;
   return `
   <div class="ch-avatar ${opts.dim ? "dim" : ""}" title="">
-    ${visual}
+    <img class="${cls}" src="${esc(icon)}" style="width:${size}px;height:${size}px" loading="lazy" onerror="this.style.opacity=0.2"/>
     ${opts.badge ? `<span class="ch-badge ${opts.badgeCls ?? ""}">${esc(opts.badge)}</span>` : ""}
   </div>`;
 }
@@ -127,7 +122,7 @@ function renderStatCard(label: string, value: string, icon?: string, rarity?: nu
   return `
   <div class="ch-stat">
     <span class="ch-stat-label">${esc(label)}</span>
-    <span class="ch-stat-value">${esc(value)}${icon ? avatarTile(icon, rarity ?? 5, { size: 32, bustCrop: true }).replace('title=""', "") : ""}</span>
+    <span class="ch-stat-value">${esc(value)}${icon ? avatarTile(icon, rarity ?? 5, { size: 32 }).replace('title=""', "") : ""}</span>
   </div>`;
 }
 
