@@ -60,12 +60,17 @@ function fmtValue(v: number | string): string {
 }
 
 /** 角色头像方块：稀有度描边 + 可选角标（命座/试用/支援） */
-function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeCls?: string; dim?: boolean; size?: number } = {}): string {
+function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeCls?: string; dim?: boolean; size?: number; bustCrop?: boolean } = {}): string {
   const size = opts.size ?? 48;
   const cls = rarity >= 5 ? "r5" : rarity >= 4 ? "r4" : "r3";
+  // 统计卡（最多击破等）的头像素材四周留白很多，原尺寸塞圆框头小悬空；
+  // 仅在 bustCrop 显式开启时用背景放大裁剪，其余头像（出场角色等）原样显示
+  const visual = opts.bustCrop
+    ? `<div class="bust ${cls}" style="width:${size}px;height:${size}px;background-image:url('${esc(icon)}')"></div>`
+    : `<img class="${cls}" src="${esc(icon)}" style="width:${size}px;height:${size}px" loading="lazy" onerror="this.style.opacity=0.2"/>`;
   return `
   <div class="ch-avatar ${opts.dim ? "dim" : ""}" title="">
-    <img class="${cls}" src="${esc(icon)}" style="width:${size}px;height:${size}px" loading="lazy" onerror="this.style.opacity=0.2"/>
+    ${visual}
     ${opts.badge ? `<span class="ch-badge ${opts.badgeCls ?? ""}">${esc(opts.badge)}</span>` : ""}
   </div>`;
 }
@@ -114,7 +119,7 @@ function renderStatCard(label: string, value: string, icon?: string, rarity?: nu
   return `
   <div class="ch-stat">
     <span class="ch-stat-label">${esc(label)}</span>
-    <span class="ch-stat-value">${esc(value)}${icon ? avatarTile(icon, rarity ?? 5, { size: 32 }).replace('title=""', "") : ""}</span>
+    <span class="ch-stat-value">${esc(value)}${icon ? avatarTile(icon, rarity ?? 5, { size: 32, bustCrop: true }).replace('title=""', "") : ""}</span>
   </div>`;
 }
 
@@ -138,9 +143,11 @@ function pageShell(content: HTMLElement, title: string, subtitle: string, listHt
 }
 
 /** 渲染期号列表项 */
-function entryItem(title: string, caption: string, timeText: string, active: boolean): string {
+/** 渲染期号列表项；badge 为右上角悬浮小角标（如「最新」），标题保持等长 */
+function entryItem(title: string, caption: string, timeText: string, active: boolean, badge?: string): string {
   return `
   <button class="ch-entry ${active ? "active" : ""}">
+    ${badge ? `<span class="ch-entry-badge">${esc(badge)}</span>` : ""}
     <div class="ch-entry-row"><span class="ch-entry-title">${esc(title)}</span><span class="ch-entry-side">${esc(caption)}</span></div>
     <div class="ch-entry-time">${esc(timeText)}</div>
   </button>`;
@@ -195,10 +202,11 @@ export function renderAbyssPage(content: HTMLElement, currentUser: UserDto | und
     shell.list.innerHTML = abyssPeriods
       .map((d, i) =>
         entryItem(
-          `第 ${d.schedule_id} 期${i === 0 ? " · 最新" : ""}`,
+          `第 ${d.schedule_id} 期`,
           d.is_unlock ? d.max_floor : "未挑战",
           `${fmtTime(d.start_time)} - ${fmtTime(d.end_time)}`,
           abyssIdx === i,
+          i === 0 ? "最新" : undefined,
         ),
       )
       .join("");

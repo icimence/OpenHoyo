@@ -2331,6 +2331,27 @@ button svg {
   font-weight: 600;
 }
 
+/* 期号「最新」角标：悬浮在卡片右上缘，不占标题空间（各期标题等长） */
+.ch-entry {
+  position: relative;
+}
+
+.ch-entry-badge {
+  position: absolute;
+  top: -7px;
+  right: 8px;
+  z-index: 1;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--accent-light);
+  background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--accent-light) 45%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
 .ch-entry-side {
   font-size: 12px;
   color: var(--text-secondary);
@@ -2442,6 +2463,27 @@ button svg {
   object-fit: cover;
   flex: none;
   max-width: none;
+}
+
+/* 统计卡头像素材：温和放大裁剪（素材头顶留白约 10~25%，稍作聚焦即可） */
+.ch-avatar .bust {
+  border-radius: 50%;
+  background-size: 150%;
+  background-position: 50% 24%;
+  background-repeat: no-repeat;
+  background-color: var(--bg-layer);
+}
+
+.ch-avatar .bust.r5 {
+  box-shadow: 0 0 0 2px var(--gold, #d3bc8e);
+}
+
+.ch-avatar .bust.r4 {
+  box-shadow: 0 0 0 2px #a256e1;
+}
+
+.ch-avatar .bust.r3 {
+  box-shadow: 0 0 0 2px var(--stroke-strong);
 }
 
 .ch-avatar img.r5 {
