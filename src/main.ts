@@ -576,6 +576,8 @@ async function main(): Promise<void> {
   // 标题栏窗口控制
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const win = getCurrentWindow();
+  // 窗口初始隐藏（tauri.conf visible:false）以消除启动白屏；万一初始化异常，3 秒兜底强制显示
+  window.setTimeout(() => void win.show(), 3000);
   initUpdateBadge();
   document.getElementById("win-min")!.addEventListener("click", () => {
     void win.minimize();
@@ -589,6 +591,8 @@ async function main(): Promise<void> {
 
   // 导航与用户菜单
   renderNav();
+  // 导航骨架已渲染，显示窗口（消除启动白屏；visible:false 起）
+  void win.show();
   document.getElementById("user-menu-btn")!.addEventListener("click", () => {
     const el = document.getElementById("user-flyout")!;
     if (el.classList.contains("hidden")) {

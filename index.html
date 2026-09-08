@@ -4,6 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>胡桃工具箱 · 学习复刻版</title>
+    <!-- 关键样式内联：dev 模式下 CSS 由 JS 注入，首帧无样式会导致 logo 按默认 300x150 渲染、整页裸排版 -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #202020;
+      }
+      @media (prefers-color-scheme: light) {
+        html,
+        body {
+          background: #f9f9f9;
+        }
+      }
+      #app {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .titlebar {
+        height: 40px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .titlebar-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-left: 14px;
+        font-size: 12.5px;
+      }
+      .titlebar-title .logo {
+        width: 20px;
+        height: 20px;
+      }
+    </style>
   </head>
   <body>
     <!-- SVG 图标库（对应原版 Resource/Navigation 下的位图图标，这里用简化矢量版） -->
