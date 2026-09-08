@@ -55,10 +55,16 @@ authkey、设备指纹原文。
     仓库不存任何阿里云长期密钥；发版后灰度恒为 0，由 `update-gray.yml`（workflow_dispatch）
     手动放量，出问题调回 0 熔断
   - 完整性由 minisign 签名保证（私钥仅在 GitHub Secrets），任一分发渠道被篡改均验签失败
-  - **更新说明（首启弹窗）的唯一编写处是根目录 `CHANGELOG.md`**：发版前为本次版本
-    编写 `## vX.Y.Z` 段落并推送；CI distribute 环节提取该段落上传 OSS 并同步
-    GitHub Release 正文，段落缺失时用固定兜底文案（git log 是开发者视角，
-    **不得**透出给用户）
+  - **更新说明的唯一编写处是根目录 `CHANGELOG.md`**：发版前为本次版本
+    编写 `## vX.Y.Z` 段落并推送；CI distribute 环节提取该段落上传 OSS
+    （`releases/vX.md` 供首启弹窗 + `latest.json` 的 `notes` 字段供更新提示弹窗）
+    并同步 GitHub Release 正文，段落缺失时用固定兜底文案（git log 是开发者视角，
+    **不得**透出给用户）。发版后发现文案要改：改完段落直接跑
+    `publish-release-notes.yml`（workflow_dispatch 输入版本号），无需重新发版
+  - **更新说明是用户文案，不是开发日志**：写给不懂技术的玩家看——每条以
+    用户可感知的变化/收益开头；禁止出现 OSS、CNB、灰度、CI、API 名、内部
+    模块名等术语（"骨架屏"要写成"加载动画"，"多渠道分发"要写成"下载更快了"）；
+    实现细节留在 commit message，不进 CHANGELOG
 - **serde 方向性 rename**：米哈游接口的错拼/大写字段（如 `fight_statisic`、`Day`）用
   `#[serde(rename(serialize = "规范名", deserialize = "错拼名"))]`——入库容忍错拼，
   出站给前端规范化。

@@ -138,7 +138,7 @@ jobs:
           grep -m1 "ASSET_URL=" dist/cnb-urls.txt | sed 's/^ASSET_URL=//' > dist/cnb-url.txt
           cat dist/cnb-url.txt
 
-      - name: Build OSS latest.json (download URL → CNB)
+      - name: Build OSS latest.json (download URL → CNB, notes → 更新说明)
         run: |
           python - <<'EOF'
           import glob, json
@@ -148,6 +148,10 @@ jobs:
               cnb_url = f.read().strip()
           for platform in manifest.get("platforms", {}).values():
               platform["url"] = cnb_url
+          # 更新提示弹窗读的是 latest.json 的 notes 字段：
+          # 注入正式更新说明，覆盖 tauri-action 建 Release 时写入的下载指引占位文案
+          with open("dist/notes.md", encoding="utf-8") as f:
+              manifest["notes"] = f.read().strip()
           with open("dist/latest-oss.json", "w", encoding="utf-8") as f:
               json.dump(manifest, f, ensure_ascii=False, indent=2)
           print(json.dumps(manifest, ensure_ascii=False)[:400])
@@ -158,5 +162,6 @@ jobs:
           python scripts/oss-sts-publish.py latest dist/latest-oss.json
           python scripts/oss-sts-publish.py notes "${VERSION}" dist/notes.md
           python scripts/oss-sts-publish.py notice "${VERSION}" 0
-          python scripts/oss-sts-publish.py verify notice.json
-          python scripts/oss-sts-publish.py verify latest.json
+          python scripts/oss-sts-publish.py verify updates/notice.json
+          python scripts/oss-sts-publish.py verify updates/latest.json
+          python scripts/oss-sts-publish.py verify "updates/releases/v${VERSION}.md"

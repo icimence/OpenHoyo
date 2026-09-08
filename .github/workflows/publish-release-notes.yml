@@ -1,0 +1,75 @@
+# 重新发布某个版本的更新说明（无需重新发版）。
+#
+# 用途：发版后发现 CHANGELOG.md 文案要改——改完段落直接跑本工作流，
+# 会把该段落重新上传 OSS（首启弹窗的 releases/vX.md）并替换线上
+# latest.json 的 notes（更新提示弹窗），同时同步 GitHub Release 正文。
+# 凭证：GitHub OIDC → 阿里云 STS 临时凭证（无长期密钥）。
+name: Publish Release Notes
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号 (x.y.z)"
+        required: true
+
+permissions:
+  id-token: write
+  contents: write # gh release edit 同步正文
+
+jobs:
+  publish-notes:
+    runs-on: ubuntu-latest
+    env:
+      ROLE_ARN: acs:ram::1203685464265895:role/openhoyo-github-ci
+      OIDC_PROVIDER_ARN: acs:ram::1203685464265895:oidc-provider/GitHub-action
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - run: pip install oss2
+
+      - name: Extract changelog section
+        run: |
+          mkdir -p dist
+          node scripts/extract-changelog.mjs "${VERSION}" > dist/notes.md || true
+          if [ ! -s dist/notes.md ]; then
+            echo "CHANGELOG.md 中没有 v${VERSION} 段落，先补写段落再运行" >&2
+            exit 1
+          fi
+          head -3 dist/notes.md
+
+      - name: Patch live latest.json notes
+        run: |
+          curl -fsS "https://openhoyo-updates.oss-cn-hangzhou.aliyuncs.com/updates/latest.json" -o dist/latest-oss.json
+          python - <<'EOF'
+          import json, os
+          with open("dist/latest-oss.json", encoding="utf-8") as f:
+              manifest = json.load(f)
+          live = manifest.get("version")
+          if live != os.environ["VERSION"]:
+              # 只改线上最新版的说明；老版本的 latest.json 不存在，误操作直接红
+              raise SystemExit(f"线上 latest.json 是 v{live}，不是 v{os.environ['VERSION']}，拒绝修改")
+          with open("dist/notes.md", encoding="utf-8") as f:
+              manifest["notes"] = f.read().strip()
+          with open("dist/latest-oss.json", "w", encoding="utf-8") as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+          print(f"notes 已替换为 v{live} 更新说明（{len(manifest['notes'])} 字符）")
+          EOF
+
+      - name: Publish to OSS (STS via OIDC)
+        run: |
+          python scripts/oss-sts-publish.py notes "${VERSION}" dist/notes.md
+          python scripts/oss-sts-publish.py latest dist/latest-oss.json
+          python scripts/oss-sts-publish.py verify "updates/releases/v${VERSION}.md"
+          python scripts/oss-sts-publish.py verify updates/latest.json
+
+      - name: Sync GitHub Release body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${VERSION}" --notes-file dist/notes.md --repo "$GITHUB_REPOSITORY"

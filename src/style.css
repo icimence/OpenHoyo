@@ -1685,6 +1685,15 @@ button svg {
   line-height: 1.7;
 }
 
+.update-notes ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.update-notes li {
+  margin: 3px 0;
+}
+
 #dialog-ok.danger {
   background: #c42b1c;
   border-color: #c42b1c;

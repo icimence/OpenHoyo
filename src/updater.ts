@@ -1,6 +1,7 @@
 // 应用更新检查（Tauri v2 updater：OSS/CNB 国内源 + GitHub 兜底，minisign 签名校验）
 import type { Update } from "@tauri-apps/plugin-updater";
 import { api } from "./api";
+import { mdToHtml } from "./md";
 import { closeDialog, onDialogCancel, onDialogOk, openDialog, setStatus, toast } from "./ui";
 
 /** 待安装的更新：静默检查发现新版本时先挂起，由标题栏徽标触发安装 */
@@ -125,7 +126,7 @@ async function showUpdateDialog(update: Update): Promise<void> {
     "发现新版本",
     `
     <p class="confirm-message">新版本 <b>v${update.version}</b> 可用，是否立即更新？</p>
-    ${update.body ? `<div class="update-notes">${update.body}</div>` : ""}`,
+    ${update.body ? `<div class="update-notes">${mdToHtml(update.body)}</div>` : ""}`,
     "立即更新",
   );
   onDialogCancel(() => {
