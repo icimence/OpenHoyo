@@ -177,8 +177,11 @@ pub async fn initialize_user(state: &AppState, rec: &mut UserRecord, fresh: bool
     if !info.uid.is_empty() {
         rec.uid = Some(info.uid);
     }
-    if !info.avatar.is_empty() {
-        rec.avatar = Some(info.avatar);
+    // 头像：接口的 avatar 是纯数字 ID（不可直接当图片地址），完整 URL 在 avatar_url；
+    // 只接受 http 开头的值，避免把 ID 写进记录（存量记录里的 ID 会被这里覆盖）
+    let avatar_url = if info.avatar_url.is_empty() { info.avatar.clone() } else { info.avatar_url.clone() };
+    if avatar_url.starts_with("http") {
+        rec.avatar = Some(avatar_url);
     }
 
     // ④ 游戏角色

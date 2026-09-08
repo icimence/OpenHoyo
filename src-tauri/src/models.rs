@@ -144,10 +144,13 @@ pub struct BbsUserInfo {
     pub uid: String,
     #[serde(default = "empty_str")]
     pub nickname: String,
-    /// 头像 URL（前端展示预留）
+    /// 头像 ID（数字，不可直接作为图片地址）
     #[serde(default = "empty_str")]
     #[allow(dead_code)]
     pub avatar: String,
+    /// 头像完整 URL（前端展示用）
+    #[serde(default = "empty_str")]
+    pub avatar_url: String,
 }
 
 #[derive(Debug, Deserialize)]
