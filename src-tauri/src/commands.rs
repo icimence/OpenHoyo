@@ -93,22 +93,40 @@ pub async fn qr_login_poll(
 // 手机验证码登录
 // ---------------------------------------------------------------------------
 
+/// 发送验证码结果：已发送 / 触发极验风控（需前端完成人机验证后重发）
 #[derive(Serialize)]
-pub struct CaptchaSendDto {
-    pub action_type: String,
-    pub countdown: i64,
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum CaptchaSendDto {
+    Sent { action_type: String, countdown: i64 },
+    Risk { session_id: String, gt: String, challenge: String },
 }
 
 #[tauri::command]
-pub async fn mobile_captcha_send(state: State<'_, AppState>, mobile: String) -> ApiResult<CaptchaSendDto> {
+pub async fn mobile_captcha_send(
+    state: State<'_, AppState>,
+    mobile: String,
+    aigis: Option<String>,
+) -> ApiResult<CaptchaSendDto> {
     let salts = salts(&state).await;
-    // aigis 风控在 passport 层检测：触发时返回带提示的错误
-    let (data, _) = passport::create_login_captcha(&state.http, &salts, &state.devices, &mobile, None).await?;
+    match passport::create_login_captcha(&state.http, &salts, &state.devices, &mobile, aigis.as_deref()).await? {
+        passport::CaptchaStep::Sent(data) => Ok(CaptchaSendDto::Sent {
+            action_type: data.action_type,
+            countdown: data.countdown,
+        }),
+        passport::CaptchaStep::Risk(risk) => Ok(CaptchaSendDto::Risk {
+            session_id: risk.session_id,
+            gt: risk.gt,
+            challenge: risk.challenge,
+        }),
+    }
+}
 
-    Ok(CaptchaSendDto {
-        action_type: data.action_type,
-        countdown: data.countdown,
-    })
+/// 验证码登录结果：登录成功（含用户）/ 触发极验风控
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum CaptchaLoginDto {
+    Ok { user: UserDto },
+    Risk { session_id: String, gt: String, challenge: String },
 }
 
 #[tauri::command]
@@ -118,9 +136,30 @@ pub async fn mobile_captcha_login(
     mobile: String,
     captcha: String,
     action_type: String,
-) -> ApiResult<UserDto> {
+    aigis: Option<String>,
+) -> ApiResult<CaptchaLoginDto> {
     let salts = salts(&state).await;
-    let result = passport::login_by_mobile_captcha(&state.http, &salts, &state.devices, &mobile, &captcha, &action_type, None).await?;
+    let result = passport::login_by_mobile_captcha(
+        &state.http,
+        &salts,
+        &state.devices,
+        &mobile,
+        &captcha,
+        &action_type,
+        aigis.as_deref(),
+    )
+    .await?;
+
+    let result = match result {
+        passport::CaptchaLoginStep::Ok(r) => r,
+        passport::CaptchaLoginStep::Risk(risk) => {
+            return Ok(CaptchaLoginDto::Risk {
+                session_id: risk.session_id,
+                gt: risk.gt,
+                challenge: risk.challenge,
+            })
+        }
+    };
 
     let token = result
         .token
@@ -130,7 +169,8 @@ pub async fn mobile_captcha_login(
         .ok_or_else(|| ApiError::empty_data("user_info"))?;
 
     let cookie = cookie::build_stoken_cookie(&user_info.aid, &user_info.mid, &token.token);
-    service::login_with_stoken(&state, &handle, cookie, false).await
+    let user = service::login_with_stoken(&state, &handle, cookie, false).await?;
+    Ok(CaptchaLoginDto::Ok { user })
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import "./style.css";
-import { api, errText, type UserDto } from "./api";
+import { api, errText, type CaptchaRisk, type UserDto } from "./api";
 import { renderGachaPage } from "./gacha";
+import { geetestVerify } from "./geetest";
 import {
   closeDialog,
   onDialogCancel,
@@ -444,6 +445,13 @@ function openQrDialog(): void {
 // 手机验证码登录（对应原版 UserMobileCaptchaDialog）
 // ---------------------------------------------------------------------------
 
+/** 触发极验风控时的处理：弹滑块 → 组 aigis 头（sessionId;base64(三件套)） */
+async function solveGeetestRisk(risk: CaptchaRisk): Promise<string> {
+  const validate = await geetestVerify(risk.gt, risk.challenge);
+  // 内容为 ASCII，btoa 即可；回传格式与原版 TryVerifyAigisSessionAsync 一致
+  return `${risk.session_id};${btoa(JSON.stringify(validate))}`;
+}
+
 function openCaptchaDialog(): void {
   openDialog(
     "手机验证码",
@@ -457,11 +465,13 @@ function openCaptchaDialog(): void {
       </label>
       <button id="cap-send">发送验证码</button>
     </div>
-    <p class="hint">验证码登录可能触发极验风控，此时请改用扫码登录</p>`,
+    <p class="hint">首次使用建议扫码登录；短信发送可能要求人机验证</p>`,
     "登录",
   );
 
   let actionType = "";
+  // 通过人机验证后获得，重发/登录时带上（米哈游 X-Rpc-Aigis 头）
+  let aigis: string | null = null;
 
   document.getElementById("cap-send")!.addEventListener("click", () => {
     void (async () => {
@@ -472,9 +482,18 @@ function openCaptchaDialog(): void {
       }
       setStatus("正在发送验证码…");
       try {
-        const sent = await api.captchaSend(mobile);
-        actionType = sent.action_type;
-        setStatus(`验证码已发送（${sent.countdown}s 内有效）`);
+        let r = await api.captchaSend(mobile, aigis ?? undefined);
+        if (r.status === "risk") {
+          setStatus("需要人机验证，请完成滑块验证…");
+          aigis = await solveGeetestRisk(r);
+          setStatus("验证通过，正在发送验证码…");
+          r = await api.captchaSend(mobile, aigis);
+          if (r.status === "risk") {
+            throw new Error("人机验证未通过，请稍后重试");
+          }
+        }
+        actionType = r.action_type;
+        setStatus(`验证码已发送（${r.countdown}s 内有效）`);
       } catch (e) {
         setStatus("");
         toast(errText(e), "error");
@@ -490,10 +509,19 @@ function openCaptchaDialog(): void {
         throw new Error("请先发送验证码");
       }
       setStatus("正在登录…");
-      const user = await api.captchaLogin(mobile, code, actionType);
+      let r = await api.captchaLogin(mobile, code, actionType, aigis ?? undefined);
+      if (r.status === "risk") {
+        setStatus("需要人机验证，请完成滑块验证…");
+        aigis = await solveGeetestRisk(r);
+        setStatus("验证通过，正在登录…");
+        r = await api.captchaLogin(mobile, code, actionType, aigis);
+        if (r.status === "risk") {
+          throw new Error("人机验证未通过，请稍后重试");
+        }
+      }
       closeDialog();
-      currentUserId = user.id;
-      toast(`已添加用户 ${user.nickname ?? ""}`, "success");
+      currentUserId = r.user.id;
+      toast(`已添加用户 ${r.user.nickname ?? ""}`, "success");
       await reload();
     }),
   );

@@ -32,10 +32,22 @@ export interface QrPollDto {
   user: UserDto | null;
 }
 
-export interface CaptchaSendDto {
-  action_type: string;
-  countdown: number;
+/** 极验风控参数（触发时需先完成人机验证） */
+export interface CaptchaRisk {
+  session_id: string;
+  gt: string;
+  challenge: string;
 }
+
+/** 发送验证码结果：已发送 / 触发极验风控 */
+export type CaptchaSendDto =
+  | { status: "sent"; action_type: string; countdown: number }
+  | ({ status: "risk" } & CaptchaRisk);
+
+/** 验证码登录结果：登录成功 / 触发极验风控 */
+export type CaptchaLoginDto =
+  | { status: "ok"; user: UserDto }
+  | ({ status: "risk" } & CaptchaRisk);
 
 /** 后端 ApiError 的序列化结构 */
 export interface ApiErrorShape {
@@ -66,10 +78,11 @@ export const api = {
 
   qrPoll: (ticket: string) => invoke<QrPollDto>("qr_login_poll", { ticket }),
 
-  captchaSend: (mobile: string) => invoke<CaptchaSendDto>("mobile_captcha_send", { mobile }),
+  captchaSend: (mobile: string, aigis?: string) =>
+    invoke<CaptchaSendDto>("mobile_captcha_send", { mobile, aigis: aigis ?? null }),
 
-  captchaLogin: (mobile: string, captcha: string, actionType: string) =>
-    invoke<UserDto>("mobile_captcha_login", { mobile, captcha, actionType }),
+  captchaLogin: (mobile: string, captcha: string, actionType: string, aigis?: string) =>
+    invoke<CaptchaLoginDto>("mobile_captcha_login", { mobile, captcha, actionType, aigis: aigis ?? null }),
 
   cookieLogin: (raw: string, isOversea: boolean) =>
     invoke<UserDto>("cookie_login", { raw, isOversea }),

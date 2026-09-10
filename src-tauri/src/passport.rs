@@ -10,6 +10,7 @@ use rand::rngs::OsRng;
 use rsa::pkcs1v15::Pkcs1v15Encrypt;
 use rsa::pkcs8::DecodePublicKey;
 use rsa::RsaPublicKey;
+use serde::Serialize;
 use serde_json::json;
 
 /// RSA 加密手机号等敏感字段（PKCS1v15，与原版 PassportClient.Encrypt 一致）
@@ -61,14 +62,14 @@ pub async fn query_qr_login_status(
 }
 
 /// 发送登录短信验证码（对应 CreateLoginCaptchaAsync，带 DS Gen2 PROD 签名）。
-/// 返回 (action_type, countdown, 新的 aigis 会话)。
+/// 触发极验风控时返回 Risk（含滑块参数），由前端完成人机验证后带 aigis 重发。
 pub async fn create_login_captcha(
     client: &reqwest::Client,
     salts: &Salts,
     devices: &Devices,
     mobile: &str,
     aigis: Option<&str>,
-) -> ApiResult<(MobileCaptchaData, Option<String>)> {
+) -> ApiResult<CaptchaStep> {
     let data = json!({
         "area_code": rsa_encrypt_cn("+86")?,
         "mobile": rsa_encrypt_cn(mobile)?,
@@ -84,18 +85,18 @@ pub async fn create_login_captcha(
     }
     let resp = http::request::<MobileCaptchaData>(client, salts, devices, spec).await?;
 
-    if resp.envelope.retcode != 0 && resp.aigis.is_some() {
-        return Err(ApiError::retcode(
-            resp.envelope.retcode,
-            format!("{}（触发极验风控，本示例未实现验证码组件，请改用扫码登录）", resp.envelope.message),
-        ));
+    if resp.envelope.retcode != 0 {
+        if let Some(risk) = parse_aigis_risk(resp.aigis.as_deref()) {
+            log::info!("[passport] 发送验证码触发极验风控（gt={}…），等待前端人机验证", &risk.gt[..risk.gt.len().min(8)]);
+            return Ok(CaptchaStep::Risk(risk));
+        }
     }
 
     let data = unwrap_envelope(resp.envelope, "createLoginCaptcha")?;
-    Ok((data, resp.aigis))
+    Ok(CaptchaStep::Sent(data))
 }
 
-/// 短信验证码登录（对应 LoginByMobileCaptchaAsync）
+/// 短信验证码登录（对应 LoginByMobileCaptchaAsync）。风控处理同上。
 pub async fn login_by_mobile_captcha(
     client: &reqwest::Client,
     salts: &Salts,
@@ -104,7 +105,7 @@ pub async fn login_by_mobile_captcha(
     captcha: &str,
     action_type: &str,
     aigis: Option<&str>,
-) -> ApiResult<LoginResult> {
+) -> ApiResult<CaptchaLoginStep> {
     let data = json!({
         "area_code": rsa_encrypt_cn("+86")?,
         "action_type": action_type,
@@ -121,13 +122,65 @@ pub async fn login_by_mobile_captcha(
         spec = spec.with_header("x-rpc-aigis", a);
     }
     let resp = http::request::<LoginResult>(client, salts, devices, spec).await?;
-    if resp.envelope.retcode != 0 && resp.aigis.is_some() {
-        return Err(ApiError::retcode(
-            resp.envelope.retcode,
-            format!("{}（触发极验风控，本示例未实现验证码组件，请改用扫码登录）", resp.envelope.message),
-        ));
+    if resp.envelope.retcode != 0 {
+        if let Some(risk) = parse_aigis_risk(resp.aigis.as_deref()) {
+            log::info!("[passport] 验证码登录触发极验风控，等待前端人机验证");
+            return Ok(CaptchaLoginStep::Risk(risk));
+        }
     }
-    unwrap_envelope(resp.envelope, "loginByMobileCaptcha")
+    let result = unwrap_envelope(resp.envelope, "loginByMobileCaptcha")?;
+    Ok(CaptchaLoginStep::Ok(result))
+}
+
+/// 极验风控参数：由前端加载极验滑块，完成后组 aigis 头重发请求
+#[derive(Debug, Clone, Serialize)]
+pub struct CaptchaRisk {
+    /// 风控会话 ID，回传 aigis 头的第一段
+    pub session_id: String,
+    /// 极验 GT3 参数
+    pub gt: String,
+    /// 极验 GT3 参数
+    pub challenge: String,
+}
+
+pub enum CaptchaStep {
+    Sent(MobileCaptchaData),
+    Risk(CaptchaRisk),
+}
+
+pub enum CaptchaLoginStep {
+    Ok(LoginResult),
+    Risk(CaptchaRisk),
+}
+
+/// 解析风控响应头 X-Rpc-Aigis：
+/// `{"session_id":"...","mmt_type":1,"data":"{\"gt\":\"...\",\"challenge\":\"...\",...}"}`
+/// （data 是字符串化的 JSON）
+fn parse_aigis_risk(raw: Option<&str>) -> Option<CaptchaRisk> {
+    let raw = raw?;
+    #[derive(serde::Deserialize)]
+    struct AigisSession {
+        session_id: String,
+        #[serde(default)]
+        #[allow(dead_code)]
+        mmt_type: i32,
+        data: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct GeetestVerification {
+        gt: String,
+        challenge: String,
+    }
+    let session: AigisSession = serde_json::from_str(raw).ok()?;
+    let geetest: GeetestVerification = serde_json::from_str(&session.data).ok()?;
+    if geetest.gt.is_empty() || geetest.challenge.is_empty() {
+        return None;
+    }
+    Some(CaptchaRisk {
+        session_id: session.session_id,
+        gt: geetest.gt,
+        challenge: geetest.challenge,
+    })
 }
 
 /// 用 SToken 换取 cookie_token（对应 GetCookieAccountInfoBySTokenAsync；
@@ -193,4 +246,28 @@ pub async fn get_ltoken_by_stoken(
         http::request::<LTokenData>(client, salts, devices, spec).await?
     };
     unwrap_envelope(resp.envelope, "getLTokenBySToken")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_aigis_risk;
+
+    /// 风控响应头样例（格式对应原版 AigisSession/GeetestVerification，data 为字符串化 JSON）
+    #[test]
+    fn parses_aigis_risk_header() {
+        let raw = r#"{"session_id":"0cb5abf3-56f1-4f8f-a1aa-0d5a5c9a5a2b","mmt_type":1,"data":"{\"success\":1,\"gt\":\"549cc6b0d8e0a1f4e6e8d4b0e4e6f4e4\",\"challenge\":\"c7e0d4b8a1c8e4f2a9d3e0f4c6d2a8e6\",\"new_captcha\":1}"}"#;
+        let risk = parse_aigis_risk(Some(raw)).expect("应解析出风控参数");
+        assert_eq!(risk.session_id, "0cb5abf3-56f1-4f8f-a1aa-0d5a5c9a5a2b");
+        assert_eq!(risk.gt, "549cc6b0d8e0a1f4e6e8d4b0e4e6f4e4");
+        assert_eq!(risk.challenge, "c7e0d4b8a1c8e4f2a9d3e0f4c6d2a8e6");
+    }
+
+    #[test]
+    fn rejects_non_risk_aigis() {
+        assert!(parse_aigis_risk(None).is_none());
+        // 空风控参数（未触发）
+        assert!(parse_aigis_risk(Some(r#"{"session_id":"x","data":"{\"gt\":\"\",\"challenge\":\"\"}"}"#)).is_none());
+        // 非 JSON
+        assert!(parse_aigis_risk(Some("garbage")).is_none());
+    }
 }
