@@ -229,12 +229,6 @@ function renderUserFlyout(): void {
         <button class="flyout-item" data-login="captcha"><svg><use href="#i-phone"/></svg>手机验证码</button>
         <button class="flyout-item" data-login="cookie-cn"><svg><use href="#i-keyboard"/></svg>手动输入</button>
       </div>
-      <button class="flyout-item flyout-brand" data-expand="sub-os">
-        <span class="brand-logo brand-os">H</span>HoYoLAB<svg class="chevron sub-chev"><use href="#i-chevron"/></svg>
-      </button>
-      <div class="flyout-sub hidden" id="sub-os">
-        <button class="flyout-item" data-login="cookie-os"><svg><use href="#i-keyboard"/></svg>手动输入</button>
-      </div>
       <div class="flyout-sep"></div>
       <div class="flyout-section center">当前用户</div>
       <button class="flyout-item" data-unimpl="旅行工具"><svg><use href="#i-launch"/></svg>旅行工具</button>
@@ -304,7 +298,7 @@ function renderUserFlyout(): void {
       } else if (kind === "captcha") {
         openCaptchaDialog();
       } else {
-        openCookieDialog(kind === "cookie-os");
+        openCookieDialog(false);
       }
     });
   });
