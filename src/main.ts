@@ -15,6 +15,7 @@ import {
 import { checkForUpdates, initUpdateBadge } from "./updater";
 import { initChangelog } from "./changelog";
 import { initTheme, renderSettingsPage } from "./settings";
+import { renderAvatarPropertyPage } from "./avatarproperty";
 import { renderDailyNotePage } from "./dailynote";
 import { renderAbyssPage, renderHardChallengePage, renderTheaterPage } from "./chronicle";
 
@@ -94,7 +95,7 @@ function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
   let lastGroup: string | undefined;
-  const implemented = new Set(["gachalog", "setting", "dailynote", "spiralabyss", "rolecombat", "hardchallenge"]);
+  const implemented = new Set(["gachalog", "setting", "dailynote", "avatarproperty", "spiralabyss", "rolecombat", "hardchallenge"]);
   for (const item of NAV_ITEMS) {
     if (item.group && item.group !== lastGroup) {
       html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
@@ -137,6 +138,8 @@ function renderPage(): void {
     void renderSettingsPage(content);
   } else if (currentPage === "dailynote") {
     renderDailyNotePage(content, currentUser());
+  } else if (currentPage === "avatarproperty") {
+    renderAvatarPropertyPage(content, currentUser());
   } else if (currentPage === "spiralabyss") {
     renderAbyssPage(content, currentUser());
   } else if (currentPage === "rolecombat") {

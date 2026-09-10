@@ -68,8 +68,31 @@ async fn fetch_record(
     user: &UserRecord,
     url: String,
     xrpc_challenge: Option<&str>,
+) -> ApiResult<serde_json::Value> {    let mut spec = record_spec(user, url, reqwest::Method::GET, None)?;
+    if let Some(challenge) = xrpc_challenge {
+        spec = spec.with_header("x-rpc-challenge", challenge);
+    }
+    let resp = match http::request::<serde_json::Value>(client, salts, devices, spec).await {
+        Ok(r) => r,
+        Err(e) if e.code == 1034 || e.code == 5003 => {
+            return Err(ApiError::retcode(e.code, "当前账号被标记风险，需要完成安全验证后重试"));
+        }
+        Err(e) => return Err(e),
+    };
+    unwrap_envelope(resp.envelope, "game_record")
+}
+
+/// 通用拉取：GameRecord 系 POST 接口（character/list、character/detail）
+async fn fetch_record_post(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+    url: String,
+    body: serde_json::Value,
+    xrpc_challenge: Option<&str>,
 ) -> ApiResult<serde_json::Value> {
-    let mut spec = record_spec(user, url, reqwest::Method::GET, None)?;
+    let mut spec = record_spec(user, url, reqwest::Method::POST, Some(body))?;
     if let Some(challenge) = xrpc_challenge {
         spec = spec.with_header("x-rpc-challenge", challenge);
     }
@@ -506,4 +529,55 @@ pub async fn fetch_hard_challenge(
     let url = constants::url_hard_challenge(uid, region, user.is_oversea);
     let value = fetch_record(client, salts, devices, user, url, xrpc_challenge).await?;
     serde_json::from_value(value).map_err(|e| ApiError::transport(format!("hard_challenge 解析失败: {e}")))
+}
+
+// ---------------------------------------------------------------------------
+// 我的角色（AvatarProperty）：index + character/list + character/detail
+// 数据结构与原版 PlayerInfo/Character/DetailedCharacter 一致，前端负责组装视图
+// ---------------------------------------------------------------------------
+
+/// GET index：玩家统计 + 角色摘要列表（含 image/card_image 原生 URL）
+pub async fn fetch_player_info(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+    uid: &str,
+    region: &str,
+    xrpc_challenge: Option<&str>,
+) -> ApiResult<serde_json::Value> {
+    let url = constants::url_player_info(uid, region, user.is_oversea);
+    fetch_record(client, salts, devices, user, url, xrpc_challenge).await
+}
+
+/// POST character/list：角色基础（等级/命座/武器摘要）
+pub async fn fetch_character_list(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+    uid: &str,
+    region: &str,
+    xrpc_challenge: Option<&str>,
+) -> ApiResult<serde_json::Value> {
+    let url = constants::url_character_list(user.is_oversea);
+    let body = serde_json::json!({ "sort_type": 1, "role_id": uid, "server": region });
+    fetch_record_post(client, salts, devices, user, url, body, xrpc_challenge).await
+}
+
+/// POST character/detail：角色详情（属性/技能/命座/圣遗物），ids 为空则拉全部
+pub async fn fetch_character_detail(
+    client: &reqwest::Client,
+    salts: &Salts,
+    devices: &Devices,
+    user: &UserRecord,
+    uid: &str,
+    region: &str,
+    character_ids: &[i64],
+    xrpc_challenge: Option<&str>,
+) -> ApiResult<serde_json::Value> {
+    let url = constants::url_character_detail(user.is_oversea);
+    let ids: Vec<serde_json::Value> = character_ids.iter().map(|v| serde_json::json!(v)).collect();
+    let body = serde_json::json!({ "character_ids": ids, "role_id": uid, "server": region });
+    fetch_record_post(client, salts, devices, user, url, body, xrpc_challenge).await
 }

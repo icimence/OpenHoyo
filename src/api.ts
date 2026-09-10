@@ -49,6 +49,85 @@ export type CaptchaLoginDto =
   | { status: "ok"; user: UserDto }
   | ({ status: "risk" } & CaptchaRisk);
 
+/** 我的角色：index + list + detail 三段原始数据（前端组装视图） */
+export interface AvatarPropertyDto {
+  index: PlayerIndexData;
+  list: { list: CharacterListItem[] };
+  detail: { list: DetailedCharacter[] };
+}
+
+export interface PlayerIndexData {
+  stats?: Record<string, number>;
+  avatars: IndexAvatar[];
+}
+
+export interface IndexAvatar {
+  id: number;
+  name: string;
+  element: string;
+  fetter: number;
+  level: string;
+  rarity: number;
+  actived_constellation_num: number;
+  image?: string;
+  card_image?: string;
+  icon?: string;
+  side_icon?: string;
+}
+
+export interface CharacterListItem {
+  id: number;
+  name: string;
+  element: string;
+  fetter: number;
+  level: string;
+  rarity: number;
+  actived_constellation_num: number;
+  weapon_type: string;
+  icon?: string;
+  weapon: { id: number; type: string; rarity: number; level: string; affix_level: number; icon?: string };
+}
+
+export interface DetailedCharacter {
+  base: CharacterListItem;
+  weapon: { id: number; type: string; rarity: number; level: string; affix_level: number; icon?: string; promote_level?: number };
+  relics: Reliquary[];
+  constellations: { id: number; name: string; icon: string; effect: string; is_actived: boolean; pos: number }[];
+  costumes?: { id: number; icon?: string }[];
+  selected_properties: { property_type: number; val: string; base?: string }[];
+  base_properties?: { property_type: number; val: string }[];
+  skills: CharacterSkill[];
+}
+
+/** 技能：skill_type=1 战斗天赋（普攻/E/Q），=2 固有天赋；图标为完整 URL */
+export interface CharacterSkill {
+  skill_id: number;
+  skill_type: number;
+  level: number;
+  name: string;
+  icon: string;
+  desc: string;
+  skill_affix_list?: { name: string; value: string }[];
+}
+
+export interface Reliquary {
+  id: number;
+  name: string;
+  icon: string;
+  pos: number;
+  rarity: number;
+  level: number;
+  set: { name: string; effects?: { activation_number: number; effect: string }[] };
+  pos_name: string;
+  main_property: ReliquaryProperty;
+  sub_property_list: ReliquaryProperty[];
+}
+
+export interface ReliquaryProperty {
+  property_type: number;
+  val: string;
+}
+
 /** 后端 ApiError 的序列化结构 */
 export interface ApiErrorShape {
   code: number;
@@ -86,6 +165,9 @@ export const api = {
 
   cookieLogin: (raw: string, isOversea: boolean) =>
     invoke<UserDto>("cookie_login", { raw, isOversea }),
+
+  avatarPropertyRefresh: (userId: number, gameUid: string, challenge?: string) =>
+    invoke<AvatarPropertyDto>("avatar_property_refresh", { userId, gameUid, challenge: challenge ?? null }),
 
   removeUser: (id: number) => invoke<void>("remove_user", { id }),
 

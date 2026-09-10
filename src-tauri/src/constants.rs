@@ -212,6 +212,24 @@ pub fn url_hard_challenge(uid: &str, server: &str, is_oversea: bool) -> String {
     )
 }
 
+// 我的角色（AvatarProperty）：index / character list / character detail
+pub fn url_player_info(uid: &str, server: &str, is_oversea: bool) -> String {
+    format!(
+        "{}/game_record/app/genshin/api/index?role_id={}&server={}",
+        record_host(is_oversea),
+        uid,
+        server
+    )
+}
+
+pub fn url_character_list(is_oversea: bool) -> String {
+    format!("{}/game_record/app/genshin/api/character/list", record_host(is_oversea))
+}
+
+pub fn url_character_detail(is_oversea: bool) -> String {
+    format!("{}/game_record/app/genshin/api/character/detail", record_host(is_oversea))
+}
+
 // ---------------------------------------------------------------------------
 // 国服 Passport 接口 RSA 公钥（UIGF 社区文档公开值，用于手机号加密）
 // ---------------------------------------------------------------------------

@@ -544,3 +544,51 @@ pub async fn chronicle_refresh(
     let db = state.db.lock().unwrap();
     crate::game_record::list_periods(&db, &uid, &kind).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
 }
+
+// ---------------------------------------------------------------------------
+// 我的角色（AvatarProperty）
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct AvatarPropertyDto {
+    /// index：stats（活跃统计）+ avatars（角色摘要，含 image/card_image URL）
+    pub index: serde_json::Value,
+    /// character/list：角色基础（等级/命座/武器摘要）
+    pub list: serde_json::Value,
+    /// character/detail：角色详情数组（属性/技能/命座/圣遗物）
+    pub detail: serde_json::Value,
+}
+
+/// 一次拉齐我的角色数据（index + list + detail 三接口）
+#[tauri::command]
+pub async fn avatar_property_refresh(
+    state: State<'_, AppState>,
+    user_id: i64,
+    game_uid: String,
+    challenge: Option<String>,
+) -> ApiResult<AvatarPropertyDto> {
+    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
+    let salts = salts(&state).await;
+    let uid = role.game_uid.clone();
+    let region = role.region.clone();
+    log::info!("[avatar_property] 刷新我的角色（uid={uid}）");
+
+    let ch = challenge.as_deref();
+    let index = crate::game_record::fetch_player_info(&state.http, &salts, &state.devices, &rec, &uid, &region, ch).await?;
+    let list = crate::game_record::fetch_character_list(&state.http, &salts, &state.devices, &rec, &uid, &region, ch).await?;
+
+    // 角色列表为 detail 提供 ids（与原版 GetCharacterDetailAsync 一致）
+    let ids: Vec<i64> = list
+        .get("list")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| c.get("id").and_then(|v| v.as_i64()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let detail = crate::game_record::fetch_character_detail(&state.http, &salts, &state.devices, &rec, &uid, &region, &ids, ch).await?;
+
+    log::info!("[avatar_property] 刷新完成（{} 个角色）", ids.len());
+    Ok(AvatarPropertyDto { index, list, detail })
+}

@@ -120,6 +120,7 @@ pub fn run() {
             commands::card_verify_verification,
             commands::chronicle_list,
             commands::chronicle_refresh,
+            commands::avatar_property_refresh,
             feedback::feedback_submit,
             update::update_notice,
             update::update_notes,
