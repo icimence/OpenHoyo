@@ -80,17 +80,19 @@ export interface CharacterListItem {
   name: string;
   element: string;
   fetter: number;
-  level: string;
+  level: number;
   rarity: number;
   actived_constellation_num: number;
-  weapon_type: string;
+  weapon_type?: string;
   icon?: string;
-  weapon: { id: number; type: string; rarity: number; level: string; affix_level: number; icon?: string };
+  side_icon?: string;
+  image?: string;
+  weapon: { id: number; type: number; rarity: number; level: number; affix_level: number; name?: string; icon?: string };
 }
 
 export interface DetailedCharacter {
   base: CharacterListItem;
-  weapon: { id: number; type: string; rarity: number; level: string; affix_level: number; icon?: string; promote_level?: number };
+  weapon: { id: number; type: number; rarity: number; level: number; affix_level: number; name?: string; icon?: string; promote_level?: number };
   relics: Reliquary[];
   constellations: { id: number; name: string; icon: string; effect: string; is_actived: boolean; pos: number }[];
   costumes?: { id: number; icon?: string }[];

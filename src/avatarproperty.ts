@@ -38,17 +38,18 @@ const ELEMENTS: { key: string; label: string; color: string }[] = [
   { key: "Geo", label: "岩", color: "#ffb628" },
 ];
 
-const WEAPON_TYPES: { key: string; label: string }[] = [
-  { key: "WEAPON_SWORD_ONE_HAND", label: "单手剑" },
-  { key: "WEAPON_CLAYMORE", label: "双手剑" },
-  { key: "WEAPON_POLE", label: "长柄武器" },
-  { key: "WEAPON_CATALYST", label: "法器" },
-  { key: "WEAPON_BOW", label: "弓" },
+/** 武器类型（对应原版 WeaponType 枚举数值） */
+const WEAPON_TYPES: { key: number; label: string }[] = [
+  { key: 1, label: "单手剑" },
+  { key: 10, label: "法器" },
+  { key: 11, label: "双手剑" },
+  { key: 12, label: "弓" },
+  { key: 13, label: "长柄武器" },
 ];
 
 /** 等级 → 突破阶段（角色突破星；武器 API 直接给 promote_level） */
-function promoteOfLevel(level: string): number {
-  const lv = Number.parseInt(level, 10) || 0;
+function promoteOfLevel(level: string | number): number {
+  const lv = typeof level === "number" ? level : Number.parseInt(String(level), 10) || 0;
   if (lv > 80) return 6;
   if (lv > 70) return 5;
   if (lv > 60) return 4;
@@ -83,7 +84,7 @@ interface AvatarView {
   name: string;
   element: string;
   elementLabel: string;
-  weaponType: string;
+  weaponType: number;
   weaponTypeLabel: string;
   quality: number;
   level: number;
@@ -93,7 +94,7 @@ interface AvatarView {
   icon: string;
   sideIcon: string;
   nameCard: string;
-  weapon: { icon: string; quality: number; level: number; affix: number; promote: number };
+  weapon: { icon: string; name: string; quality: number; level: number; affix: number; promote: number };
   skills: { name: string; icon: string; level: number }[];
   constellations: { icon: string; effect: string; name: string; activated: boolean }[];
   properties: { type: number; name: string; value: string; add: string }[];
@@ -121,10 +122,10 @@ function buildAvatarViews(dto: AvatarPropertyDto): AvatarView[] {
   return (dto.list?.list ?? []).map((c): AvatarView => {
     const idx = indexById.get(c.id);
     const detail = detailById.get(c.id);
-    const lv = Number.parseInt(c.level, 10) || 0;
+    const lv = typeof c.level === "number" ? c.level : Number.parseInt(c.level, 10) || 0;
     const promote = promoteOfLevel(c.level);
     const element = ELEMENTS.find((e) => e.key === (c.element ?? idx?.element));
-    const wt = WEAPON_TYPES.find((w) => w.key === c.weapon_type);
+    const wt = WEAPON_TYPES.find((w) => w.key === (c.weapon?.type ?? 0));
 
     const selected = new Map<number, number>();
     for (const p of detail?.selected_properties ?? []) {
@@ -153,22 +154,23 @@ function buildAvatarViews(dto: AvatarPropertyDto): AvatarView[] {
       name: c.name,
       element: c.element ?? idx?.element ?? "",
       elementLabel: element?.label ?? "?",
-      weaponType: c.weapon_type,
+      weaponType: c.weapon?.type ?? 0,
       weaponTypeLabel: wt?.label ?? "?",
       quality: c.rarity,
       level: lv,
       fetter: c.fetter,
       constellationCount: c.actived_constellation_num,
       promoteArray: Array.from({ length: 6 }, (_, i) => i < promote),
-      icon: iconUrl(idx?.image ?? c.icon ?? ""),
+      icon: iconUrl(c.image ?? idx?.image ?? c.icon ?? ""),
       sideIcon: iconUrl(idx?.side_icon),
       nameCard: idx?.card_image ?? "",
       weapon: {
         icon: iconUrl(detail?.weapon?.icon ?? c.weapon?.icon),
+        name: detail?.weapon?.name ?? c.weapon?.name ?? "",
         quality: detail?.weapon?.rarity ?? c.weapon?.rarity ?? 5,
-        level: Number.parseInt(detail?.weapon?.level ?? c.weapon?.level ?? "0", 10) || 0,
+        level: typeof (detail?.weapon?.level ?? c.weapon?.level) === "number" ? (detail?.weapon?.level ?? c.weapon?.level ?? 0) : Number.parseInt(String(detail?.weapon?.level ?? c.weapon?.level ?? "0"), 10) || 0,
         affix: detail?.weapon?.affix_level ?? c.weapon?.affix_level ?? 0,
-        promote: detail?.weapon?.promote_level ?? promoteOfLevel(detail?.weapon?.level ?? c.weapon?.level ?? "0"),
+        promote: detail?.weapon?.promote_level ?? promoteOfLevel(String(detail?.weapon?.level ?? c.weapon?.level ?? 0)),
       },
       skills: (detail?.skills ?? []).filter((s) => s.skill_type === 1).map((s) => ({ name: s.name, icon: s.icon, level: s.level })),
       constellations: (detail?.constellations ?? []).map((k) => ({
@@ -210,7 +212,7 @@ let currentIdx = -1;
 let layout: "grid" | "list" = "grid";
 let sortKind: SortKind = "default";
 const filterElements = new Set<string>();
-const filterWeapons = new Set<string>();
+const filterWeapons = new Set<number>();
 let refreshing = false;
 /** 当前渲染页面对应的用户（refresh 复用） */
 let currentUserRef: UserDto | undefined;
@@ -276,7 +278,8 @@ export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | u
       if (btn.dataset.element) {
         filterElements.has(btn.dataset.element) ? filterElements.delete(btn.dataset.element) : filterElements.add(btn.dataset.element);
       } else if (btn.dataset.weapon) {
-        filterWeapons.has(btn.dataset.weapon) ? filterWeapons.delete(btn.dataset.weapon) : filterWeapons.add(btn.dataset.weapon);
+        const wk = Number(btn.dataset.weapon);
+        filterWeapons.has(wk) ? filterWeapons.delete(wk) : filterWeapons.add(wk);
       }
       btn.classList.toggle("active");
       renderBody();
@@ -391,27 +394,25 @@ function renderGrid(list: AvatarView[]): string {
       <button class="ap-card ${cur ? "active" : ""}" data-id="${v.id}">
         ${v.nameCard ? `<img class="ap-card-bg" src="${esc(v.nameCard)}" loading="lazy" onerror="this.remove()"/>` : ""}
         <div class="ap-card-mask"></div>
-        <div class="ap-card-row">
-          <div class="ap-vert">
-            <div class="ap-icon q${v.quality}">
-              <img src="${esc(v.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
-              <span class="ap-fetter">♥${v.fetter}</span>
-              <span class="ap-cons">${v.constellationCount}</span>
-            </div>
-            <span class="ap-vert-label">Lv.${v.level}</span>
+        <div class="ap-card-top">
+          <div class="ap-card-portrait q${v.quality}">
+            <img src="${esc(v.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
+            <span class="ap-badge pill">Lv.${v.level}</span>
+            <span class="ap-badge corner">✦${v.constellationCount}</span>
           </div>
-          <div class="ap-vert">
-            <div class="ap-icon q${v.weapon.quality}">
-              <img src="${esc(v.weapon.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
-              <span class="ap-cons">R${v.weapon.affix}</span>
-            </div>
-            <span class="ap-vert-label">Lv.${v.weapon.level}</span>
+          <div class="ap-card-title">
+            <b>${esc(v.name)}</b>
+            <span class="ap-card-sub">♥ 好感 ${v.fetter} · ${v.weaponTypeLabel}</span>
           </div>
-          <div class="ap-skills">
-            ${v.skills
-              .map((s, i) => `<div class="ap-skill-tile" title="${esc(s.name)} Lv.${s.level}"><b>${SKILL_LABELS[i + 1] ?? "?"}</b><span>${s.level}</span></div>`)
-              .join("")}
+          <div class="ap-card-weapon q${v.weapon.quality}" title="${esc(v.weapon.name)} Lv.${v.weapon.level} · 精${v.weapon.affix}">
+            <img src="${esc(v.weapon.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
+            <span class="ap-badge pill">Lv.${v.weapon.level}</span>
           </div>
+        </div>
+        <div class="ap-card-skills">
+          ${v.skills
+            .map((s, i) => `<span class="ap-skill-pill" title="${esc(s.name)} Lv.${s.level}"><b>${SKILL_LABELS[i + 1] ?? "?"}</b> ${s.level}</span>`)
+            .join("")}
         </div>
       </button>`;
     })
@@ -462,7 +463,7 @@ function renderDetail(v: AvatarView): string {
         <div class="ap-hero-weapon">
           <div class="ap-icon q${v.weapon.quality}"><img src="${esc(v.weapon.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/></div>
           <div class="ap-weapon-info">
-            <b>武器</b>
+            <b>${esc(v.weapon.name || "武器")}</b>
             <div class="ap-stars small">${starIcons(Array.from({ length: 6 }, (_, i) => i < v.weapon.promote))}</div>
             <span>Lv.${v.weapon.level} · 精${v.weapon.affix}</span>
           </div>
