@@ -121,6 +121,7 @@ pub fn run() {
             commands::chronicle_list,
             commands::chronicle_refresh,
             commands::avatar_property_refresh,
+            commands::avatar_property_cache,
             feedback::feedback_submit,
             update::update_notice,
             update::update_notes,

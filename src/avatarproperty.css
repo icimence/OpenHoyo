@@ -305,7 +305,7 @@
 }
 
 .ap-split-pane {
-  width: 220px;
+  width: 240px;
   flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--stroke);
@@ -387,9 +387,10 @@
 
 .ap-hero {
   position: relative;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
-  min-height: 220px;
+  aspect-ratio: 840 / 400;
+  width: 100%;
   display: flex;
 }
 
@@ -430,7 +431,7 @@
 }
 
 .ap-hero-name b {
-  font-size: 18px;
+  font-size: 21px;
 }
 
 .ap-hero-name > span {
@@ -449,7 +450,7 @@
 
 .ap-star {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .ap-star.on {
@@ -501,8 +502,8 @@
 }
 
 .ap-cons-btn img {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: block;
 }
@@ -537,10 +538,10 @@
 
 .ap-prop-row {
   display: grid;
-  grid-template-columns: 1fr auto 90px;
-  padding: 7px 14px;
+  grid-template-columns: 1fr auto 96px;
+  padding: 8px 16px;
   border-top: 1px solid var(--divider);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .ap-prop-val {
@@ -562,8 +563,8 @@
 
 .ap-relic {
   border: 1px solid var(--stroke);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -576,12 +577,12 @@
 }
 
 .ap-relic-head .ap-icon {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
 }
 
 .ap-relic-head b {
-  font-size: 13px;
+  font-size: 14px;
   display: block;
 }
 
@@ -602,7 +603,7 @@
 .ap-relic-subs {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 7px;
 }
 
 .ap-relic-sub {
@@ -614,8 +615,8 @@
 }
 
 .ap-skill-tile img {
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -625,12 +626,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  padding: 4px 10px;
-  font-size: 12.5px;
-  min-width: 96px;
+  padding: 5px 12px;
+  font-size: 13px;
+  min-width: 104px;
   color: #fff;
 }
 
@@ -660,3 +661,16 @@
 .ap-icon.q5 { border: 2px solid #d3bc8e; box-shadow: 0 0 6px rgba(211,188,142,0.35); }
 .ap-icon.q4 { border: 2px solid #a256e1; }
 .ap-icon.q3 { border: 2px solid var(--stroke-strong); }
+
+/* 详情大头像（原版 ItemIcon 默认 86） */
+.ap-icon.big {
+  width: 86px;
+  height: 86px;
+}
+
+/* 上次更新时间标签 */
+.ap-updated {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}

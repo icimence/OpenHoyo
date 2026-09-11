@@ -216,6 +216,15 @@ const filterWeapons = new Set<number>();
 let refreshing = false;
 /** 当前渲染页面对应的用户（refresh 复用） */
 let currentUserRef: UserDto | undefined;
+/** 缓存/刷新的上次更新时间（unix 毫秒） */
+let lastUpdated = 0;
+
+function syncUpdatedLabel(): void {
+  const el = document.getElementById("ap-updated");
+  if (el) {
+    el.textContent = lastUpdated > 0 ? `上次更新 ${new Date(lastUpdated).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}` : "";
+  }
+}
 
 export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | undefined): void {
   if (!user || user.game_roles.length === 0) {
@@ -250,6 +259,7 @@ export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | u
             <span class="ap-filter-sep"></span>
             ${WEAPON_TYPES.map((w) => `<button class="ap-filter-chip" data-weapon="${w.key}">${w.label}</button>`).join("")}
           </div>
+          <span class="ap-updated" id="ap-updated"></span>
           <button class="primary" id="ap-refresh"><svg><use href="#i-refresh"/></svg>刷新数据</button>
         </div>
         <div class="ap-body" id="ap-body"></div>
@@ -285,6 +295,28 @@ export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | u
       renderBody();
     });
   });
+
+  // 先读本地缓存秒显（不触网；与原版一致：进入显示缓存，手动点刷新更新）
+  if (views.length === 0) {
+    void (async () => {
+      try {
+        const cached = await api.avatarPropertyCache(user.id, role.game_uid);
+        if (cached && views.length === 0) {
+          views = buildAvatarViews(cached.data);
+          currentIdx = views.length > 0 ? 0 : -1;
+          lastUpdated = cached.updated_at;
+          document.getElementById("ap-empty")?.classList.add("hidden");
+          document.getElementById("ap-main")?.classList.remove("hidden");
+          syncLayoutBtns();
+          renderBody();
+          syncUpdatedLabel();
+          console.info(`[avatar_property] 已加载本地缓存（${views.length} 个角色）`);
+        }
+      } catch (e) {
+        console.warn(`[avatar_property] 缓存读取失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
+  }
 
   // 已有数据直接渲染（切页不重拉）
   if (views.length > 0) {
@@ -324,6 +356,8 @@ async function refresh(gameUid: string): Promise<void> {
     syncLayoutBtns();
     renderBody();
     console.info(`[avatar_property] 刷新完成（${views.length} 个角色）`);
+    lastUpdated = Date.now();
+    syncUpdatedLabel();
     toast(`已刷新 ${views.length} 个角色`, "success");
   } catch (e) {
     if (!isRiskError(e)) {

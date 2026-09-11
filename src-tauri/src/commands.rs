@@ -7,7 +7,7 @@ use crate::response::{ApiError, ApiResult};
 use crate::service::{self, UserDto};
 use crate::state::{salts, AppState};
 use crate::store::{self, UserRecord};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 #[tauri::command]
@@ -549,7 +549,7 @@ pub async fn chronicle_refresh(
 // 我的角色（AvatarProperty）
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct AvatarPropertyDto {
     /// index：stats（活跃统计）+ avatars（角色摘要，含 image/card_image URL）
     pub index: serde_json::Value,
@@ -590,5 +590,52 @@ pub async fn avatar_property_refresh(
     let detail = crate::game_record::fetch_character_detail(&state.http, &salts, &state.devices, &rec, &uid, &region, &ids, ch).await?;
 
     log::info!("[avatar_property] 刷新完成（{} 个角色）", ids.len());
-    Ok(AvatarPropertyDto { index, list, detail })
+    let dto = AvatarPropertyDto { index, list, detail };
+    // 落库：下次进入页面秒显缓存（kind=avatar_property 单条 upsert）
+    if let Ok(value) = serde_json::to_value(&dto) {
+        let db = state.db.lock().unwrap();
+        if let Err(e) = crate::game_record::save_period(&db, &uid, "avatar_property", 0, &value) {
+            log::warn!("[avatar_property] 缓存写入失败: {e}");
+        }
+    }
+    Ok(dto)
+}
+
+/// 我的角色本地缓存（秒回，不触网；对应原版进入页面先显示缓存的行为）
+#[derive(Serialize)]
+pub struct AvatarPropertyCacheDto {
+    pub data: AvatarPropertyDto,
+    /// unix 毫秒
+    pub updated_at: i64,
+}
+
+#[tauri::command]
+pub async fn avatar_property_cache(
+    state: State<'_, AppState>,
+    user_id: i64,
+    game_uid: String,
+) -> ApiResult<Option<AvatarPropertyCacheDto>> {
+    // 归属校验：该 uid 必须属于指定用户，避免越权读取
+    let rec = find_user(&state, user_id)?;
+    if !rec.game_roles.iter().any(|r| r.game_uid == game_uid) {
+        return Ok(None);
+    }
+    let db = state.db.lock().unwrap();
+    let row = db
+        .query_row(
+            "SELECT data, updated_at FROM game_records WHERE uid = ?1 AND kind = 'avatar_property' AND period_id = 0",
+            rusqlite::params![game_uid],
+            |row| {
+                let raw: String = row.get(0)?;
+                let updated: i64 = row.get(1)?;
+                Ok((raw, updated))
+            },
+        )
+        .ok();
+    let Some((raw, updated_at)) = row else {
+        return Ok(None);
+    };
+    let data: AvatarPropertyDto = serde_json::from_str(&raw)
+        .map_err(|e| ApiError::transport(format!("缓存解析失败: {e}")))?;
+    Ok(Some(AvatarPropertyCacheDto { data, updated_at }))
 }

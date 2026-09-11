@@ -171,6 +171,9 @@ export const api = {
   avatarPropertyRefresh: (userId: number, gameUid: string, challenge?: string) =>
     invoke<AvatarPropertyDto>("avatar_property_refresh", { userId, gameUid, challenge: challenge ?? null }),
 
+  avatarPropertyCache: (userId: number, gameUid: string) =>
+    invoke<{ data: AvatarPropertyDto; updated_at: number } | null>("avatar_property_cache", { userId, gameUid }),
+
   removeUser: (id: number) => invoke<void>("remove_user", { id }),
 
   refreshCookieToken: (id: number) => invoke<UserDto>("refresh_cookie_token", { id }),
