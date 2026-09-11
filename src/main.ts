@@ -2,6 +2,7 @@ import "./style.css";
 import { api, errText, type CaptchaRisk, type UserDto } from "./api";
 import { renderGachaPage } from "./gacha";
 import { geetestVerify } from "./geetest";
+import { ROLE_KEY, currentRoleOf, selectRole } from "./role";
 import {
   closeDialog,
   onDialogCancel,
@@ -208,8 +209,11 @@ function renderFooterUser(): void {
   if (cur) {
     nickEl.textContent = cur.nickname ?? "未知昵称";
     const initial = esc((cur.nickname ?? cur.mid).slice(0, 1).toUpperCase());
-    avatarEl.innerHTML = cur.avatar
-      ? `<span class="initial">${initial}</span><img src="${esc(cur.avatar)}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/>`
+    // 选中角色的游戏内头像优先，其次米游社账号头像，最后首字母占位
+    const gameAvatar = currentRoleOf(cur)?.avatar;
+    const src = gameAvatar || cur.avatar;
+    avatarEl.innerHTML = src
+      ? `<span class="initial">${initial}</span><img src="${esc(src)}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/>`
       : `<span class="initial">${initial}</span>`;
   } else {
     nickEl.textContent = "尚未登录";
@@ -247,8 +251,8 @@ function renderUserFlyout(): void {
     const roleRows = cur.game_roles
       .map(
         (r) => `
-        <div class="role-row" data-role="${esc(r.game_uid)}">
-          <div class="role-avatar">${esc(r.nickname.slice(0, 1))}</div>
+        <div class="role-row${r.game_uid === localStorage.getItem(ROLE_KEY) ? " selected" : ""}" data-role="${esc(r.game_uid)}">
+          <div class="role-avatar">${r.avatar ? `<img src="${esc(r.avatar)}" loading="lazy" onerror="this.remove()"/>` : esc(r.nickname.slice(0, 1))}</div>
           <div class="role-text">
             <div class="role-name">${esc(r.nickname)}</div>
             <div class="role-desc">${esc(r.game_uid)} · ${esc(r.region_name)} · Lv.${r.level}</div>
@@ -350,10 +354,16 @@ function renderUserFlyout(): void {
   // 角色行点击：切换选中角色（视觉态）
   flyout.querySelectorAll<HTMLElement>(".role-row").forEach((row) => {
     row.addEventListener("click", () => {
-      flyout.querySelectorAll(".role-row").forEach((r) => {
-        r.classList.remove("selected");
-      });
-      row.classList.add("selected");
+      const uid = row.dataset.role ?? "";
+      if (localStorage.getItem(ROLE_KEY) !== uid) {
+        selectRole(uid);
+        hideFlyout();
+        // 选定角色全局生效：刷新侧边栏头像与各页数据
+        void reload().catch((e: unknown) => toast(errText(e), "error"));
+        toast("已切换当前角色", "success");
+      } else {
+        hideFlyout();
+      }
     });
   });
 }

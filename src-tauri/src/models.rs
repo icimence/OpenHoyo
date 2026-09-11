@@ -171,6 +171,9 @@ pub struct GameRole {
     pub nickname: String,
     #[serde(default)]
     pub level: i32,
+    /// 游戏内头像（index 接口 role.game_head_icon，我的角色刷新时回填）
+    #[serde(default = "empty_str")]
+    pub avatar: String,
 }
 
 #[derive(Debug, Deserialize)]

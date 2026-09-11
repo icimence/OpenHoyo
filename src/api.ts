@@ -6,6 +6,8 @@ export interface GameRoleDto {
   region: string;
   region_name: string;
   game_biz: string;
+  /** 游戏内头像 URL（我的角色刷新时回填，空则无） */
+  avatar: string | null;
 }
 
 export interface UserDto {

@@ -3,6 +3,7 @@
 // 图标：index 原生 URL 优先，名字型 icon（UI_XXX）走 enka 镜像。
 import "./avatarproperty.css";
 import { api, type AvatarPropertyDto, type DetailedCharacter, type IndexAvatar, type Reliquary, type UserDto } from "./api";
+import { currentRoleOf } from "./role";
 import { fetchWithVerification, isRiskError } from "./verify";
 import { toast } from "./ui";
 
@@ -233,7 +234,11 @@ export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | u
       <div class="title">尚未登录</div><div class="desc">登录后可查看角色练度</div></div></div>`;
     return;
   }
-  const role = user.game_roles[0];
+  const role = currentRoleOf(user);
+  if (!role) {
+    refreshing = false;
+    return;
+  }
   currentUserRef = user;
 
   content.innerHTML = `

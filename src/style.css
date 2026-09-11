@@ -2796,3 +2796,11 @@ button svg {
   color: var(--accent-light);
   font-variant-numeric: tabular-nums;
 }
+
+.role-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}

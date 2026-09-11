@@ -567,7 +567,7 @@ pub async fn avatar_property_refresh(
     game_uid: String,
     challenge: Option<String>,
 ) -> ApiResult<AvatarPropertyDto> {
-    let (rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
+    let (mut rec, role) = prepare_record_user(&state, user_id, &game_uid).await?;
     let salts = salts(&state).await;
     let uid = role.game_uid.clone();
     let region = role.region.clone();
@@ -590,6 +590,22 @@ pub async fn avatar_property_refresh(
     let detail = crate::game_record::fetch_character_detail(&state.http, &salts, &state.devices, &rec, &uid, &region, &ids, ch).await?;
 
     log::info!("[avatar_property] 刷新完成（{} 个角色）", ids.len());
+    // 顺带回填游戏内头像（index.role.game_head_icon）到角色档案，侧边栏选中该角色时展示
+    if let Some(head) = index
+        .get("role")
+        .and_then(|r| r.get("game_head_icon"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        if let Some(role) = rec.game_roles.iter_mut().find(|r| r.game_uid == uid) {
+            if role.avatar != head {
+                role.avatar = head.to_string();
+                if let Err(e) = service::save(&state, &mut rec) {
+                    log::warn!("[avatar_property] 游戏头像回填保存失败: {e}");
+                }
+            }
+        }
+    }
     let dto = AvatarPropertyDto { index, list, detail };
     // 落库：下次进入页面秒显缓存（kind=avatar_property 单条 upsert）
     if let Ok(value) = serde_json::to_value(&dto) {

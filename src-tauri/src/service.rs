@@ -38,6 +38,7 @@ pub struct GameRoleDto {
     pub region: String,
     pub region_name: String,
     pub game_biz: String,
+    pub avatar: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -67,6 +68,7 @@ impl From<&UserRecord> for UserDto {
                 region: r.region.clone(),
                 region_name: region_name(&r.region),
                 game_biz: r.game_biz.clone(),
+                avatar: r.avatar.clone(),
             })
             .collect();
         Self {
