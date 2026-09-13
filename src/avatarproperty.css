@@ -295,23 +295,24 @@
 }
 
 
-/* ---- 列表 + 详情（对应原版 SplitView） ---- */
+/* ---- 列表 + 详情（对应原版 SplitView，规格来自真机逐区观察） ---- */
 
 .ap-split {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   min-height: 480px;
   align-items: stretch;
 }
 
+/* 左列：底色稍深与详情区分层（原版无分隔线，靠背景层次） */
 .ap-split-pane {
   width: 240px;
   flex-shrink: 0;
-  background: var(--bg-card);
+  background: color-mix(in srgb, var(--bg-card) 92%, #000 8%);
   border: 1px solid var(--stroke);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow-y: auto;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 200px);
   display: flex;
   flex-direction: column;
 }
@@ -320,13 +321,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 5px 10px;
   text-align: left;
   border-radius: 0;
+  min-height: 54px;
 }
 
 .ap-list-item.active {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
   border-left: 3px solid var(--accent);
 }
 
@@ -341,7 +343,16 @@
 .ap-list-text {
   display: flex;
   flex-direction: column;
-  line-height: 1.4;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.ap-list-text b {
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ap-list-text small {
@@ -361,10 +372,10 @@
 .ap-split-main {
   flex: 1;
   overflow-y: auto;
-  max-height: calc(100vh - 220px);
+  max-height: calc(100vh - 200px);
   background: var(--bg-card);
   border: 1px solid var(--stroke);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 16px;
 }
 
@@ -376,13 +387,13 @@
   color: var(--text-tertiary);
 }
 
-/* ---- 详情：英雄卡（名片 + 黑遮罩） ---- */
+/* ---- 名片大卡：840:400 全宽，轻渐变遮罩（顶部近透明，底部文字区压暗） ---- */
 
 .ap-detail {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 860px;
+  max-width: 880px;
 }
 
 .ap-hero {
@@ -400,12 +411,13 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center;
 }
 
 .ap-hero-mask {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.55) 100%);
 }
 
 .ap-hero-left {
@@ -427,20 +439,17 @@
   display: flex;
   flex-direction: column;
   color: #fff;
-  gap: 2px;
+  gap: 3px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .ap-hero-name b {
   font-size: 21px;
+  font-weight: 600;
 }
 
 .ap-hero-name > span {
-  font-size: 13px;
-}
-
-.ap-fetter-line {
-  font-size: 12px;
-  opacity: 0.85;
+  font-size: 14px;
 }
 
 .ap-stars {
@@ -449,7 +458,7 @@
 }
 
 .ap-star {
-  color: var(--text-tertiary);
+  color: rgba(255, 255, 255, 0.35);
   font-size: 13px;
 }
 
@@ -471,10 +480,17 @@
   display: flex;
   flex-direction: column;
   color: #fff;
-  gap: 2px;
-  font-size: 13px;
+  gap: 3px;
+  font-size: 14px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
+.ap-weapon-info b {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* 技能列：无框纯图标 + 数字（对应原版 AvatarSkillTemplate 无背景样式） */
 .ap-hero-skills {
   position: relative;
   margin-left: auto;
@@ -482,16 +498,39 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 6px;
+  gap: 14px;
 }
 
+.ap-skill-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.ap-skill-row img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: block;
+}
+
+.ap-skill-row span {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* 命座行：未激活 = 灰度 + 半透明（无锁图标，对应原版 BoolToOpacity） */
 .ap-hero-cons {
   position: absolute;
   bottom: 12px;
   left: 16px;
   right: 16px;
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .ap-cons-btn {
@@ -505,145 +544,188 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
+  object-fit: cover;
   display: block;
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .ap-cons-btn img.off {
-  opacity: 0.35;
-  filter: grayscale(0.8);
+  opacity: 0.4;
+  filter: grayscale(1);
 }
 
-.ap-lock {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-}
-
-/* ---- 属性面板 ---- */
+/* ---- 属性折叠面板（对应原版 Expander，默认展开） ---- */
 
 .ap-props {
   border: 1px solid var(--stroke);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
+  background: color-mix(in srgb, var(--bg-layer) 55%, transparent);
 }
 
-.ap-props-title {
-  padding: 10px 14px;
+.ap-props summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 16px;
   font-weight: 600;
-  background: var(--bg-layer);
+  font-size: 14px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ap-props summary::before {
+  content: "›";
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 16px;
+  color: var(--text-tertiary);
+}
+
+.ap-props[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.ap-props summary::-webkit-details-marker {
+  display: none;
+}
+
+.ap-props-body {
+  border-top: 1px solid var(--divider);
 }
 
 .ap-prop-row {
   display: grid;
   grid-template-columns: 1fr auto 96px;
-  padding: 8px 16px;
-  border-top: 1px solid var(--divider);
-  font-size: 13.5px;
+  align-items: center;
+  padding: 0 16px;
+  min-height: 36px;
+  border-top: 1px solid color-mix(in srgb, var(--divider) 55%, transparent);
+  font-size: 14px;
+}
+
+.ap-prop-row:first-child {
+  border-top: none;
 }
 
 .ap-prop-val {
   font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  padding-right: 16px;
 }
 
 .ap-prop-add {
-  color: #7ee08a;
+  color: #4cce63;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- 圣遗物 ---- */
+/* ---- 圣遗物：一排 5 张，右上角强化等级（对应原版 UniformPanel） ---- */
 
 .ap-relics {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 10px;
 }
 
 .ap-relic {
+  position: relative;
   border: 1px solid var(--stroke);
-  border-radius: 8px;
-  padding: 14px;
+  border-radius: 6px;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  background: color-mix(in srgb, var(--bg-layer) 40%, transparent);
 }
 
 .ap-relic-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .ap-relic-head .ap-icon {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
 }
 
-.ap-relic-head b {
-  font-size: 14px;
+.ap-relic-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.ap-relic-name b {
+  font-size: 12.5px;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.ap-relic-head small {
+.ap-relic-name small {
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: 10.5px;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ap-relic-lv {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .ap-relic-main {
   display: flex;
   justify-content: space-between;
+  gap: 6px;
   border-top: 1px solid var(--divider);
   border-bottom: 1px solid var(--divider);
   padding: 6px 0;
-  font-size: 13px;
+  font-size: 12.5px;
+}
+
+.ap-relic-main b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ap-relic-main b:last-child {
+  flex-shrink: 0;
 }
 
 .ap-relic-subs {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 
 .ap-relic-sub {
   display: flex;
   justify-content: space-between;
-  font-size: 12.5px;
+  gap: 6px;
+  font-size: 12px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-.ap-skill-tile img {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
+.ap-relic-sub span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 详情面板技能块（英雄卡右列，带图标） */
-.ap-skill-tile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  padding: 5px 12px;
-  font-size: 13px;
-  min-width: 104px;
-  color: #fff;
-}
-
-.ap-skill-tile b {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.ap-skill-tile span {
-  font-weight: 600;
-}
-
-/* 通用品质图标（详情面板：角色/武器/圣遗物，外描边） */
+/* 通用品质图标（名片区的角色/武器大头像：外描边，对应原版 ItemIcon） */
 .ap-icon {
   position: relative;
   flex-shrink: 0;
@@ -658,19 +740,20 @@
   display: block;
 }
 
-.ap-icon.q5 { border: 2px solid #d3bc8e; box-shadow: 0 0 6px rgba(211,188,142,0.35); }
-.ap-icon.q4 { border: 2px solid #a256e1; }
-.ap-icon.q3 { border: 2px solid var(--stroke-strong); }
-
-/* 详情大头像（原版 ItemIcon 默认 86） */
 .ap-icon.big {
   width: 86px;
   height: 86px;
 }
 
-/* 上次更新时间标签 */
-.ap-updated {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
+.ap-icon.q5 {
+  border: 2px solid #d3bc8e;
+  box-shadow: 0 0 6px rgba(211, 188, 142, 0.35);
+}
+
+.ap-icon.q4 {
+  border: 2px solid #a256e1;
+}
+
+.ap-icon.q3 {
+  border: 2px solid var(--stroke-strong);
 }

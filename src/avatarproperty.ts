@@ -485,7 +485,7 @@ function renderListDetail(list: AvatarView[]): string {
 function renderDetail(v: AvatarView): string {
   return `
   <div class="ap-detail">
-    <!-- 卡片面板：名片 + 黑遮罩 + 角色/武器/技能/命座 -->
+    <!-- 名片大卡：840:400 全宽、轻渐变遮罩（对应原版 AcrylicGridCard + 黑遮罩） -->
     <div class="ap-hero">
       ${v.nameCard ? `<img class="ap-hero-bg" src="${esc(v.nameCard)}" loading="lazy" onerror="this.remove()"/>` : ""}
       <div class="ap-hero-mask"></div>
@@ -495,8 +495,7 @@ function renderDetail(v: AvatarView): string {
           <div class="ap-hero-name">
             <b>${esc(v.name)}</b>
             <div class="ap-stars">${starIcons(v.promoteArray)}</div>
-            <span>Lv.${v.level}</span>
-            <span class="ap-fetter-line">♥ 好感 ${v.fetter}</span>
+            <span>Lv. ${v.level} · ♥ ${v.fetter}</span>
           </div>
         </div>
         <div class="ap-hero-weapon">
@@ -504,17 +503,17 @@ function renderDetail(v: AvatarView): string {
           <div class="ap-weapon-info">
             <b>${esc(v.weapon.name || "武器")}</b>
             <div class="ap-stars small">${starIcons(Array.from({ length: 6 }, (_, i) => i < v.weapon.promote))}</div>
-            <span>Lv.${v.weapon.level} · 精${v.weapon.affix}</span>
+            <span>Lv. ${v.weapon.level} · 精炼 ${v.weapon.affix}</span>
           </div>
         </div>
       </div>
       <div class="ap-hero-skills">
         ${v.skills
           .map(
-            (s, i) => `
-          <div class="ap-skill-tile big" title="${esc(s.name)} Lv.${s.level}">
+            (s) => `
+          <div class="ap-skill-row" title="${esc(s.name)} Lv.${s.level}">
             <img src="${esc(iconUrl(s.icon))}" loading="lazy" onerror="this.remove()"/>
-            <b>${SKILL_LABELS[i + 1] ?? "?"}</b><span>Lv.${s.level}</span>
+            <span>Lv.${s.level}</span>
           </div>`,
           )
           .join("")}
@@ -523,39 +522,41 @@ function renderDetail(v: AvatarView): string {
         ${v.constellations
           .map(
             (k) => `
-        <button class="ap-cons-btn" data-cons='${esc(JSON.stringify({ name: k.name, effect: k.effect }))}'>
+        <button class="ap-cons-btn" data-cons='${esc(JSON.stringify({ name: k.name, effect: k.effect }))}' title="${esc(k.name)}">
           <img class="${k.activated ? "" : "off"}" src="${esc(k.icon)}" loading="lazy" onerror="this.style.opacity=0.15"/>
-          ${k.activated ? "" : `<span class="ap-lock">🔒</span>`}
         </button>`,
           )
           .join("")}
       </div>
     </div>
 
-    <!-- 角色属性 -->
-    <div class="ap-props">
-      <div class="ap-props-title">属性</div>
-      ${v.properties
-        .map(
-          (p) => `
-        <div class="ap-prop-row">
-          <span>${esc(p.name)}</span>
-          <span class="ap-prop-val">${esc(p.value)}</span>
-          ${p.add ? `<span class="ap-prop-add">${esc(p.add)}</span>` : `<span></span>`}
-        </div>`,
-        )
-        .join("")}
-    </div>
+    <!-- 角色属性：可折叠面板（对应原版 Expander） -->
+    <details class="ap-props" open>
+      <summary>角色属性</summary>
+      <div class="ap-props-body">
+        ${v.properties
+          .map(
+            (p) => `
+          <div class="ap-prop-row">
+            <span>${esc(p.name)}</span>
+            <span class="ap-prop-val">${esc(p.value)}</span>
+            <span class="ap-prop-add">${esc(p.add)}</span>
+          </div>`,
+          )
+          .join("")}
+      </div>
+    </details>
 
-    <!-- 圣遗物 -->
-    <div class="ap-relics">
+    <!-- 圣遗物：一排 5 张（对应原版 UniformPanel），右上角强化等级 -->
+    ${v.reliquaries.length > 0 ? `<div class="ap-relics">
       ${v.reliquaries
         .map(
           (r) => `
       <div class="ap-relic">
         <div class="ap-relic-head">
           <div class="ap-icon q${r.rarity}"><img src="${esc(iconUrl(r.icon))}" loading="lazy" onerror="this.style.opacity=0.2"/></div>
-          <div><b>${esc(r.name)}</b><small>${esc(r.pos_name)} · ${esc(r.set?.name ?? "")}</small></div>
+          <div class="ap-relic-name"><b>${esc(r.name)}</b><small>${esc(r.set?.name ?? "")}</small></div>
+          <span class="ap-relic-lv">+${Math.max(0, r.level - 1)}</span>
         </div>
         <div class="ap-relic-main"><b>${esc(FIGHT_PROP_NAMES[r.main_property.property_type] ?? "")}</b><b>${esc(propValue(r.main_property.property_type, r.main_property.val))}</b></div>
         <div class="ap-relic-subs">
@@ -572,7 +573,7 @@ function renderDetail(v: AvatarView): string {
       </div>`,
         )
         .join("")}
-    </div>
+    </div>` : ""}
   </div>`;
 }
 
