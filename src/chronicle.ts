@@ -646,7 +646,8 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
         !cur.has_data
           ? '<div class="ch-empty">本期限未挑战</div>'
           : `
-        ${best ? `<div class="ch-stats-grid">${renderStatCard("最高难度", HC_DIFFICULTY[best.difficulty] ?? `难度${best.difficulty}`)}${renderStatCard("最短用时", fmtDuration(hcTotalSeconds(best.seconds, cur.challenge)))}</div>` : ""}
+        ${best ? `<div class="ch-stats-grid">${renderStatCard("最高难度", HC_DIFFICULTY[best.difficulty] ?? `难度${best.difficulty}`)}${// 纯秒数展示（不用 X分Y秒 格式）
+          renderStatCard("最短用时", `${hcTotalSeconds(best.seconds, cur.challenge)} 秒`)}</div>` : ""}
         <div class="ch-hc-grid">${challenges}</div>`
       }`;
 
