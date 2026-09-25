@@ -162,20 +162,20 @@ function render(content: HTMLElement): void {
       <div class="gacha-tabs">${tabs}</div>
       <div class="gacha-progress" id="gacha-progress">${esc(progressText)}</div>
       <div class="refresh-wrap">
-        <button class="primary" id="gacha-refresh-btn">刷新 ▾</button>
-        <div id="gacha-refresh-menu" class="commandbar-menu ${refreshMenuOpen ? "" : "hidden"}">
-          <button data-refresh="stoken">SToken 刷新</button>
-          <button data-refresh="webcache">网页缓存刷新</button>
-          <button data-refresh="manual">手动输入 URL</button>
+        <button class="primary" id="gacha-refresh-btn"><svg aria-hidden="true"><use href="#i-refresh"/></svg>刷新 ▾</button>
+        <div id="gacha-refresh-menu" class="commandbar-menu align-right ${refreshMenuOpen ? "" : "hidden"}">
+          <button data-refresh="stoken"><svg aria-hidden="true"><use href="#i-key"/></svg>SToken 刷新</button>
+          <button data-refresh="webcache"><svg aria-hidden="true"><use href="#i-browser"/></svg>网页缓存刷新</button>
+          <button data-refresh="manual"><svg aria-hidden="true"><use href="#i-link"/></svg>手动输入 URL</button>
         </div>
       </div>
       <div class="refresh-wrap more-wrap">
         <button id="gacha-more-btn" class="more-btn" title="更多">⋯</button>
         <div id="gacha-more-menu" class="commandbar-menu align-right ${moreMenuOpen ? "" : "hidden"}">
-          <button data-more="uigf-import">导入 UIGF 记录</button>
-          <button data-more="uigf-export" ${hasArchive ? "" : "disabled"}>导出 UIGF 记录</button>
+          <button data-more="uigf-import"><svg aria-hidden="true"><use href="#i-import"/></svg>导入 UIGF 记录</button>
+          <button data-more="uigf-export" ${hasArchive ? "" : "disabled"}><svg aria-hidden="true"><use href="#i-export"/></svg>导出 UIGF 记录</button>
           <div class="menu-divider"></div>
-          <button data-more="remove" ${hasArchive ? "" : "disabled"}>删除当前存档</button>
+          <button class="danger" data-more="remove" ${hasArchive ? "" : "disabled"}><svg aria-hidden="true"><use href="#i-delete"/></svg>删除当前存档</button>
         </div>
       </div>
     </div>`;

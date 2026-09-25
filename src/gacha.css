@@ -53,6 +53,22 @@
   padding: 8px 12px;
   border-radius: 5px;
   justify-content: flex-start;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.commandbar-menu button svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+
+.commandbar-menu button.danger:not(:disabled) {
+  color: var(--danger);
+}
+
+.commandbar-menu button.danger:hover:not(:disabled) {
+  background: rgba(196, 43, 28, 0.12);
 }
 
 .commandbar-menu button:disabled {
