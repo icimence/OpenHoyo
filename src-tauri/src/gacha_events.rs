@@ -9,6 +9,7 @@
 //! 其余类型按物品时间落在 [From, To] 的卡池期，且名称 ∈ 该期 UP 五星名单则为中。
 
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
@@ -60,6 +61,10 @@ fn item_names() -> &'static HashMap<u64, String> {
     })
 }
 
+pub(crate) fn item_name(id: u64) -> Option<&'static str> {
+    item_names().get(&id).map(String::as_str)
+}
+
 fn up_windows() -> &'static [UpWindow] {
     UP_WINDOWS.get_or_init(|| {
         let names = item_names();
@@ -80,13 +85,29 @@ fn up_windows() -> &'static [UpWindow] {
 }
 
 /// "2026-08-12T06:00:00+08:00" → "2026-08-12 06:00:00"
-/// （卡池数据为 +08:00 国服时区，祈愿记录 time 亦为国服本地时间，字符串可直接比较）
+/// （卡池数据为 +08:00 国服时区；API 记录可直接比较，UIGF 记录先经 event_local_time 转换）
 pub(crate) fn iso_to_local(iso: &str) -> String {
     iso.replace('T', " ")
         .split('+')
         .next()
         .unwrap_or("")
         .to_string()
+}
+
+/// 活动期比较专用：UIGF v4 的 timezone=0 为 UTC，国服 API 的时间已是 UTC+8。
+/// 国服 API 不返回 item_id，旧版导入条目据非空 item_id 区分；原始时间保持不变。
+pub(crate) fn event_local_time<'a>(item_id: &str, time: &'a str) -> Cow<'a, str> {
+    if item_id.is_empty() {
+        return Cow::Borrowed(time);
+    }
+    match chrono::NaiveDateTime::parse_from_str(time, "%Y-%m-%d %H:%M:%S") {
+        Ok(utc) => Cow::Owned(
+            (utc + chrono::Duration::hours(8))
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+        ),
+        Err(_) => Cow::Borrowed(time),
+    }
 }
 
 /// 该物品在此时间是否命中当期 UP（按名称匹配；400 与 301 为并行双池，各有独立 UP 名单）

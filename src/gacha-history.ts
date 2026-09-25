@@ -27,11 +27,14 @@ export function renderEventHistory(body: HTMLElement, events: EventHistory[]): v
     </div>`;
   }).join("");
   const list = events.map((event, index) => {
-    const leading = event.items.filter((item) => item.rank_type === 5).slice(0, 3);
-    if (leading.length === 0) leading.push(...event.items.filter((item) => item.rank_type === 4).slice(0, 3));
+    const orange = event.up_orange.length ? event.up_orange : event.items.filter((item) => item.rank_type === 5).slice(0, 2);
+    const purple = event.up_purple.length ? event.up_purple : event.items.filter((item) => item.rank_type === 4).slice(0, 3);
+    const featured = (items: EventHistory["items"]): string => items.map((item) =>
+      `<span class="tile-face ${item.rank_type === 5 ? "orange" : "purple"}" title="${esc(item.name)} × ${item.count}">${esc(item.name.slice(0, 1))}<img src="${iconSrc(item.name)}" loading="lazy" onerror="this.remove()"/><em>${item.count}</em></span>`,
+    ).join("");
     return `<button class="event-row ${index === selectedEvent ? "active" : ""}" data-event="${index}" aria-pressed="${index === selectedEvent}">
       <span class="event-row-title"><b>${esc(event.version || eventLabel(event))} ${esc(event.name)}</b><strong>${event.total_count} 抽</strong></span>
-      <span class="event-row-icons">${leading.map((item) => `<span class="tile-face ${item.rank_type === 5 ? "orange" : "purple"}" title="${esc(item.name)}">${esc(item.name.slice(0, 1))}<img src="${iconSrc(item.name)}" loading="lazy" onerror="this.remove()"/><em>${item.count}</em></span>`).join("")}</span>
+      <span class="event-row-icons"><span class="event-feature-group">${featured(orange)}</span><span class="event-feature-group">${featured(purple)}</span></span>
       <span class="event-row-date">${esc(event.from.slice(0, 10))} — ${esc(event.to.slice(0, 10))}</span>
     </button>`;
   }).join("");

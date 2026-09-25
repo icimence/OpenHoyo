@@ -324,9 +324,22 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   justify-content: start;
   gap: 5px;
+  align-content: start;
+}
+
+.orange-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   margin-top: 12px;
-  border-top: 1px solid var(--divider);
   padding-top: 10px;
+  border-top: 1px solid var(--divider);
+}
+
+.orange-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .orange-flat .flat-tile {
@@ -341,24 +354,8 @@
 .orange-flat .up-badge { top: 1px; right: 1px; font-size: 8px; padding: 2px; }
 
 .orange-empty {
-  margin-top: 12px;
-  border-top: 1px solid var(--divider);
-  padding-top: 10px;
   font-size: 12.5px;
   color: var(--text-tertiary);
-}
-
-.section-toggle.orange-toggle {
-  padding: 5px 16px;
-  border-color: rgba(233, 162, 59, 0.35);
-  background: rgba(233, 162, 59, 0.07);
-  color: #e9a23b;
-}
-
-.section-toggle.orange-toggle:hover {
-  background: rgba(233, 162, 59, 0.14);
-  border-color: rgba(233, 162, 59, 0.6);
-  color: #e9a23b;
 }
 
 /* ---- 共用物品图标 ---- */
@@ -479,33 +476,6 @@
   grid-template-columns: repeat(auto-fill, 96px);
   justify-content: start;
   gap: 12px;
-}
-
-/* 展开/收起：居中胶囊，比纯文字按钮显眼但不喧宾夺主 */
-.section-toggle {
-  margin: 12px auto 0;
-  display: flex;
-  gap: 5px;
-  padding: 5px 16px;
-  font-size: 12px;
-  border-radius: 999px;
-  background: var(--bg-layer);
-  color: var(--text-secondary);
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-
-.section-toggle::after {
-  font-size: 10px;
-  content: "▾";
-}
-
-.section-toggle[data-open="0"]::after {
-  content: "▴";
-}
-
-.section-toggle:hover {
-  color: var(--accent);
-  border-color: var(--accent);
 }
 
 /* ---- 拉取进度对话框（对应原版 GachaLogRefreshProgressDialog） ---- */
@@ -630,10 +600,14 @@
 .stats-cards {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr));
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .stats-card {
+  display: flex;
+  flex-direction: column;
+  height: clamp(520px, calc(100vh - 210px), 680px);
+  overflow: hidden;
   padding: 14px;
   border-radius: 6px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
@@ -763,8 +737,9 @@
 .event-row-title { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .event-row-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-row-title strong { flex-shrink: 0; font-weight: 500; }
-.event-row-icons { display: flex; gap: 4px; margin-top: 6px; min-height: 42px; }
-.event-row-icons .tile-face { width: 40px; height: 40px; font-size: 14px; border-radius: 4px; }
+.event-row-icons { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; min-height: 37px; }
+.event-feature-group { display: flex; gap: 3px; min-width: 0; }
+.event-row-icons .tile-face { width: 35px; height: 35px; flex: 0 0 35px; font-size: 12px; border-radius: 4px; }
 .event-row-icons em { position: absolute; bottom: 0; right: 1px; z-index: 1; font-size: 11px; font-style: normal; background: var(--bg-card); color: var(--text); border-radius: 2px; padding: 0 2px; }
 .event-row-date { display: block; margin-top: 5px; font-size: 11px; color: var(--text-tertiary); }
 .event-detail-header { display: flex; justify-content: space-between; gap: 10px; padding-bottom: 13px; border-bottom: 1px solid var(--divider); }

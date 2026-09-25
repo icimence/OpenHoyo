@@ -335,6 +335,8 @@ export interface EventHistory {
   query_type: number;
   total_count: number;
   items: { name: string; rank_type: number; count: number }[];
+  up_orange: { name: string; rank_type: number; count: number }[];
+  up_purple: { name: string; rank_type: number; count: number }[];
 }
 
 export interface GachaCountdown {

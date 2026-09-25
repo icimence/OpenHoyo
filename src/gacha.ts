@@ -410,22 +410,14 @@ function openManualDialog(): void {
 }
 
 // ---------------------------------------------------------------------------
-// 总览（4 张 StatisticsCard）
+// 总览统计卡
 // ---------------------------------------------------------------------------
 
 function renderOverview(body: HTMLElement): void {
   const s = stats!;
-  const cards: WishSummary[] = [s.avatar_wish, s.weapon_wish, s.standard_wish, s.chronicled_wish];
+  const cards: WishSummary[] = [s.avatar_wish, s.weapon_wish, s.standard_wish];
+  if (s.chronicled_wish.total_count > 0) cards.push(s.chronicled_wish);
   body.innerHTML = `<div class="stats-cards">${cards.map((w, index) => statsCard(w, index === 0)).join("")}</div>`;
-  clampCollapsedGrids(body);
-
-  // 五星列表的展开/收起
-  body.querySelectorAll<HTMLButtonElement>(".orange-toggle").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      explicitSectionState.set(btn.dataset.section!, btn.dataset.open === "1");
-      renderOverview(body);
-    });
-  });
   body.querySelectorAll<HTMLButtonElement>("[data-stats-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       statsViewMode.set(button.dataset.card!, button.dataset.statsMode as "stats" | "ratio");
@@ -440,34 +432,20 @@ function renderOverview(body: HTMLElement): void {
 
 const statsViewMode = new Map<string, "stats" | "ratio">();
 
-/** 五星出货列表：平铺（图标+正下方抽数）+ 智能展开收起 */
+/** 五星出货列表：固定卡片高度内独立滚动。 */
 function orangeListHtml(w: WishSummary, combined: boolean): string {
   const entries = (combined ? combineLimitedOrange(w.orange_list) : w.orange_list).slice().reverse(); // 最新在前
   if (entries.length === 0) {
-    return `<div class="orange-empty">暂无五星记录</div>`;
+    return `<div class="orange-scroll"><div class="orange-empty">暂无五星记录</div></div>`;
   }
-
-  const key = `orange-${w.name}`;
-  const smartOpen = entries.length <= ORANGE_COLLAPSE_THRESHOLD;
-  const isExpanded = explicitSectionState.get(key) ?? smartOpen;
-
-  // 收起态也渲染全部条目，由 clampCollapsedGrids 按整两行动态隐藏——
-  // 列数随卡片宽度变化，固定数量必然出现"一行半"
-  const inner = `<div class="orange-flat${isExpanded ? "" : " collapsible"}">${entries
+  return `<div class="orange-scroll" role="region" aria-label="${esc(w.name)}五星记录" tabindex="0"><div class="orange-flat">${entries
     .map(
       (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽${combined && o.is_up ? "（含此前歪出的抽数）" : ""} · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
         <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" onerror="this.remove()" loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
         <span class="flat-count orange">${o.pull}</span>
       </div>`,
     )
-    .join("")}</div>`;
-
-  const footer =
-    entries.length > ORANGE_COLLAPSE_THRESHOLD
-      ? `<button class="section-toggle orange-toggle" data-section="${key}" data-open="${isExpanded ? "0" : "1"}">${isExpanded ? "收起" : `展开全部 ${entries.length} 个五星`}</button>`
-      : "";
-
-  return `${inner}${footer}`;
+    .join("")}</div></div>`;
 }
 
 function statsCard(w: WishSummary, isAvatar: boolean): string {
@@ -516,52 +494,6 @@ function statsCard(w: WishSummary, isAvatar: boolean): string {
 // 角色 / 武器（对应原版 Avatar/Weapon Pivot：按品质分卡片区 + 平铺网格）
 // ---------------------------------------------------------------------------
 
-/** 显式展开/收起状态（未设置时用智能默认） */
-const explicitSectionState = new Map<string, boolean>();
-const COLLAPSE_THRESHOLD = 12;
-/** 总览卡五星列表的展开阈值：超过此数量才收起并显示按钮（实际收起数量按整行动态裁剪） */
-const ORANGE_COLLAPSE_THRESHOLD = 8;
-
-/**
- * 收起态整行裁剪：网格列数随容器宽度变化（auto-fill），固定数量必然出现"一行半"。
- * 渲染全部条目后按实际列数隐藏第 3 行起的内容，收起恒为整两行；两行装得下时移除展开按钮。
- */
-function clampCollapsedGrids(root: ParentNode): void {
-  bindClampOnResize();
-  root.querySelectorAll<HTMLElement>(".collapsible").forEach((grid) => {
-    if (grid.clientWidth === 0) {
-      return; // 隐藏 tab 里的容器量不到宽度，跳过
-    }
-    const tile = (grid.firstElementChild as HTMLElement | null)?.offsetWidth ?? 64;
-    const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 8;
-    const cols = grid.classList.contains("orange-flat")
-      ? 5
-      : Math.max(1, Math.floor((grid.clientWidth + gap) / (tile + gap)));
-    const keep = cols * 2;
-    const tiles = Array.from(grid.children) as HTMLElement[];
-    tiles.forEach((t, i) => {
-      t.style.display = i < keep ? "" : "none";
-    });
-    if (tiles.length <= keep) {
-      grid.parentElement?.querySelector(":scope > .section-toggle")?.remove();
-    }
-  });
-}
-
-/** 窗口尺寸变化后重新裁剪（列数变了半行会重新出现），防抖只绑一次 */
-let clampResizeBound = false;
-function bindClampOnResize(): void {
-  if (clampResizeBound) {
-    return;
-  }
-  clampResizeBound = true;
-  let timer = 0;
-  window.addEventListener("resize", () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => clampCollapsedGrids(document), 150);
-  });
-}
-
 function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "avatar" | "weapon"): void {
   if (entries.length === 0) {
     body.innerHTML = `<div class="empty-users"><div class="title">暂无${kind === "avatar" ? "角色" : "武器"}记录</div></div>`;
@@ -577,10 +509,7 @@ function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "av
       if (items.length === 0) {
         return "";
       }
-      const key = `${kind}-${rank}`;
       const q = rank === 5 ? "orange" : rank === 4 ? "purple" : "blue";
-      const smartOpen = items.length <= COLLAPSE_THRESHOLD;
-      const isExpanded = explicitSectionState.get(key) ?? smartOpen;
 
       const tiles = items
         .map(
@@ -591,34 +520,18 @@ function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "av
         )
         .join("");
 
-      const footer =
-        items.length > COLLAPSE_THRESHOLD
-          ? `<button class="section-toggle" data-section="${key}" data-open="${isExpanded ? "0" : "1"}">${isExpanded ? "收起" : `展开全部 ${items.length} 项`}</button>`
-          : "";
-
       return `
         <div class="section-card">
-          <div class="section-header" data-toggle="${key}">
+          <div class="section-header">
             <span class="section-title ${q}">${rankNames[rank]}</span>
             <span class="section-count">${items.length} 种</span>
           </div>
-          <div class="section-body flat${isExpanded ? "" : " collapsible"}">${tiles}</div>
-          ${footer}
+          <div class="section-body flat">${tiles}</div>
         </div>`;
     })
     .join("");
 
   body.innerHTML = sections;
-  clampCollapsedGrids(body);
-
-  body.querySelectorAll<HTMLButtonElement>(".section-toggle").forEach((btn) => {
-    btn.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const key = btn.dataset.section!;
-      explicitSectionState.set(key, btn.dataset.open === "1");
-      renderNameCount(body, entries, kind);
-    });
-  });
 }
 
 // ---------------------------------------------------------------------------

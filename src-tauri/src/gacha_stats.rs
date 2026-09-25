@@ -222,7 +222,8 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
     let mut owned: Vec<StoredItem> = items.to_vec();
     for item in owned.iter_mut() {
         if item.rank_type == 5 {
-            item.is_up = crate::gacha_events::is_up(item.gacha_type, &item.name, &item.time);
+            let local_time = crate::gacha_events::event_local_time(&item.item_id, &item.time);
+            item.is_up = crate::gacha_events::is_up(item.gacha_type, &item.name, &local_time);
         }
     }
     dto.event_history = crate::gacha_history::build_event_history(&owned);
@@ -332,4 +333,84 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
     dto.weapons = weapons;
 
     dto
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wish(
+        id: i64,
+        gacha_type: i32,
+        item_id: &str,
+        name: &str,
+        rank_type: i32,
+        time: &str,
+    ) -> StoredItem {
+        StoredItem {
+            id,
+            gacha_type,
+            query_type: gacha_type,
+            item_id: item_id.into(),
+            name: name.into(),
+            item_type: if gacha_type == 302 {
+                "武器"
+            } else {
+                "角色"
+            }
+            .into(),
+            rank_type,
+            time: time.into(),
+            is_up: false,
+        }
+    }
+
+    #[test]
+    fn uigf_utc_times_match_local_banners_and_featured_four_stars() {
+        let items = vec![
+            wish(1, 302, "14514", "万世流涌大典", 5, "2024-04-02 16:04:09"),
+            wish(2, 301, "10000096", "阿蕾奇诺", 5, "2024-04-24 03:53:35"),
+            wish(3, 301, "10000085", "菲米尼", 4, "2024-04-24 03:54:00"),
+            wish(4, 301, "10000103", "希诺宁", 5, "2024-10-09 05:09:05"),
+            wish(5, 301, "10000106", "玛薇卡", 5, "2025-01-01 02:51:08"),
+            wish(6, 301, "", "玛薇卡", 5, "2025-01-05 15:50:50"),
+        ];
+        let stats = build_statistics("100000001", &items);
+        assert!(stats.avatar_wish.orange_list.iter().all(|item| item.is_up));
+        assert!(stats.weapon_wish.orange_list[0].is_up);
+        assert_eq!(stats.avatar_wish.orange_list[0].time, "2024-04-24 03:53:35");
+        assert_eq!(
+            stats.avatar_wish.orange_list.last().unwrap().time,
+            "2025-01-05 15:50:50"
+        );
+        assert_eq!(
+            items[1].time, "2024-04-24 03:53:35",
+            "原始 UIGF 时间必须保留给导出"
+        );
+
+        let banner = stats
+            .event_history
+            .iter()
+            .find(|event| event.name == "炉边烬影" && event.from.starts_with("2024-04-24"))
+            .unwrap();
+        assert_eq!(
+            banner
+                .items
+                .iter()
+                .find(|item| item.name == "菲米尼")
+                .unwrap()
+                .count,
+            1
+        );
+        assert_eq!(
+            banner
+                .up_purple
+                .iter()
+                .find(|item| item.name == "菲米尼")
+                .unwrap()
+                .count,
+            1
+        );
+        assert!(banner.up_purple.iter().any(|item| item.count == 0));
+    }
 }
