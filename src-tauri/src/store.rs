@@ -80,8 +80,10 @@ pub fn init(conn: &Connection) -> rusqlite::Result<()> {
 
 /// 读取 meta 键值（设备标识等跨启动持久数据）
 pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| row.get(0))
-        .ok()
+    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |row| {
+        row.get(0)
+    })
+    .ok()
 }
 
 pub fn meta_set(conn: &Connection, key: &str, value: &str) {
@@ -119,13 +121,13 @@ static COLS: &str = "id, aid, mid, is_oversea, stoken, ltoken, cookie_token, fin
 
 pub fn list(conn: &Connection) -> rusqlite::Result<Vec<UserRecord>> {
     let mut stmt = conn.prepare(&format!("SELECT {COLS} FROM users ORDER BY id"))?;
-    let rows = stmt.query_map([], |row| row_to_record(row))?;
+    let rows = stmt.query_map([], row_to_record)?;
     rows.collect()
 }
 
 pub fn find_by_mid(conn: &Connection, mid: &str) -> rusqlite::Result<Option<UserRecord>> {
     let mut stmt = conn.prepare(&format!("SELECT {COLS} FROM users WHERE mid = ?1"))?;
-    stmt.query_row([mid], |row| row_to_record(row)).optional()
+    stmt.query_row([mid], row_to_record).optional()
 }
 
 /// 按 mid 插入或更新，返回行 id

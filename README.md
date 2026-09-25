@@ -1,102 +1,52 @@
-# HoyoAuth
+# OpenHoyo
 
-基于 **Tauri 2** 重制的米哈游账号登录示例，移植自 [SnapHutaoArchive](https://github.com/icimence/SnapHutaoArchive)（Snap Hutao 存档）的米哈游账号体系，**只实现用户登录与凭证管理**，其余功能一概不做。
+基于 Tauri 2 的原神工具箱，参考 [Snap Hutao Remastered](https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered) 的本地功能与交互。项目供学习与交流。
 
-> 仅供学习与交流。米哈游相关接口与 salt 均来自原开源项目及社区公开资料。
+## 已实现的功能
 
-## 功能
+- 米哈游账号的扫码、手机验证码和 Cookie 登录；凭证恢复与懒刷新
+- 祈愿记录的刷新、总览、活动期历史、角色与武器统计、UP 计时、UIGF v4.x 导入导出
+- 实时便笺、我的角色，以及深境螺旋、幻想真境剧诗、幽境危战的周期记录
+- 设置、反馈中心、自动更新
 
-- **扫码登录**（国服）：伪装 HoyoPlay 启动器调用 `createQRLogin` / `queryQRLoginStatus`，本地渲染二维码，3 秒轮询，过期自动刷新
-- **手机验证码登录**（国服）：手机号 RSA 加密 + DS Gen2 签名（触发极验风控时会提示改用扫码）
-- **Cookie 导入**（国服/国际服）：粘贴含 `stuid/mid/stoken` 的 Cookie
-- **完整凭证初始化链**（对应原版 `InitializeUserAsync` 五步）：
-  `SToken → LToken → cookie_token → 用户信息 → 游戏角色列表 → 设备指纹`
-- **凭证懒刷新**：启动时自动恢复用户；cookie_token 超 1 天、设备指纹超 7 天自动用 SToken 重换
-- **SQLite 持久化**：users 表存三组 Cookie + 刷新时间戳（`%APPDATA%/com.learnrepo.hoyoauth/users.db`）
-- **运行时 salt 刷新**：启动时尽力从原版同源端点拉取最新 salt/版本，失败则使用内置默认值
+全球祈愿统计、颂愿和胡桃云不在复刻范围内。侧边栏中的部分入口仍为占位。
 
-## 开发
+## 开发与验证
+
+需要 Node.js、Rust 工具链和 Windows WebView2。
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-发布构建：
+```bash
+npm run build
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+```
+
+UIGF 导入会在后台按批写入 SQLite，并向前端发送 `uigf://progress` 事件。相同文件重复导入时，已有记录自动跳过。真实文件的往返验证可运行：
 
 ```bash
-npm run tauri build
+cargo test --manifest-path src-tauri/Cargo.toml --lib uigf_roundtrip_real_file -- --ignored --nocapture
 ```
 
-> 如遇 cargo 下载 crates 报证书吊销错误（schannel 企业网络问题），本项目已在
-> `src-tauri/.cargo/config.toml` 中设置 `check-revoke = false`。
+该测试默认读取桌面的 `Snap Hutao UIGF.json`，也可设置 `UIGF_SAMPLE` 指向其他文件；测试数据库建在系统临时目录，不会修改应用数据。
 
-## 架构与原版对照
+## 代码结构
 
-| 本项目 (Rust) | 原 Snap.Hutao (C#) |
-|---|---|
-| `src-tauri/src/constants.rs` | `HoyolabOptions` / `ApiEndpoints.csv` / `SaltConstants`(源生成器) |
-| `src-tauri/src/cookie.rs` | `Web/Hoyolab/Cookie(.Constant/.Extension).cs` |
-| `src-tauri/src/ds.rs` | `DataSigning/*` |
-| `src-tauri/src/http.rs` | `HttpClientConfiguration` XRpc2/3/5/6 + `HoyolabHttpRequestMessageBuilderExtension` |
-| `src-tauri/src/passport.rs` | `PassportClient` / `HoyoPlayPassportClient` |
-| `src-tauri/src/user_api.rs` | `UserClient` / `BindingClient` / `AuthClient` |
-| `src-tauri/src/device_fp.rs` | `UserFingerprintService` / `DeviceFpClient` |
-| `src-tauri/src/store.rs` | `Model/Entity/User` + `UserRepository` |
-| `src-tauri/src/service.rs` | `UserService` / `UserInitializationService` / `UserCollectionService` |
-| `src/main.ts` + `src/ui.ts` | `UserViewModel` + `UserQRCodeDialog` / `UserMobileCaptchaDialog` / `UserDialog` |
+| 模块 | 职责 |
+| --- | --- |
+| `src/main.ts`、`src/ui.ts` | 导航、通用对话框与提示 |
+| `src/gacha.ts`、`src/gacha-*.ts` | 祈愿页操作、活动历史、计时和 UIGF 导入交互 |
+| `src/*.css` | 按通用界面和功能页拆分的样式 |
+| `src-tauri/src/commands.rs` | 账号与记录的 IPC 命令 |
+| `src-tauri/src/gacha.rs`、`gacha_stats.rs`、`gacha_history.rs`、`gacha_events.rs` | 祈愿记录持久化与统计 |
+| `src-tauri/src/uigf.rs`、`uigf_commands.rs` | UIGF 数据转换与文件对话框 |
+| `src-tauri/src/http.rs` | 统一网络请求和安全日志 |
 
-### 凭证模型
+SQLite 数据位于应用数据目录。日志由 `tauri-plugin-log` 写入本地并供反馈中心采集；日志格式和敏感字段处理须遵守 [AGENTS.md](AGENTS.md)。
 
-```
-登录（扫码/验证码/Cookie 导入）
-        ↓  stuid + mid + stoken
-      SToken ──────────────── 根凭证，唯一需要"登录"获得
-        ├─ ltoken            缺失时兑换
-        ├─ cookie_token      超 1 天自动重换
-        ├─ actionTicket      查询游戏角色时现换（DS Gen1 + K2 签名）
-        └─ device_fp         伪造安卓设备信息兑换，超 7 天重换
-```
-
-## 已知限制（v1 有意为之）
-
-- 国际服仅支持 Cookie 导入（密码/三方登录涉及 WebView 风控组件，未实现）
-- 极验（Aigis）验证码组件未实现，验证码登录触发风控时提示改用扫码
-- 指纹接口失败不阻塞登录（与原版尽力而为语义一致）
-
-## 自动更新与发布（v0.2+）
-
-### 更新分发链路
-
-```
-release.yml (tag 触发) ─→ tauri-action 构建 + 私钥签名 ─→ GitHub Release
-                                                                    │
-App 启动 5 秒后静默检查 ← latest.json + 签名安装包 ←────────────────┘
-（用户菜单"检查更新"可手动触发）→ 弹升级对话框 → 下载(带进度) → 自动重启
-```
-
-### 发布新版本
-
-1. 本地 `node scripts/bump-version.mjs 0.2.0` 或直接推标签 `git tag v0.2.0 && git push --tags`
-2. Actions 自动构建 NSIS 安装包、用 updater 私钥签名、创建 Release 并生成 `latest.json`
-3. 已安装用户启动 App 即收到新版本提示
-
-### 必须的仓库配置（一次性）
-
-- **Secrets → Actions** 添加：
-  - `TAURI_SIGNING_PRIVATE_KEY`：`scripts/hoyo-auth-updater.key` 文件全部内容（私钥，已 gitignore，**请自行备份，丢失将无法再推送更新**）
-  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：空字符串（本项目密钥未设密码）
-- **`src-tauri/tauri.conf.json`** 的 `plugins.updater.endpoints` 需改为你的实际仓库地址（当前为 `icimence/OpenHoyo`）
-
-### 数据维护节奏（全自研，无社区依赖）
-
-| 数据 | 来源 | 说明 |
-|---|---|---|
-| 卡池时间 | 纯算术（scripts/version-table.mjs 版本表） | 版本日表 + 上半20天/下半至版本末日；含 1.1/2.7/2.8/3.1-3.3 历史例外与 2.6 特例 |
-| UP 名单 | 米哈游官方公告 API | 版本日前 2~5 天发布，版本日 04:30 自动拉取 |
-| 物品图标 | 米哈游官方观测枢 wiki | 随版本日流水线增量同步 |
-
-自动化：version-release.yml 每天 04:30（上海）自检，命中版本日或半池切换日即：
-生成元数据 → 增量图标 → 校验 → 提交 → 自动发版，用户早晨 7 点前收到更新。
-手动兜底：推 v* 标签 / 手动运行 release.yml / version-release.yml（force=true）。
-社区镜像已退役（曾发现系统性时间错误，仅历史 UP 名单沿用其数据）。
+活动期和物品元数据由 `scripts/` 维护。更新说明只在 [CHANGELOG.md](CHANGELOG.md) 编写。发版、分发和日志约定以 [AGENTS.md](AGENTS.md) 为准；仅在明确要求发版时触发发布流程。

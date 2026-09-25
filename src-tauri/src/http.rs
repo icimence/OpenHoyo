@@ -55,7 +55,11 @@ pub enum DsSpec {
     /// Gen1 + 指定 salt（如 K2）
     Gen1 { salt: String, include_chars: bool },
     /// Gen2 + 指定 salt（如 PROD）
-    Gen2 { salt: String, include_chars: bool, is_prod_body: bool },
+    Gen2 {
+        salt: String,
+        include_chars: bool,
+        is_prod_body: bool,
+    },
 }
 
 pub struct RequestSpec {
@@ -184,13 +188,22 @@ pub async fn request<T: DeserializeOwned>(
     }
     if let Some(ds_spec) = &spec.ds {
         let ds_value = match ds_spec {
-            DsSpec::Gen1 { salt, include_chars } => ds::ds_gen1(salt, *include_chars),
-            DsSpec::Gen2 { salt, include_chars, is_prod_body } => ds::ds_gen2(
+            DsSpec::Gen1 {
+                salt,
+                include_chars,
+            } => ds::ds_gen1(salt, *include_chars),
+            DsSpec::Gen2 {
+                salt,
+                include_chars,
+                is_prod_body,
+            } => ds::ds_gen2(
                 salt,
                 *include_chars,
                 match body_str.as_deref() {
                     Some(b) => DsBody::Raw(b),
-                    None => DsBody::None { is_prod: *is_prod_body },
+                    None => DsBody::None {
+                        is_prod: *is_prod_body,
+                    },
                 },
                 ds::query_of(&spec.url),
             ),
@@ -224,15 +237,25 @@ pub async fn request<T: DeserializeOwned>(
     let bytes = match resp.bytes().await {
         Ok(b) => b,
         Err(e) => {
-            log::warn!("[http] {} {} → 读取响应失败: HTTP {status}, {e}", spec.method, url_path);
+            log::warn!(
+                "[http] {} {} → 读取响应失败: HTTP {status}, {e}",
+                spec.method,
+                url_path
+            );
             return Err(ApiError::transport(format!("HTTP {status}, {e}")));
         }
     };
     let envelope: Envelope<T> = match serde_json::from_slice(&bytes) {
         Ok(e) => e,
         Err(e) => {
-            log::warn!("[http] {} {} → 响应解析失败: HTTP {status}, {e}", spec.method, url_path);
-            return Err(ApiError::transport(format!("HTTP {status}, 响应解析失败: {e}")));
+            log::warn!(
+                "[http] {} {} → 响应解析失败: HTTP {status}, {e}",
+                spec.method,
+                url_path
+            );
+            return Err(ApiError::transport(format!(
+                "HTTP {status}, 响应解析失败: {e}"
+            )));
         }
     };
 
@@ -257,7 +280,12 @@ pub async fn request<T: DeserializeOwned>(
     Ok(HoyoResponse { envelope, aigis })
 }
 
-fn apply_profile(req: reqwest::RequestBuilder, profile: Profile, salts: &Salts, devices: &Devices) -> reqwest::RequestBuilder {
+fn apply_profile(
+    req: reqwest::RequestBuilder,
+    profile: Profile,
+    salts: &Salts,
+    devices: &Devices,
+) -> reqwest::RequestBuilder {
     let mut req = req.header(reqwest::header::ACCEPT, "application/json");
     match profile {
         Profile::XRpc2 => {

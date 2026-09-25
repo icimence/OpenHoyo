@@ -88,7 +88,10 @@ mod tests {
     #[test]
     fn sort_query_orders_segments() {
         assert_eq!(sort_query("b=2&a=1"), "a=1&b=2");
-        assert_eq!(sort_query("uid=1&action_type=game_role"), "action_type=game_role&uid=1");
+        assert_eq!(
+            sort_query("uid=1&action_type=game_role"),
+            "action_type=game_role&uid=1"
+        );
         assert_eq!(sort_query(""), "");
     }
 

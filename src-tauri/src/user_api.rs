@@ -28,7 +28,9 @@ pub async fn get_user_full_info(
 
     let resp = http::request::<UserFullInfoWrapper>(client, salts, devices, spec).await?;
     let wrapper = unwrap_envelope(resp.envelope, "getUserFullInfo")?;
-    wrapper.user_info.ok_or_else(|| ApiError::empty_data("user_info"))
+    wrapper
+        .user_info
+        .ok_or_else(|| ApiError::empty_data("user_info"))
 }
 
 /// 国服：用 SToken 换 game_role actionTicket（GET + DS Gen1 K2，对应 AuthClient）
@@ -70,7 +72,10 @@ pub async fn get_game_roles(
     user: &UserRecord,
 ) -> ApiResult<Vec<crate::models::GameRole>> {
     if user.is_oversea {
-        let ltoken = user.ltoken.as_ref().ok_or_else(|| ApiError::retcode(-3, "缺少 LToken"))?;
+        let ltoken = user
+            .ltoken
+            .as_ref()
+            .ok_or_else(|| ApiError::retcode(-3, "缺少 LToken"))?;
         let spec = RequestSpec::get(constants::URL_GAME_ROLES_BY_COOKIE_OS, Profile::Bbs)
             .with_cookie(ltoken);
         let resp = http::request::<GameRoleList>(client, salts, devices, spec).await?;
@@ -78,9 +83,15 @@ pub async fn get_game_roles(
         Ok(data.list)
     } else {
         let ticket = get_action_ticket(client, salts, devices, user).await?;
-        let ltoken = user.ltoken.as_ref().ok_or_else(|| ApiError::retcode(-3, "缺少 LToken"))?;
-        let spec = RequestSpec::get(constants::url_game_roles_by_action_ticket(&ticket), Profile::Bbs)
-            .with_cookie(ltoken);
+        let ltoken = user
+            .ltoken
+            .as_ref()
+            .ok_or_else(|| ApiError::retcode(-3, "缺少 LToken"))?;
+        let spec = RequestSpec::get(
+            constants::url_game_roles_by_action_ticket(&ticket),
+            Profile::Bbs,
+        )
+        .with_cookie(ltoken);
         let resp = http::request::<GameRoleList>(client, salts, devices, spec).await?;
         let data = unwrap_envelope(resp.envelope, "getUserGameRoles")?;
         Ok(data.list)

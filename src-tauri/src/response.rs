@@ -34,16 +34,25 @@ pub struct ApiError {
 
 impl ApiError {
     pub fn retcode(code: i32, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+        Self {
+            code,
+            message: message.into(),
+        }
     }
 
     pub fn transport(message: impl Into<String>) -> Self {
-        Self { code: -1, message: format!("网络请求失败: {}", message.into()) }
+        Self {
+            code: -1,
+            message: format!("网络请求失败: {}", message.into()),
+        }
     }
 
     /// retcode 为 0 但 data 缺失等情况
     pub fn empty_data(context: &str) -> Self {
-        Self { code: -2, message: format!("响应缺少数据: {context}") }
+        Self {
+            code: -2,
+            message: format!("响应缺少数据: {context}"),
+        }
     }
 }
 
@@ -65,7 +74,10 @@ pub fn unwrap_envelope<T>(env: Envelope<T>, context: &str) -> ApiResult<T> {
             -100 | 10001 => "（登录态失效，请删除用户后重新登录）",
             _ => "",
         };
-        return Err(ApiError::retcode(env.retcode, format!("{}{hint}", env.message)));
+        return Err(ApiError::retcode(
+            env.retcode,
+            format!("{}{hint}", env.message),
+        ));
     }
     env.data.ok_or_else(|| ApiError::empty_data(context))
 }

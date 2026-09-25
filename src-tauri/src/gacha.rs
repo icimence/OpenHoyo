@@ -33,7 +33,11 @@ pub const PAGE_SIZE: usize = 20;
 pub struct GachaLogItem {
     #[serde(default)]
     pub uid: String,
-    #[serde(default, rename = "gacha_type", deserialize_with = "crate::models::de_i32_flexible")]
+    #[serde(
+        default,
+        rename = "gacha_type",
+        deserialize_with = "crate::models::de_i32_flexible"
+    )]
     pub gacha_type: i32,
     #[serde(default, rename = "item_id")]
     pub item_id: String,
@@ -43,7 +47,11 @@ pub struct GachaLogItem {
     pub name: String,
     #[serde(default, rename = "item_type")]
     pub item_type: String,
-    #[serde(default, rename = "rank_type", deserialize_with = "crate::models::de_i32_flexible")]
+    #[serde(
+        default,
+        rename = "rank_type",
+        deserialize_with = "crate::models::de_i32_flexible"
+    )]
     pub rank_type: i32,
     #[serde(default, deserialize_with = "crate::models::de_i64_flexible")]
     pub id: i64,
@@ -59,9 +67,17 @@ pub struct GachaLogPage {
 pub struct GameAuthKey {
     #[serde(default, rename = "authkey")]
     pub authkey: String,
-    #[serde(default, rename = "authkey_ver", deserialize_with = "crate::models::de_i32_flexible")]
+    #[serde(
+        default,
+        rename = "authkey_ver",
+        deserialize_with = "crate::models::de_i32_flexible"
+    )]
     pub authkey_ver: i32,
-    #[serde(default, rename = "sign_type", deserialize_with = "crate::models::de_i32_flexible")]
+    #[serde(
+        default,
+        rename = "sign_type",
+        deserialize_with = "crate::models::de_i32_flexible"
+    )]
     pub sign_type: i32,
 }
 
@@ -77,7 +93,10 @@ pub async fn build_query_from_stoken(
     role: &GameRole,
 ) -> ApiResult<String> {
     if user.is_oversea {
-        return Err(ApiError::retcode(-10, "国际服不支持 SToken 方式获取祈愿记录"));
+        return Err(ApiError::retcode(
+            -10,
+            "国际服不支持 SToken 方式获取祈愿记录",
+        ));
     }
 
     let data = json!({
@@ -87,13 +106,17 @@ pub async fn build_query_from_stoken(
         "region": role.region,
     });
 
-    let spec = RequestSpec::post("https://api-takumi.mihoyo.com/binding/api/genAuthKey", Profile::XRpc, data)
-        .with_cookie(user.stoken())
-        .with_referer("https://app.mihoyo.com")
-        .with_ds(DsSpec::Gen1 {
-            salt: salts.cn_lk2.clone(),
-            include_chars: true,
-        });
+    let spec = RequestSpec::post(
+        "https://api-takumi.mihoyo.com/binding/api/genAuthKey",
+        Profile::XRpc,
+        data,
+    )
+    .with_cookie(user.stoken())
+    .with_referer("https://app.mihoyo.com")
+    .with_ds(DsSpec::Gen1 {
+        salt: salts.cn_lk2.clone(),
+        include_chars: true,
+    });
 
     let resp = http::request::<GameAuthKey>(&state.http, salts, &state.devices, spec).await?;
     let key = unwrap_envelope(resp.envelope, "genAuthKey")?;
@@ -148,11 +171,15 @@ fn game_dir_candidates() -> Vec<(std::path::PathBuf, &'static str)> {
     let mut out: Vec<(std::path::PathBuf, &'static str)> = Vec::new();
 
     // %APPDATA%\..\LocalLow\miHoYo\<游戏名>\output_log.txt
-    if let Some(local_low) = std::env::var("APPDATA")
-        .ok()
-        .and_then(|appdata| std::path::Path::new(&appdata).parent().map(|p| p.join("LocalLow")))
-    {
-        for (sub, data_folder) in [("Genshin Impact", "GenshinImpact_Data"), ("原神", "YuanShen_Data")] {
+    if let Some(local_low) = std::env::var("APPDATA").ok().and_then(|appdata| {
+        std::path::Path::new(&appdata)
+            .parent()
+            .map(|p| p.join("LocalLow"))
+    }) {
+        for (sub, data_folder) in [
+            ("Genshin Impact", "GenshinImpact_Data"),
+            ("原神", "YuanShen_Data"),
+        ] {
             let log = local_low.join("miHoYo").join(sub).join("output_log.txt");
             if let Some(dir) = game_dir_from_unity_log(&log) {
                 out.push((dir, data_folder));
@@ -165,7 +192,9 @@ fn game_dir_candidates() -> Vec<(std::path::PathBuf, &'static str)> {
         (r"Software\miHoYo\Genshin Impact", "GenshinImpact_Data"),
     ] {
         let install_path = (|| {
-            let key = winreg::RegKey::predef(HKEY_CURRENT_USER).open_subkey(reg_path).ok()?;
+            let key = winreg::RegKey::predef(HKEY_CURRENT_USER)
+                .open_subkey(reg_path)
+                .ok()?;
             let path: String = key.get_value("InstallPath").ok()?;
             Some(path)
         })();
@@ -204,7 +233,11 @@ fn dir_before_marker(content: &str, marker_pos: usize, marker: &str) -> Option<S
     if dir.len() < 3 {
         return None;
     }
-    let exe = if marker == "YuanShen_Data" { "YuanShen.exe" } else { "GenshinImpact.exe" };
+    let exe = if marker == "YuanShen_Data" {
+        "YuanShen.exe"
+    } else {
+        "GenshinImpact.exe"
+    };
     if std::path::Path::new(&format!("{dir}\\{exe}")).is_file() {
         Some(dir.to_string())
     } else {
@@ -213,12 +246,18 @@ fn dir_before_marker(content: &str, marker_pos: usize, marker: &str) -> Option<S
 }
 
 fn path_prefix_before_marker(content: &str, marker_pos: usize) -> Option<&str> {
-    let line_start = content[..marker_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line_start = content[..marker_pos]
+        .rfind('\n')
+        .map(|i| i + 1)
+        .unwrap_or(0);
     let line = &content[line_start..marker_pos];
     let bytes = line.as_bytes();
     let mut start = None;
     for i in 0..bytes.len().saturating_sub(2) {
-        if bytes[i].is_ascii_alphabetic() && bytes[i + 1] == b':' && (bytes[i + 2] == b'/' || bytes[i + 2] == b'\\') {
+        if bytes[i].is_ascii_alphabetic()
+            && bytes[i + 1] == b':'
+            && (bytes[i + 2] == b'/' || bytes[i + 2] == b'\\')
+        {
             start = Some(i);
         }
     }
@@ -251,7 +290,11 @@ fn cache_files_newest_first(web_caches: &std::path::Path) -> Vec<std::path::Path
         if parts.len() != 4 {
             continue;
         }
-        let nums: Vec<u64> = match parts.iter().map(|p| p.parse::<u64>().ok()).collect::<Option<Vec<_>>>() {
+        let nums: Vec<u64> = match parts
+            .iter()
+            .map(|p| p.parse::<u64>().ok())
+            .collect::<Option<Vec<_>>>()
+        {
             Some(v) => v,
             None => continue,
         };
@@ -287,7 +330,8 @@ fn match_gacha_url_bytes(bytes: &[u8]) -> Option<String> {
         while let Some(pos) = find_subslice(&bytes[search_from..], prefix) {
             let abs = search_from + pos;
             // 事件名后缀 ≤ 32 字节且不含路径分隔符，随后应为 /index.html?
-            let suffix_zone = &bytes[abs + prefix.len()..(abs + prefix.len() + 48).min(bytes.len())];
+            let suffix_zone =
+                &bytes[abs + prefix.len()..(abs + prefix.len() + 48).min(bytes.len())];
             if find_subslice(suffix_zone, index_html).is_some() {
                 best = best.map_or(Some(abs), |b| Some(b.max(abs)));
             }
@@ -376,7 +420,10 @@ pub async fn refresh_gacha_log_with_progress(
     let mut authkey_timeout = false;
 
     for &gacha_type in QUERY_TYPES {
-        log::info!("[gacha] 开始拉取 {}（gacha_type={gacha_type}）", pool_display_name(gacha_type));
+        log::info!(
+            "[gacha] 开始拉取 {}（gacha_type={gacha_type}）",
+            pool_display_name(gacha_type)
+        );
         let mut end_id: i64 = 0;
         let mut fetched: usize = 0;
         let mut items_to_add: Vec<GachaLogItem> = Vec::new();
@@ -385,13 +432,19 @@ pub async fn refresh_gacha_log_with_progress(
         let mut type_completed = false;
 
         loop {
-            let url = format!("{base}?{query}&gacha_type={gacha_type}&size={PAGE_SIZE}&end_id={end_id}");
+            let url =
+                format!("{base}?{query}&gacha_type={gacha_type}&size={PAGE_SIZE}&end_id={end_id}");
             let spec = RequestSpec::get(url, Profile::Bbs);
-            let resp = http::request::<GachaLogPage>(&state.http, &salts, &state.devices, spec).await?;
+            let resp =
+                http::request::<GachaLogPage>(&state.http, &salts, &state.devices, spec).await?;
 
             if resp.envelope.retcode != 0 {
                 authkey_timeout = true;
-                log::warn!("[gacha] {} authkey 失效（retcode={}）", pool_display_name(gacha_type), resp.envelope.retcode);
+                log::warn!(
+                    "[gacha] {} authkey 失效（retcode={}）",
+                    pool_display_name(gacha_type),
+                    resp.envelope.retcode
+                );
                 report(GachaProgress {
                     uid: target_uid.clone(),
                     gacha_type,
@@ -404,7 +457,9 @@ pub async fn refresh_gacha_log_with_progress(
                 break;
             }
 
-            let Some(page) = resp.envelope.data else { break };
+            let Some(page) = resp.envelope.data else {
+                break;
+            };
             let items = page.list;
             // 当前页新增的物品（对应原版 ResetCurrentPage + Status.Items）
             let mut page_items: Vec<ProgressItem> = Vec::with_capacity(items.len());
@@ -416,7 +471,8 @@ pub async fn refresh_gacha_log_with_progress(
                     target_uid = item.uid.clone();
                 }
                 if db_end_id.is_none() {
-                    db_end_id = newest_item_id(state, target_archive_id.expect("ensured"), gacha_type);
+                    db_end_id =
+                        newest_item_id(state, target_archive_id.expect("ensured"), gacha_type);
                 }
 
                 // 懒合并：遇到已存在的旧记录则提前结束当前类型
@@ -446,7 +502,10 @@ pub async fn refresh_gacha_log_with_progress(
                 fetched,
                 done: false,
                 authkey_timeout: false,
-                message: format!("正在获取 {} · 已获取 {fetched} 条", pool_display_name(gacha_type)),
+                message: format!(
+                    "正在获取 {} · 已获取 {fetched} 条",
+                    pool_display_name(gacha_type)
+                ),
                 items: page_items,
             });
 
@@ -467,7 +526,11 @@ pub async fn refresh_gacha_log_with_progress(
         // 保存当前类型（INSERT OR IGNORE 兜底去重）
         if let Some(archive_id) = target_archive_id {
             if !items_to_add.is_empty() {
-                log::info!("[gacha] {} 入库新增 {} 条", pool_display_name(gacha_type), items_to_add.len());
+                log::info!(
+                    "[gacha] {} 入库新增 {} 条",
+                    pool_display_name(gacha_type),
+                    items_to_add.len()
+                );
                 insert_items(state, archive_id, &items_to_add)?;
             }
         }
@@ -487,7 +550,10 @@ pub async fn refresh_gacha_log_with_progress(
     }
 
     if authkey_timeout {
-        return Err(ApiError::retcode(-101, "authkey 已失效，请稍后重试或在游戏内重新打开祈愿记录页面"));
+        return Err(ApiError::retcode(
+            -101,
+            "authkey 已失效，请稍后重试或在游戏内重新打开祈愿记录页面",
+        ));
     }
     Ok(target_uid)
 }
@@ -526,7 +592,9 @@ pub fn ensure_archive(state: &AppState, uid: &str) -> ApiResult<i64> {
     use rusqlite::OptionalExtension;
     let conn = state.db.lock().unwrap();
     if let Some(id) = conn
-        .query_row("SELECT id FROM gacha_archives WHERE uid = ?1", [uid], |r| r.get(0))
+        .query_row("SELECT id FROM gacha_archives WHERE uid = ?1", [uid], |r| {
+            r.get(0)
+        })
         .optional()
         .map_err(db_err)?
     {
@@ -548,11 +616,17 @@ fn newest_item_id(state: &AppState, archive_id: i64, query_type: i32) -> Option<
     .flatten()
 }
 
-fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -> ApiResult<()> {    let conn = state.db.lock().unwrap();
+pub fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -> ApiResult<()> {
+    let mut conn = state.db.lock().unwrap();
+    let transaction = conn.transaction().map_err(db_err)?;
     for item in items {
         // 400（角色活动祈愿-2）查询/存储归并到 301（对应 ToQueryType）
-        let query_type = if item.gacha_type == 400 { 301 } else { item.gacha_type };
-        conn.execute(
+        let query_type = if item.gacha_type == 400 {
+            301
+        } else {
+            item.gacha_type
+        };
+        transaction.execute(
             "INSERT OR IGNORE INTO gacha_items (id, archive_id, gacha_type, query_type, item_id, name, item_type, rank_type, time)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
@@ -569,7 +643,7 @@ fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -> Ap
         )
         .map_err(db_err)?;
     }
-    Ok(())
+    transaction.commit().map_err(db_err)
 }
 
 pub fn list_archives(state: &AppState) -> ApiResult<Vec<(i64, String)>> {
@@ -660,352 +734,27 @@ pub fn pool_display_name(gacha_type: i32) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "gacha_tests.rs"]
+mod gacha_tests;
 
-    #[test]
-    fn gacha_url_matches_new_and_old_event_suffix() {
-        // 新版哈希后缀（2.52+ 缓存实测）与旧版 -v3 两种形态都要命中
-        let old = b"junk\0https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?auth_appid=webview_gacha&lang=zh-cn&old=1\0tail";
-        let new = b"junk\0https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?win_mode=fullscreen&auth_appid=webview_gacha&init_type=301\0tail";
-        assert_eq!(
-            match_gacha_url_bytes(old).as_deref(),
-            Some("https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?auth_appid=webview_gacha&lang=zh-cn&old=1")
-        );
-        assert!(match_gacha_url_bytes(new)
-            .as_deref()
-            .unwrap()
-            .starts_with("https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?win_mode=fullscreen"));
-    }
-
-    #[test]
-    fn gacha_url_ignores_resource_urls_and_takes_last() {
-        // 静态资源 URL（css/js）含相同事件名但无 /index.html?，必须被忽略；
-        // 多个命中时取最后一个（对应原版 LastIndexOf）
-        let bytes = b"css https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/1_8338b8e48022f6cb6f85.css\0\
-                      first https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-v3/index.html?auth_appid=webview_gacha&first=1\0\
-                      js https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/bundle_7af5ae760bffe15a194d.js\0\
-                      last https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&last=1\0end";
-        assert_eq!(
-            match_gacha_url_bytes(bytes).as_deref(),
-            Some("https://webstatic.mihoyo.com/hk4e/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&last=1")
-        );
-    }
-
-    #[test]
-    fn gacha_url_overseas_prefix() {
-        let bytes = b"\0https://gs.hoyoverse.com/genshin/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&os=1\0";
-        assert_eq!(
-            match_gacha_url_bytes(bytes).as_deref(),
-            Some("https://gs.hoyoverse.com/genshin/event/e20190909gacha-df01aea2/index.html?auth_appid=webview_gacha&os=1")
-        );
-    }
-
-    #[test]
-    fn unity_log_path_extraction() {
-        // 真实日志形态：路径含空格、正斜杠；行内最后一个盘符为路径起点
-        let content = "[Subsystems] Discovering subsystems at path E:/Program Files/miHoYo Launcher/games/Genshin Impact Game/YuanShen_Data/UnitySubsystems\n\
-                       [Line 2] something else";
-        let pos = ascii_find_ci(content, "YuanShen_Data").unwrap();
-        assert_eq!(
-            path_prefix_before_marker(content, pos),
-            Some("E:/Program Files/miHoYo Launcher/games/Genshin Impact Game")
-        );
-    }
-
-    #[test]
-    fn unity_log_path_prefers_last_drive_letter_on_line() {
-        // 同一行出现两个盘符时取离 marker 最近的一个
-        let content = "compare D:/old/path with E:\\Games\\YuanShen_Data/data.unity3d";
-        let pos = ascii_find_ci(content, "YuanShen_Data").unwrap();
-        assert_eq!(path_prefix_before_marker(content, pos), Some("E:\\Games"));
-    }
+/// 档内条目总数（导入摘要用）
+pub fn count_items(state: &AppState, archive_id: i64) -> ApiResult<i64> {
+    let conn = state.db.lock().unwrap();
+    conn.query_row(
+        "SELECT COUNT(*) FROM gacha_items WHERE archive_id = ?1",
+        [archive_id],
+        |r| r.get(0),
+    )
+    .map_err(db_err)
 }
 
-#[cfg(test)]
-mod live_tests {
-    use super::*;
-    use crate::constants::Salts;
-    use crate::state::AppState;
-
-    /// 端到端冒烟测试：用应用数据库中已登录的国服用户，
-    /// 走 SToken → genAuthKey → 一页 getGachaLog → 解析 → 存储 → 统计 全链路。
-    /// 运行：cargo test -- --ignored --nocapture
-    #[tokio::test]
-    #[ignore = "需要本机已登录用户与外网访问"]
-    async fn stoken_gacha_end_to_end() {
-        let appdata = std::env::var("APPDATA").expect("APPDATA 未设置");
-        let src = std::path::Path::new(&appdata)
-            .join("com.learnrepo.hoyoauth")
-            .join("users.db");
-        assert!(src.exists(), "应用数据库不存在: {}", src.display());
-
-        // 复制一份，避免与应用进程抢锁
-        let tmp = std::env::temp_dir().join(format!("hoyo-auth-test-{}.db", std::process::id()));
-        std::fs::copy(&src, &tmp).expect("复制数据库失败");
-        let conn = rusqlite::Connection::open(&tmp).unwrap();
-        crate::store::init(&conn).unwrap();
-        init_tables(&conn).unwrap();
-
-        let state = AppState::new(conn);
-        let salts = Salts::default();
-
-        let users = crate::store::list(&state.db.lock().unwrap()).unwrap();
-        let user = users
-            .iter()
-            .find(|u| !u.is_oversea && u.game_roles.iter().any(|r| r.game_biz.contains("hk4e_cn")))
-            .expect("数据库中没有可用的国服用户，请先在应用中登录");
-        let role = user.game_roles.iter().find(|r| r.game_biz.contains("hk4e_cn")).unwrap();
-        println!("测试用户: {} ({})", user.nickname.clone().unwrap_or_default(), role.game_uid);
-
-        // ① genAuthKey 换取 authkey
-        let query = build_query_from_stoken(&state, &salts, user, role)
-            .await
-            .expect("genAuthKey 失败");
-        let redacted: String = query.chars().take(60).collect();
-        println!("[1/4] genAuthKey 成功，query 前 60 字符: {redacted}...");
-
-        // ② 拉一页角色活动祈愿并解析（覆盖字符串数字字段的反序列化）
-        let url = format!(
-            "https://public-operation-hk4e.mihoyo.com/gacha_info/api/getGachaLog?{query}&gacha_type=301&size={PAGE_SIZE}&end_id=0"
-        );
-        let resp = http::request::<GachaLogPage>(
-            &state.http,
-            &salts,
-            &state.devices,
-            RequestSpec::get(url, Profile::Bbs),
-        )
-        .await
-        .expect("getGachaLog 请求失败");
-        assert_eq!(resp.envelope.retcode, 0, "getGachaLog 返回错误: {}", resp.envelope.message);
-        let page = resp.envelope.data.expect("响应缺少 data");
-        assert!(!page.list.is_empty(), "返回列表为空");
-        println!("[2/4] getGachaLog 解析成功，本页 {} 条，示例：", page.list.len());
-        for item in page.list.iter().take(3) {
-            println!(
-                "      {} | {} | rank={} | gacha_type={} | id={}",
-                item.time, item.name, item.rank_type, item.gacha_type, item.id
-            );
-        }
-        assert!((3..=5).contains(&page.list[0].rank_type), "rank_type 解析异常");
-        assert!(page.list[0].id > 0, "id 解析异常");
-
-        // ③ 用完整真实数据验证统计与 UP/歪判定
-        let uid = page.list[0].uid.clone();
-        let archive_id = ensure_archive(&state, &uid).expect("创建存档失败");
-        let full = load_items(&state, archive_id).expect("读取失败");
-        let stats = crate::gacha_stats::build_statistics(&uid, &full);
-        println!(
-            "[3/5] 统计构建成功：总 {} 抽，角色池 {} 抽（五星 {} 个），武器池五星 {} 个",
-            stats.total_count, stats.avatar_wish.total_count, stats.avatar_wish.total_orange, stats.weapon_wish.total_orange
-        );
-
-        let aw = &stats.avatar_wish;
-        let ww = &stats.weapon_wish;
-        assert_eq!(aw.total_up_orange + aw.total_lost_orange, aw.total_orange, "角色池 UP+歪 应等于五星总数");
-        assert_eq!(ww.total_up_orange + ww.total_lost_orange, ww.total_orange, "武器池 UP+歪 应等于五星总数");
-        // 大保底规则：歪之后紧接的五星必须是 UP
-        let mut expect_up = false;
-        for e in &aw.orange_list {
-            if expect_up {
-                assert!(e.is_up, "歪后紧接的五星 [{}] 应为大保底 UP", e.name);
-            }
-            expect_up = !e.is_up;
-        }
-        println!(
-            "[4/5] UP 判定通过：角色池五星 {}（中UP {} / 歪 {}），当前{}，UP平均 {} 抽",
-            aw.total_orange,
-            aw.total_up_orange,
-            aw.total_lost_orange,
-            if aw.guaranteed { "大保底" } else { "小保底" },
-            aw.average_up_orange_pull
-        );
-        if aw.total_orange > 0 {
-            println!(
-                "      五星序列: {}",
-                aw.orange_list
-                    .iter()
-                    .map(|e| format!("{}{}", if e.is_up { "" } else { "歪:" }, e.name))
-                    .collect::<Vec<_>>()
-                    .join(" → ")
-            );
-        }
-
-        // ⑤ 存储往返（含重复写入去重）——临时库中清空后用本页数据模拟全新场景
-        {
-            let conn = state.db.lock().unwrap();
-            conn.execute("DELETE FROM gacha_items WHERE archive_id = ?1", [archive_id])
-                .expect("清空临时存档失败");
-        }
-        insert_items(&state, archive_id, &page.list).expect("写入失败");
-        insert_items(&state, archive_id, &page.list).expect("重复写入应被忽略");
-        let stored = load_items(&state, archive_id).expect("读取失败");
-        assert_eq!(stored.len(), page.list.len(), "INSERT OR IGNORE 去重失败");
-        println!("[5/5] 存储往返成功：写入 {} 条（重复写入被正确忽略）", stored.len());
-
-        let _ = std::fs::remove_file(&tmp);
-    }
-
-    /// 懒合并去重验证：种入每种类型的第一页 → 跑真实懒合并刷新 →
-    /// 断言结果恰好等于「旧数据 ∪ 线上新增」，无重复、无遗漏。
-    /// 运行：cargo test -- --ignored --nocapture gacha_lazy_merge_dedup
-    #[tokio::test]
-    #[ignore = "需要本机已登录用户与外网访问"]
-    async fn gacha_lazy_merge_dedup() {
-        let appdata = std::env::var("APPDATA").expect("APPDATA 未设置");
-        let src = std::path::Path::new(&appdata)
-            .join("com.learnrepo.hoyoauth")
-            .join("users.db");
-        assert!(src.exists(), "应用数据库不存在");
-
-        let tmp = std::env::temp_dir().join(format!("hoyo-auth-dedup-{}.db", std::process::id()));
-        std::fs::copy(&src, &tmp).expect("复制数据库失败");
-        let conn = rusqlite::Connection::open(&tmp).unwrap();
-        crate::store::init(&conn).unwrap();
-        init_tables(&conn).unwrap();
-
-        let state = AppState::new(conn);
-        let salts = Salts::default();
-
-        let users = crate::store::list(&state.db.lock().unwrap()).unwrap();
-        let user = users
-            .iter()
-            .find(|u| !u.is_oversea && u.game_roles.iter().any(|r| r.game_biz.contains("hk4e_cn")))
-            .expect("数据库中没有国服用户");
-        let role = user.game_roles.iter().find(|r| r.game_biz.contains("hk4e_cn")).unwrap();
-
-        let query = build_query_from_stoken(&state, &salts, user, role).await.expect("genAuthKey 失败");
-
-        // ---- 种子：拉每种类型的第一页并入库（模拟历史同步）----
-        let mut seed_uid = String::new();
-        for &gacha_type in QUERY_TYPES {
-            let url = format!(
-                "https://public-operation-hk4e.mihoyo.com/gacha_info/api/getGachaLog?{query}&gacha_type={gacha_type}&size={PAGE_SIZE}&end_id=0"
-            );
-            let resp = http::request::<GachaLogPage>(
-                &state.http,
-                &salts,
-                &state.devices,
-                RequestSpec::get(url, Profile::Bbs),
-            )
-            .await
-            .expect("种子拉取失败");
-            assert_eq!(resp.envelope.retcode, 0, "种子拉取错误: {}", resp.envelope.message);
-            let Some(page) = resp.envelope.data else { continue };
-            if page.list.is_empty() {
-                continue;
-            }
-            if seed_uid.is_empty() {
-                seed_uid = page.list[0].uid.clone();
-            }
-            let archive_id = ensure_archive(&state, &seed_uid).unwrap();
-            insert_items(&state, archive_id, &page.list).unwrap();
-            // 与真实刷新相同的防风控节奏
-            let delay = rand::thread_rng().gen_range(1000..2000u64);
-            tokio::time::sleep(Duration::from_millis(delay)).await;
-        }
-        let archive_id = ensure_archive(&state, &seed_uid).unwrap();
-
-        // 种子后的按类型计数与最大 id
-        let before = load_items(&state, archive_id).unwrap();
-        let count_before: std::collections::HashMap<i32, usize> =
-            before.iter().fold(std::collections::HashMap::new(), |mut m, i| {
-                *m.entry(i.query_type).or_insert(0) += 1;
-                m
-            });
-        let max_before: std::collections::HashMap<i32, i64> =
-            before.iter().fold(std::collections::HashMap::new(), |mut m, i| {
-                let e = m.entry(i.query_type).or_insert(0);
-                if i.id > *e {
-                    *e = i.id;
-                }
-                m
-            });
-        println!("种子完成：{:?} 条，各类型上界 {:?}", count_before, max_before);
-
-        // ---- 执行真实的懒合并刷新 ----
-        refresh_gacha_log_with_progress(&state, &query, false, false, |p| {
-            if p.done {
-                println!("  刷新进度: {}", p.message);
-            }
-        })
-        .await
-        .expect("懒合并刷新失败");
-
-        // ---- 断言：不重 ----
-        let after = load_items(&state, archive_id).unwrap();
-        let mut seen = std::collections::HashSet::new();
-        for item in &after {
-            assert!(seen.insert((item.id)), "出现重复记录 id={}", item.id);
-        }
-
-        // ---- 断言：不漏（旧数据全保留；新增恰为 id > 种子上界的部分）----
-        let count_after: std::collections::HashMap<i32, usize> =
-            after.iter().fold(std::collections::HashMap::new(), |mut m, i| {
-                *m.entry(i.query_type).or_insert(0) += 1;
-                m
-            });
-        let new_items: std::collections::HashMap<i32, usize> =
-            after.iter().fold(std::collections::HashMap::new(), |mut m, i| {
-                if *max_before.get(&i.query_type).unwrap_or(&0) < i.id {
-                    *m.entry(i.query_type).or_insert(0) += 1;
-                }
-                m
-            });
-
-        for (query_type, seeded) in &count_before {
-            let now = count_after.get(query_type).copied().unwrap_or(0);
-            let added = new_items.get(query_type).copied().unwrap_or(0);
-            assert!(
-                now >= *seeded,
-                "类型 {query_type} 数据减少：{now} < {seeded}，旧数据丢失"
-            );
-            assert_eq!(
-                now,
-                seeded + added,
-                "类型 {query_type} 计数不符：现 {now}，种子 {seeded} + 线上新增 {added}"
-            );
-        }
-        for id in before.iter().map(|i| i.id) {
-            assert!(seen.contains(&id), "种子记录 id={id} 在刷新后丢失");
-        }
-
-        println!(
-            "验证通过：二次刷新后 {} 条（种子 {} 条，线上新增 {:?}），无重复、无遗漏",
-            after.len(),
-            before.len(),
-            new_items
-        );
-
-        let _ = std::fs::remove_file(&tmp);
-    }
-
-    /// 真机验证网页缓存链路：Unity 日志定位游戏目录 → 各版本 data_2 → 提取祈愿 URL。
-    /// 前置：本机装有原神且游戏内打开过一次祈愿记录页。
-    /// 运行：cargo test web_cache_real_machine -- --ignored --nocapture
-    #[test]
-    #[ignore = "需要本机安装原神并打开过祈愿记录页"]
-    fn web_cache_real_machine() {
-        let candidates = game_dir_candidates();
-        assert!(!candidates.is_empty(), "未能定位游戏目录（Unity 日志与注册表均无结果）");
-        for (dir, data_folder) in &candidates {
-            println!("候选游戏目录: {} ({data_folder})", dir.display());
-            for f in cache_files_newest_first(&dir.join(data_folder).join("webCaches")) {
-                match std::fs::read(&f) {
-                    Ok(b) => {
-                        let hit = match_gacha_url_bytes(&b);
-                        println!("  {} ({} 字节) → {:?}", f.display(), b.len(), hit.as_deref().map(|s| &s[..s.len().min(40)]));
-                    }
-                    Err(e) => println!("  {} 读取失败: {e}", f.display()),
-                }
-            }
-        }
-
-        let url = extract_gacha_url_from_web_cache().expect("网页缓存中未找到祈愿 URL");
-        let query = build_query_from_web_cache().expect("URL 解析失败");
-        assert!(url.contains("index.html"), "URL 缺少 index.html: {url}");
-        assert!(query.contains("auth_appid=webview_gacha"), "query 缺少 auth_appid: {query}");
-        let redacted: String = query.chars().take(80).collect();
-        println!("✓ 网页缓存链路通过，query 前 80 字符: {redacted}...");
-    }
+/// 按 UID 查存档 ID（导出用；不存在返回 None）
+pub fn archive_id_by_uid(state: &AppState, uid: &str) -> ApiResult<Option<i64>> {
+    use rusqlite::OptionalExtension;
+    let conn = state.db.lock().unwrap();
+    conn.query_row("SELECT id FROM gacha_archives WHERE uid = ?1", [uid], |r| {
+        r.get(0)
+    })
+    .optional()
+    .map_err(db_err)
 }

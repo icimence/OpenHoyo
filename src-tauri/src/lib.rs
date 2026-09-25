@@ -23,6 +23,7 @@ mod ds;
 mod feedback;
 mod gacha;
 mod gacha_events;
+mod gacha_history;
 mod gacha_stats;
 mod game_record;
 mod http;
@@ -33,6 +34,8 @@ mod response;
 mod service;
 mod state;
 mod store;
+mod uigf;
+mod uigf_commands;
 mod update;
 mod user_api;
 
@@ -69,14 +72,10 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let dir = app
-                .path()
-                .app_data_dir()
-                .expect("无法获取应用数据目录");
+            let dir = app.path().app_data_dir().expect("无法获取应用数据目录");
             std::fs::create_dir_all(&dir).expect("无法创建应用数据目录");
 
-            let conn = rusqlite::Connection::open(dir.join("users.db"))
-                .expect("无法打开数据库");
+            let conn = rusqlite::Connection::open(dir.join("users.db")).expect("无法打开数据库");
             store::init(&conn).expect("无法初始化数据库");
             gacha::init_tables(&conn).expect("无法初始化祈愿记录表");
             game_record::init_tables(&conn).expect("无法初始化周期记录表");
@@ -111,7 +110,10 @@ pub fn run() {
             commands::export_user_cookies,
             commands::gacha_archives,
             commands::gacha_statistics,
+            gacha_events::gacha_countdown,
             commands::gacha_remove_archive,
+            uigf_commands::uigf_import,
+            uigf_commands::uigf_export,
             commands::gacha_refresh_by_stoken,
             commands::gacha_refresh_by_web_cache,
             commands::gacha_refresh_by_manual,

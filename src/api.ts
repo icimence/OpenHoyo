@@ -189,6 +189,12 @@ export const api = {
   gachaStatistics: (archiveId: number) =>
     invoke<GachaStatisticsDto>("gacha_statistics", { archiveId }),
 
+  gachaCountdown: () => invoke<GachaCountdown[]>("gacha_countdown"),
+
+  uigfImport: () => invoke<{ accounts: { uid: string; inserted: number; skipped: number }[] }>("uigf_import"),
+
+  uigfExport: (uid: string) => invoke<string>("uigf_export", { uid }),
+
   gachaRemoveArchive: (archiveId: number) =>
     invoke<void>("gacha_remove_archive", { archiveId }),
 
@@ -321,6 +327,25 @@ export interface PoolHistory {
   groups: HistoryGroup[];
 }
 
+export interface EventHistory {
+  name: string;
+  version: string;
+  from: string;
+  to: string;
+  query_type: number;
+  total_count: number;
+  items: { name: string; rank_type: number; count: number }[];
+}
+
+export interface GachaCountdown {
+  name: string;
+  rank_type: number;
+  item_type: "角色" | "武器";
+  days: number;
+  last_up: string;
+  version: string;
+}
+
 export interface NameCountEntry {
   name: string;
   item_type: string;
@@ -336,6 +361,7 @@ export interface GachaStatisticsDto {
   standard_wish: WishSummary;
   chronicled_wish: WishSummary;
   history: PoolHistory[];
+  event_history: EventHistory[];
   avatars: NameCountEntry[];
   weapons: NameCountEntry[];
 }

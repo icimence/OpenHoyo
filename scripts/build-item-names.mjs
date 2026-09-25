@@ -1,5 +1,5 @@
 // 构建 item_id → 名称 精简映射（src-tauri/src/data/item_names.json）
-// 数据源: Snap.Metadata 镜像（Avatar/*.json 按单人拆分 + Weapon.json 单文件）
+// 数据源: Snap.Hutao.Remastered 官方元数据仓库（Avatar/*.json 按单人拆分 + Weapon.json 单文件）
 // 用法: node scripts/build-item-names.mjs [tarball路径]  （缺省时自动下载）
 import { writeFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { execSync } from "node:child_process";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const out = join(root, "src-tauri", "src", "data", "item_names.json");
 
-const REPO_TARBALL = "https://api.github.com/repos/wangdage12/Snap.Metadata/tarball/main";
+const REPO_TARBALL = "https://api.github.com/repos/SnapHutaoRemasteringProject/Snap.Metadata/tarball/main";
 
 const work = mkdtempSync(join(tmpdir(), "snap-meta-"));
 try {
@@ -24,7 +24,7 @@ try {
   }
   execSync(`tar --force-local -xzf "${tarball}" -C "${work}"`, { stdio: "inherit" });
 
-  const repoDir = readdirSync(work).find((d) => d.startsWith("wangdage12-Snap.Metadata") || d.startsWith("DGP"));
+  const repoDir = readdirSync(work).find((d) => d.startsWith("SnapHutaoRemasteringProject-Snap.Metadata"));
   if (!repoDir) throw new Error("tarball 中找不到仓库目录");
   const chs = join(work, repoDir, "Genshin", "CHS");
 

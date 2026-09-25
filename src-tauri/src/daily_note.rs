@@ -96,13 +96,25 @@ pub struct Transformer {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct RecoveryTime {
-    #[serde(rename(serialize = "day", deserialize = "Day"), deserialize_with = "de_i32_flexible")]
+    #[serde(
+        rename(serialize = "day", deserialize = "Day"),
+        deserialize_with = "de_i32_flexible"
+    )]
     pub day: i32,
-    #[serde(rename(serialize = "hour", deserialize = "Hour"), deserialize_with = "de_i32_flexible")]
+    #[serde(
+        rename(serialize = "hour", deserialize = "Hour"),
+        deserialize_with = "de_i32_flexible"
+    )]
     pub hour: i32,
-    #[serde(rename(serialize = "minute", deserialize = "Minute"), deserialize_with = "de_i32_flexible")]
+    #[serde(
+        rename(serialize = "minute", deserialize = "Minute"),
+        deserialize_with = "de_i32_flexible"
+    )]
     pub minute: i32,
-    #[serde(rename(serialize = "second", deserialize = "Second"), deserialize_with = "de_i32_flexible")]
+    #[serde(
+        rename(serialize = "second", deserialize = "Second"),
+        deserialize_with = "de_i32_flexible"
+    )]
     pub second: i32,
     pub reached: bool,
 }
@@ -157,7 +169,12 @@ pub(crate) fn combined_cookie(user: &UserRecord) -> ApiResult<String> {
 }
 
 /// GameRecord 系接口的公共请求规格：XRpc + 组合 Cookie + 指纹 + webstatic Referer + DS Gen2(X4)
-pub(crate) fn record_spec(user: &UserRecord, url: String, method: reqwest::Method, body: Option<serde_json::Value>) -> ApiResult<RequestSpec> {
+pub(crate) fn record_spec(
+    user: &UserRecord,
+    url: String,
+    method: reqwest::Method,
+    body: Option<serde_json::Value>,
+) -> ApiResult<RequestSpec> {
     let mut spec = match (method, body) {
         (reqwest::Method::POST, Some(b)) => RequestSpec::post(url, Profile::XRpc, b),
         _ => RequestSpec::get(url, Profile::XRpc),
@@ -276,7 +293,8 @@ pub async fn verify_verification(
     });
     let spec = record_spec(
         user,
-        "https://api-takumi-record.mihoyo.com/game_record/app/card/wapi/verifyVerification".to_string(),
+        "https://api-takumi-record.mihoyo.com/game_record/app/card/wapi/verifyVerification"
+            .to_string(),
         reqwest::Method::POST,
         Some(body),
     )?

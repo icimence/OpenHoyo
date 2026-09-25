@@ -2,7 +2,9 @@
 
 use crate::constants::{self, Salts};
 use crate::http::{self, Devices, DsSpec, Profile, RequestSpec};
-use crate::models::{LoginResult, MobileCaptchaData, QrLogin, QrLoginResult, UidCookieToken, LTokenData};
+use crate::models::{
+    LTokenData, LoginResult, MobileCaptchaData, QrLogin, QrLoginResult, UidCookieToken,
+};
 use crate::response::{unwrap_envelope, ApiError, ApiResult};
 use crate::store::UserRecord;
 use base64::Engine;
@@ -87,7 +89,10 @@ pub async fn create_login_captcha(
 
     if resp.envelope.retcode != 0 {
         if let Some(risk) = parse_aigis_risk(resp.aigis.as_deref()) {
-            log::info!("[passport] 发送验证码触发极验风控（gt={}…），等待前端人机验证", &risk.gt[..risk.gt.len().min(8)]);
+            log::info!(
+                "[passport] 发送验证码触发极验风控（gt={}…），等待前端人机验证",
+                &risk.gt[..risk.gt.len().min(8)]
+            );
             return Ok(CaptchaStep::Risk(risk));
         }
     }
@@ -112,12 +117,16 @@ pub async fn login_by_mobile_captcha(
         "captcha": captcha,
         "mobile": rsa_encrypt_cn(mobile)?,
     });
-    let mut spec = RequestSpec::post(constants::url_login_by_mobile_captcha(), Profile::XRpc2, data)
-        .with_ds(DsSpec::Gen2 {
-            salt: constants::SALT_CN_PROD.to_string(),
-            include_chars: true,
-            is_prod_body: false,
-        });
+    let mut spec = RequestSpec::post(
+        constants::url_login_by_mobile_captcha(),
+        Profile::XRpc2,
+        data,
+    )
+    .with_ds(DsSpec::Gen2 {
+        salt: constants::SALT_CN_PROD.to_string(),
+        include_chars: true,
+        is_prod_body: false,
+    });
     if let Some(a) = aigis {
         spec = spec.with_header("x-rpc-aigis", a);
     }
@@ -197,17 +206,24 @@ pub async fn get_cookie_token_by_stoken(
             .get(crate::cookie::STOKEN)
             .ok_or_else(|| ApiError::retcode(-3, "缺少 stoken"))?;
         let data = json!({ "stoken": stoken, "uid": user.aid });
-        let spec = RequestSpec::post(constants::url_get_cookie_token_by_stoken(true), Profile::XRpc3, data)
-            .with_cookie(user.stoken());
+        let spec = RequestSpec::post(
+            constants::url_get_cookie_token_by_stoken(true),
+            Profile::XRpc3,
+            data,
+        )
+        .with_cookie(user.stoken());
         http::request::<UidCookieToken>(client, salts, devices, spec).await?
     } else {
-        let mut spec = RequestSpec::get(constants::url_get_cookie_token_by_stoken(false), Profile::XRpc2)
-            .with_cookie(user.stoken())
-            .with_ds(DsSpec::Gen2 {
-                salt: constants::SALT_CN_PROD.to_string(),
-                include_chars: true,
-                is_prod_body: true,
-            });
+        let mut spec = RequestSpec::get(
+            constants::url_get_cookie_token_by_stoken(false),
+            Profile::XRpc2,
+        )
+        .with_cookie(user.stoken())
+        .with_ds(DsSpec::Gen2 {
+            salt: constants::SALT_CN_PROD.to_string(),
+            include_chars: true,
+            is_prod_body: true,
+        });
         if let Some(fp) = user.fingerprint.as_deref().filter(|f| !f.is_empty()) {
             spec = spec.with_device_fp(fp);
         }
@@ -229,8 +245,12 @@ pub async fn get_ltoken_by_stoken(
             .get(crate::cookie::STOKEN)
             .ok_or_else(|| ApiError::retcode(-3, "缺少 stoken"))?;
         let data = json!({ "stoken": stoken, "uid": user.aid });
-        let spec = RequestSpec::post(constants::url_get_ltoken_by_stoken(true), Profile::XRpc3, data)
-            .with_cookie(user.stoken());
+        let spec = RequestSpec::post(
+            constants::url_get_ltoken_by_stoken(true),
+            Profile::XRpc3,
+            data,
+        )
+        .with_cookie(user.stoken());
         http::request::<LTokenData>(client, salts, devices, spec).await?
     } else {
         let mut spec = RequestSpec::get(constants::url_get_ltoken_by_stoken(false), Profile::XRpc2)
@@ -266,7 +286,10 @@ mod tests {
     fn rejects_non_risk_aigis() {
         assert!(parse_aigis_risk(None).is_none());
         // 空风控参数（未触发）
-        assert!(parse_aigis_risk(Some(r#"{"session_id":"x","data":"{\"gt\":\"\",\"challenge\":\"\"}"}"#)).is_none());
+        assert!(parse_aigis_risk(Some(
+            r#"{"session_id":"x","data":"{\"gt\":\"\",\"challenge\":\"\"}"}"#
+        ))
+        .is_none());
         // 非 JSON
         assert!(parse_aigis_risk(Some("garbage")).is_none());
     }

@@ -1,0 +1,781 @@
+/* ============ 祈愿记录页 ============ */
+
+/* 胡桃式命令栏：UID 选择 + 页签 + 刷新 + ⋯ 更多，同排展示 */
+.gacha-commandbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  border-bottom: 1px solid var(--divider);
+  margin-bottom: 18px;
+}
+
+.gacha-commandbar .gacha-select {
+  margin-bottom: 5px;
+}
+
+.gacha-select {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--stroke);
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+}
+
+.refresh-wrap {
+  position: relative;
+  margin-bottom: 5px;
+}
+
+.commandbar-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 170px;
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  z-index: 70;
+}
+
+.commandbar-menu.align-right {
+  left: auto;
+  right: 0;
+}
+
+.commandbar-menu button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 12px;
+  border-radius: 5px;
+  justify-content: flex-start;
+}
+
+.commandbar-menu button:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.commandbar-menu .menu-divider {
+  height: 1px;
+  background: var(--divider);
+  margin: 4px 8px;
+}
+
+.more-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gacha-progress {
+  font-size: 12px;
+  color: var(--accent-light);
+  min-height: 17px;
+  margin-bottom: 10px;
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gacha-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.gacha-tab {
+  border: none;
+  background: transparent;
+  border-radius: 6px 6px 0 0;
+  padding: 9px 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.gacha-tab:hover:not(.disabled-tab) {
+  color: var(--text);
+  background: var(--hover-soft);
+}
+
+.gacha-tab.active {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent-light);
+}
+
+.gacha-tab.disabled-tab {
+  color: var(--text-tertiary);
+}
+
+.gacha-body {
+  min-height: 200px;
+}
+
+/* ---- 总览统计卡 ---- */
+
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.stats-card {
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 18px;
+}
+
+.stats-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stats-total {
+  margin-top: 8px;
+}
+
+.stats-total .big {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.stats-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.gauge-row {
+  margin-top: 12px;
+}
+
+.gauge-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.gauge-label b {
+  color: var(--text);
+}
+
+.gauge {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hover-strong);
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.gauge-fill.orange {
+  background: linear-gradient(90deg, #b58139, #e9a23b);
+}
+
+.gauge-fill.purple {
+  background: linear-gradient(90deg, #7a49a8, #a256e1);
+}
+
+.stats-quality {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.stats-quality .q {
+  flex: 1;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--hover-faint);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stats-quality .q-name {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.stats-quality .q-count {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.stats-quality .q-pct {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.stats-quality .orange .q-count {
+  color: #e9a23b;
+}
+
+.stats-quality .purple .q-count {
+  color: #a256e1;
+}
+
+.stats-quality .blue .q-count {
+  color: #7ea7c9;
+}
+
+.stats-avg {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- UP/歪 徽标与保底状态 ---- */
+
+.tile-face .up-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2.5px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  /* 深色底保证在任何品质色背景上可读 */
+  background: rgba(20, 20, 24, 0.82);
+  border: 1px solid transparent;
+}
+
+.tile-face .up-badge.hit {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, 0.85);
+}
+
+.tile-face .up-badge.lost {
+  color: #b9bec8;
+  border-color: rgba(185, 190, 200, 0.45);
+}
+
+.stats-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pity-state {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 10px;
+  background: rgba(76, 194, 255, 0.14);
+  color: var(--accent-light);
+  flex-shrink: 0;
+}
+
+.pity-state.lost {
+  background: rgba(233, 162, 59, 0.16);
+  color: #e9a23b;
+}
+
+.stats-quality .q-sub {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.orange-flat {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 64px);
+  justify-content: start;
+  gap: 8px;
+  margin-top: 12px;
+  border-top: 1px solid var(--divider);
+  padding-top: 10px;
+}
+
+.orange-flat .flat-tile {
+  width: 64px;
+}
+
+.orange-flat .flat-count {
+  font-size: 13px;
+}
+
+.orange-empty {
+  margin-top: 12px;
+  border-top: 1px solid var(--divider);
+  padding-top: 10px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
+.section-toggle.orange-toggle {
+  padding: 5px 16px;
+  border-color: rgba(233, 162, 59, 0.35);
+  background: rgba(233, 162, 59, 0.07);
+  color: #e9a23b;
+}
+
+.section-toggle.orange-toggle:hover {
+  background: rgba(233, 162, 59, 0.14);
+  border-color: rgba(233, 162, 59, 0.6);
+  color: #e9a23b;
+}
+
+/* ---- 共用物品图标 ---- */
+
+.tile-face {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+}
+
+.tile-face img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.tile-face.orange {
+  background: linear-gradient(160deg, #8d6a2f, #c8a35a);
+  color: #ffe9c2;
+}
+
+.tile-face.purple {
+  background: linear-gradient(160deg, #5c3787, #8250b8);
+  color: #e8d8ff;
+}
+
+.tile-face.blue {
+  background: linear-gradient(160deg, #3e5a76, #5f83a6);
+  color: #d9e8f5;
+}
+
+/* ---- 角色/武器：品质分区卡片 + 平铺/列表双视图 ---- */
+
+/* 首次进入角色/武器页签时的引导脉冲 */
+
+.section-card {
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.section-title.orange {
+  color: #e9a23b;
+}
+
+.section-title.purple {
+  color: #a256e1;
+}
+
+.section-title.blue {
+  color: #7ea7c9;
+}
+
+.section-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* 平铺视图：图标 + 正下方计数（对应原版 GridView 平铺） */
+.section-body.flat {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 76px);
+  justify-content: start;
+  gap: 10px;
+}
+
+.flat-tile {
+  width: 76px;
+}
+
+.flat-count {
+  display: block;
+  text-align: center;
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.flat-count.orange {
+  color: #e9a23b;
+}
+
+.flat-count.purple {
+  color: #a256e1;
+}
+
+.flat-count.blue {
+  color: #7ea7c9;
+}
+
+/* 列表视图：图标 + 名称 + 次数 */
+.section-body.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 96px);
+  justify-content: start;
+  gap: 12px;
+}
+
+/* 展开/收起：居中胶囊，比纯文字按钮显眼但不喧宾夺主 */
+.section-toggle {
+  margin: 12px auto 0;
+  display: flex;
+  gap: 5px;
+  padding: 5px 16px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: var(--bg-layer);
+  color: var(--text-secondary);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.section-toggle::after {
+  font-size: 10px;
+  content: "▾";
+}
+
+.section-toggle[data-open="0"]::after {
+  content: "▴";
+}
+
+.section-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- 拉取进度对话框（对应原版 GachaLogRefreshProgressDialog） ---- */
+
+.gp-header {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.gp-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  min-height: 16px;
+}
+
+.gp-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  min-height: 56px;
+}
+
+.gp-tile {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+}
+
+.gp-tile.orange {
+  background: linear-gradient(160deg, #8d6a2f, #c8a35a);
+  color: #ffe9c2;
+}
+
+.gp-tile.purple {
+  background: linear-gradient(160deg, #5c3787, #8250b8);
+  color: #e8d8ff;
+}
+
+.gp-tile.blue {
+  background: linear-gradient(160deg, #3e5a76, #5f83a6);
+  color: #d9e8f5;
+}
+
+.gp-tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.gp-spinner {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.gp-spinner .spin {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid var(--spinner-track);
+  border-top-color: var(--accent-light);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 祈愿页：原版的紧凑命令栏与三列总览 */
+.gacha-page {
+  min-width: 0;
+}
+
+.gacha-commandbar {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 6px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.gacha-commandbar .gacha-select,
+.gacha-commandbar .refresh-wrap,
+.gacha-commandbar .gacha-progress {
+  margin-bottom: 0;
+}
+
+.gacha-commandbar .gacha-progress {
+  min-width: 0;
+}
+
+.gacha-commandbar .primary {
+  padding: 7px 13px;
+}
+
+.gacha-tab {
+  border-radius: 4px;
+  padding: 7px 9px;
+}
+
+.gacha-tab.active {
+  color: var(--accent-light);
+}
+
+.stats-cards {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 265px), 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.stats-card {
+  padding: 14px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.stats-title {
+  font-size: 17px;
+}
+
+.stats-total {
+  margin: 10px 0 4px;
+}
+
+.stats-total .big {
+  font-size: 42px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.pity-meter {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+  align-items: baseline;
+  padding: 7px;
+  border-radius: 5px;
+  background: var(--hover-faint);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.pity-meter.orange b { color: #d99a55; }
+.pity-meter.purple b { color: #ab78cf; }
+.pity-meter .gauge { grid-column: 1 / -1; height: 3px; }
+
+.stats-time {
+  margin: 8px 0;
+  text-align: center;
+}
+
+.stats-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 5px;
+  background: var(--hover-faint);
+}
+
+.stats-mode-switch button {
+  padding: 5px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 12px;
+}
+
+.stats-mode-switch button.active {
+  background: var(--bg-card-hover);
+  border-color: var(--stroke);
+  color: var(--text);
+}
+
+.stats-avg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  min-height: 77px;
+  margin-top: 8px;
+}
+
+.stats-avg > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: var(--hover-faint);
+}
+
+.stats-avg span { font-size: 11px; color: var(--text-tertiary); }
+.stats-avg b { font-size: 12px; color: var(--text); font-weight: 600; }
+.stats-quality { min-height: 77px; margin-top: 8px; flex-wrap: wrap; gap: 4px; }
+.stats-quality .q { min-width: 60px; padding: 5px; }
+
+/* 历史页：左侧活动期，右侧品质明细 */
+.event-history-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 42%) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.event-list,
+.event-detail {
+  min-height: 420px;
+  max-height: calc(100vh - 175px);
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+}
+
+.event-list { padding: 4px; }
+.event-detail { padding: 16px; }
+
+.event-row {
+  display: block;
+  width: 100%;
+  padding: 9px 11px;
+  margin: 0 0 3px;
+  text-align: left;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.event-row:hover { background: var(--hover-soft); }
+.event-row.active { background: var(--hover-soft); border-left-color: var(--accent); }
+.event-row-title { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.event-row-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-row-title strong { flex-shrink: 0; font-weight: 500; }
+.event-row-icons { display: flex; gap: 4px; margin-top: 6px; min-height: 42px; }
+.event-row-icons .tile-face { width: 40px; height: 40px; font-size: 14px; border-radius: 4px; }
+.event-row-icons em { position: absolute; bottom: 0; right: 1px; z-index: 1; font-size: 11px; font-style: normal; background: var(--bg-card); color: var(--text); border-radius: 2px; padding: 0 2px; }
+.event-row-date { display: block; margin-top: 5px; font-size: 11px; color: var(--text-tertiary); }
+.event-detail-header { display: flex; justify-content: space-between; gap: 10px; padding-bottom: 13px; border-bottom: 1px solid var(--divider); }
+.event-detail-header span { font-size: 11px; color: var(--text-tertiary); }
+.event-detail-header h2 { font-size: 17px; margin: 3px 0; }
+.event-detail-header p { font-size: 11px; color: var(--text-tertiary); }
+.event-detail-header > strong { flex-shrink: 0; font-size: 17px; }
+.event-quality { padding-top: 16px; }
+.event-quality h3 { font-size: 13px; margin-bottom: 8px; }
+.event-quality h3 small { margin-left: 5px; font-size: 11px; color: var(--text-tertiary); font-weight: normal; }
+.event-item-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(61px, 1fr)); gap: 7px; }
+.event-item { position: relative; min-width: 0; text-align: center; }
+.event-item .tile-face { border-radius: 4px; }
+.event-item-count { position: absolute; top: 2px; right: 2px; z-index: 1; padding: 0 3px; background: rgba(0, 0, 0, 0.7); border-radius: 3px; color: #fff; font-size: 11px; }
+.event-item-name { display: block; margin-top: 3px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.countdown-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.countdown-section { padding: 10px; margin-bottom: 12px; border: 1px solid var(--stroke); border-radius: 6px; background: var(--bg-card); }
+.countdown-section h2 { font-size: 15px; padding: 3px 4px 11px; }
+.countdown-item { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 7px; margin-bottom: 6px; border: 1px solid var(--stroke); border-radius: 5px; }
+.countdown-item .tile-face { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 4px; }
+.countdown-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.countdown-copy strong { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.countdown-copy span { font-size: 11px; white-space: nowrap; }
+.countdown-copy small { font-size: 10px; color: var(--text-tertiary); }
+.countdown-empty { padding: 10px 4px; color: var(--text-tertiary); font-size: 12px; }
+
+.uigf-import-progress { min-width: 290px; font-size: 13px; }
+.uigf-import-progress p { margin-top: 11px; color: var(--text-secondary); font-size: 12px; }
+.uigf-progress-track { height: 10px; overflow: hidden; border-radius: 5px; margin: 13px 0 7px; background: var(--hover-strong); }
+.uigf-progress-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.15s ease; }
+#uigf-progress-meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 850px) {
+  .gacha-commandbar .gacha-progress { display: none; }
+  .event-history-layout { grid-template-columns: 1fr; }
+  .event-list { max-height: 300px; min-height: 0; }
+  .event-detail { max-height: none; }
+  .countdown-grid { grid-template-columns: 1fr; }
+}

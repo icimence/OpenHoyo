@@ -17,7 +17,6 @@ pub struct Salts {
 }
 
 /// 2026-09-05 从 salt 分发端点拉取的内置默认值（见 `impl Default`）
-
 impl Default for Salts {
     fn default() -> Self {
         Self {
@@ -75,11 +74,17 @@ pub const HOYOPLAY_USER_AGENT: &str = "HYPContainer/1.1.4.133";
 
 impl Salts {
     pub fn cn_user_agent(&self) -> String {
-        format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBS/{}", self.cn_version)
+        format!(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBS/{}",
+            self.cn_version
+        )
     }
 
     pub fn os_user_agent(&self) -> String {
-        format!("Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBSOversea/{}", self.os_version)
+        format!(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) miHoYoBBSOversea/{}",
+            self.os_version
+        )
     }
 }
 
@@ -223,11 +228,17 @@ pub fn url_player_info(uid: &str, server: &str, is_oversea: bool) -> String {
 }
 
 pub fn url_character_list(is_oversea: bool) -> String {
-    format!("{}/game_record/app/genshin/api/character/list", record_host(is_oversea))
+    format!(
+        "{}/game_record/app/genshin/api/character/list",
+        record_host(is_oversea)
+    )
 }
 
 pub fn url_character_detail(is_oversea: bool) -> String {
-    format!("{}/game_record/app/genshin/api/character/detail", record_host(is_oversea))
+    format!(
+        "{}/game_record/app/genshin/api/character/detail",
+        record_host(is_oversea)
+    )
 }
 
 // ---------------------------------------------------------------------------

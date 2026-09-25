@@ -3,7 +3,8 @@
 // 分工原则（与用户确认）：
 //   卡池时间 = 纯工程算术（scripts/version-table.mjs 版本表，不信任任何 API/社区数据）
 //   卡池内容（UP 名单）= 米哈游官方公告 API（hk4e-api，公开无鉴权）
-//   历史 UP 名单 = 沿用现有数据文件（社区来源，仅名单，时间已全部重算）
+//   历史五星 UP 名单 = 沿用现有数据文件（仅名单，时间已全部重算）
+//   四星 UP 名单 = 原版公开元数据；不可达时保留现有文件中的名单
 //
 // 1.x 版本结构特殊（空窗/15:59 切换），整体原样保留不参与算术。
 // 运行：node scripts/gen-gacha-events.mjs
@@ -21,6 +22,7 @@ const namesPath = join(DATA, "item_names.json");
 const ANN_API =
   "https://hk4e-api.mihoyo.com/common/hk4e_cn/announcement/api/getAnnList" +
   "?game=hk4e&game_biz=hk4e_cn&lang=zh-cn&bundle_id=hk4e_cn&platform=pc&channel=1&region=cn_gf01&uid=100000000";
+const UPSTREAM_EVENTS = "https://raw.githubusercontent.com/SnapHutaoRemasteringProject/Snap.Metadata/main/Genshin/CHS/GachaEvent.json";
 
 // 上海时间
 const nowLocal = new Date(Date.now() + 8 * 3600 * 1000)
@@ -111,6 +113,20 @@ for (const e of old) {
   oldIndex.set(`${e.Version}|${e.Type}|${half}`, e);
 }
 
+// 四星 UP 用原版元数据补充；时间窗口和五星名单仍由原有流程决定。
+const purpleKey = (event) => `${event.Version}|${event.Type}|${event.From.includes("18:00") ? "secondHalf" : "firstHalf"}|${event.Name}`;
+const purpleIndex = new Map();
+try {
+  const response = await fetch(UPSTREAM_EVENTS);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  for (const event of await response.json()) {
+    purpleIndex.set(purpleKey(event), event.UpPurpleList ?? []);
+  }
+  console.log(`四星 UP 元数据：${purpleIndex.size} 期`);
+} catch (error) {
+  console.warn(`四星 UP 元数据暂不可用，沿用本地记录：${error}`);
+}
+
 const nameToId = Object.fromEntries(
   Object.entries(JSON.parse(readFileSync(namesPath, "utf8"))).map(([id, name]) => [name, Number(id)]),
 );
@@ -193,7 +209,9 @@ for (let idx = 0; idx <= activeIdx; idx++) {
         To: localToIso(win.to),
         Type: p.type,
         UpOrangeList: upOrange,
-        UpPurpleList: [],
+        UpPurpleList: purpleIndex.get(`${ver.version}|${p.type}|${half}|${name}`)
+          ?? oldIndex.get(`${ver.version}|${p.type}|${half}`)?.UpPurpleList
+          ?? [],
       });
       // 2.6 下半例外：版本维护导致 05-31 05:59 提前关池
       if (ver.version === "2.6" && half === "secondHalf") {

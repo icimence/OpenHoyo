@@ -1,4 +1,9 @@
 import "./style.css";
+import "./common.css";
+import "./gacha.css";
+import "./settings.css";
+import "./dailynote.css";
+import "./chronicle.css";
 import { api, errText, type CaptchaRisk, type UserDto } from "./api";
 import { renderGachaPage } from "./gacha";
 import { geetestVerify } from "./geetest";

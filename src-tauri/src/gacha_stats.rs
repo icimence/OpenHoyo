@@ -5,6 +5,7 @@
 //! - 武器活动祈愿：302
 //! - 常驻祈愿：200
 //! - 集录祈愿：500
+//!
 //! 新手祈愿(100)不计入统计卡。
 //!
 //! 统计算法与原版逐行对应：按 id 升序遍历，橙色(5星)记录抽数区间并重置计数器，
@@ -91,6 +92,7 @@ pub struct GachaStatisticsDto {
     pub standard_wish: WishSummary,
     pub chronicled_wish: WishSummary,
     pub history: Vec<PoolHistory>,
+    pub event_history: Vec<crate::gacha_history::EventHistory>,
     pub avatars: Vec<NameCountEntry>,
     pub weapons: Vec<NameCountEntry>,
 }
@@ -199,7 +201,8 @@ fn build_wish_summary(name: &str, pool: i32, items: &[&StoredItem]) -> WishSumma
         summary.blue_percent = summary.total_blue as f64 / total;
     }
     if !orange_pulls.is_empty() {
-        summary.average_orange_pull = orange_pulls.iter().sum::<i32>() as f64 / orange_pulls.len() as f64;
+        summary.average_orange_pull =
+            orange_pulls.iter().sum::<i32>() as f64 / orange_pulls.len() as f64;
     }
     if !up_orange_pulls.is_empty() {
         summary.average_up_orange_pull =
@@ -222,12 +225,25 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
             item.is_up = crate::gacha_events::is_up(item.gacha_type, &item.name, &item.time);
         }
     }
+    dto.event_history = crate::gacha_history::build_event_history(&owned);
 
     // 各池统计（按 id 升序 = 从旧到新）
-    let avatar: Vec<&StoredItem> = owned.iter().filter(|i| matches_pool(i.query_type, 301)).collect();
-    let weapon: Vec<&StoredItem> = owned.iter().filter(|i| matches_pool(i.query_type, 302)).collect();
-    let standard: Vec<&StoredItem> = owned.iter().filter(|i| matches_pool(i.query_type, 200)).collect();
-    let chronicled: Vec<&StoredItem> = owned.iter().filter(|i| matches_pool(i.query_type, 500)).collect();
+    let avatar: Vec<&StoredItem> = owned
+        .iter()
+        .filter(|i| matches_pool(i.query_type, 301))
+        .collect();
+    let weapon: Vec<&StoredItem> = owned
+        .iter()
+        .filter(|i| matches_pool(i.query_type, 302))
+        .collect();
+    let standard: Vec<&StoredItem> = owned
+        .iter()
+        .filter(|i| matches_pool(i.query_type, 200))
+        .collect();
+    let chronicled: Vec<&StoredItem> = owned
+        .iter()
+        .filter(|i| matches_pool(i.query_type, 500))
+        .collect();
 
     dto.avatar_wish = build_wish_summary("角色活动祈愿", 301, &avatar);
     dto.weapon_wish = build_wish_summary("武器活动祈愿", 302, &weapon);
@@ -236,7 +252,10 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
 
     // 历史分组：每种池子，按五星切组（最新组在前）；顺序 角色→武器→常驻→集录→新手
     for &query_type in &[301i32, 302, 200, 500, 100] {
-        let pool_items: Vec<&StoredItem> = owned.iter().filter(|i| i.query_type == query_type).collect();
+        let pool_items: Vec<&StoredItem> = owned
+            .iter()
+            .filter(|i| i.query_type == query_type)
+            .collect();
         if pool_items.is_empty() {
             continue;
         }
@@ -247,12 +266,18 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
             current.push(item.clone());
             if item.rank_type == 5 {
                 let count = current.len() as i32;
-                groups.push(HistoryGroup { items: std::mem::take(&mut current), count });
+                groups.push(HistoryGroup {
+                    items: std::mem::take(&mut current),
+                    count,
+                });
             }
         }
         if !current.is_empty() {
             let count = current.len() as i32;
-            groups.push(HistoryGroup { items: current, count });
+            groups.push(HistoryGroup {
+                items: current,
+                count,
+            });
         }
         groups.reverse(); // 最新组在前
         dto.history.push(PoolHistory {
@@ -263,30 +288,46 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
     }
 
     // 角色 / 武器 出货列表（按数量降序）
-    let mut avatar_map: std::collections::HashMap<(String, i32), NameCountEntry> = Default::default();
-    let mut weapon_map: std::collections::HashMap<(String, i32), NameCountEntry> = Default::default();
+    let mut avatar_map: std::collections::HashMap<(String, i32), NameCountEntry> =
+        Default::default();
+    let mut weapon_map: std::collections::HashMap<(String, i32), NameCountEntry> =
+        Default::default();
     for item in &owned {
         let entry = if item.item_type == "角色" {
-            avatar_map.entry((item.name.clone(), item.rank_type)).or_insert_with(|| NameCountEntry {
-                name: item.name.clone(),
-                item_type: item.item_type.clone(),
-                rank_type: item.rank_type,
-                count: 0,
-            })
+            avatar_map
+                .entry((item.name.clone(), item.rank_type))
+                .or_insert_with(|| NameCountEntry {
+                    name: item.name.clone(),
+                    item_type: item.item_type.clone(),
+                    rank_type: item.rank_type,
+                    count: 0,
+                })
         } else {
-            weapon_map.entry((item.name.clone(), item.rank_type)).or_insert_with(|| NameCountEntry {
-                name: item.name.clone(),
-                item_type: item.item_type.clone(),
-                rank_type: item.rank_type,
-                count: 0,
-            })
+            weapon_map
+                .entry((item.name.clone(), item.rank_type))
+                .or_insert_with(|| NameCountEntry {
+                    name: item.name.clone(),
+                    item_type: item.item_type.clone(),
+                    rank_type: item.rank_type,
+                    count: 0,
+                })
         };
         entry.count += 1;
     }
     let mut avatars: Vec<NameCountEntry> = avatar_map.into_values().collect();
     let mut weapons: Vec<NameCountEntry> = weapon_map.into_values().collect();
-    avatars.sort_by(|a, b| b.rank_type.cmp(&a.rank_type).then(b.count.cmp(&a.count)).then(a.name.cmp(&b.name)));
-    weapons.sort_by(|a, b| b.rank_type.cmp(&a.rank_type).then(b.count.cmp(&a.count)).then(a.name.cmp(&b.name)));
+    avatars.sort_by(|a, b| {
+        b.rank_type
+            .cmp(&a.rank_type)
+            .then(b.count.cmp(&a.count))
+            .then(a.name.cmp(&b.name))
+    });
+    weapons.sort_by(|a, b| {
+        b.rank_type
+            .cmp(&a.rank_type)
+            .then(b.count.cmp(&a.count))
+            .then(a.name.cmp(&b.name))
+    });
     dto.avatars = avatars;
     dto.weapons = weapons;
 

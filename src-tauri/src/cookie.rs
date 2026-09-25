@@ -34,7 +34,8 @@ impl Cookie {
             let name = parts.next().unwrap_or("").trim();
             let value = parts.next().map(|v| v.trim()).unwrap_or("");
             if !name.is_empty() {
-                map.entry(name.to_string()).or_insert_with(|| value.to_string());
+                map.entry(name.to_string())
+                    .or_insert_with(|| value.to_string());
             }
         }
         Self(map)

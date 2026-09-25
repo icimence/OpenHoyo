@@ -2,11 +2,12 @@
 //!
 //! 请求规格与实时便签一致（XRpc + 组合 Cookie + 指纹 + webstatic Referer
 //! + x-rpc-tool_verison + DS Gen2(X4)），复用 daily_note::record_spec。
+//!
 //! 同样支持 1034/5003 风控验证后带 x-rpc-challenge 重试。
 
 use crate::constants::{self, Salts};
 use crate::daily_note::record_spec;
-use crate::http::{self, Devices, RequestSpec};
+use crate::http::{self, Devices};
 use crate::models::{de_i32_flexible, de_i64_flexible};
 use crate::response::{unwrap_envelope, ApiError, ApiResult};
 use crate::store::UserRecord;
@@ -35,8 +36,15 @@ fn db_err(e: rusqlite::Error) -> ApiError {
 }
 
 /// upsert 一期记录
-pub fn save_period(conn: &rusqlite::Connection, uid: &str, kind: &str, period_id: i64, data: &serde_json::Value) -> ApiResult<()> {
-    let json = serde_json::to_string(data).map_err(|e| ApiError::transport(format!("序列化失败: {e}")))?;
+pub fn save_period(
+    conn: &rusqlite::Connection,
+    uid: &str,
+    kind: &str,
+    period_id: i64,
+    data: &serde_json::Value,
+) -> ApiResult<()> {
+    let json =
+        serde_json::to_string(data).map_err(|e| ApiError::transport(format!("序列化失败: {e}")))?;
     conn.execute(
         "INSERT INTO game_records (uid, kind, period_id, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(uid, kind, period_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
@@ -47,9 +55,15 @@ pub fn save_period(conn: &rusqlite::Connection, uid: &str, kind: &str, period_id
 }
 
 /// 读取某 uid 某玩法的全部历史期（期号倒序，最新在前）
-pub fn list_periods(conn: &rusqlite::Connection, uid: &str, kind: &str) -> ApiResult<Vec<serde_json::Value>> {
+pub fn list_periods(
+    conn: &rusqlite::Connection,
+    uid: &str,
+    kind: &str,
+) -> ApiResult<Vec<serde_json::Value>> {
     let mut stmt = conn
-        .prepare("SELECT data FROM game_records WHERE uid = ?1 AND kind = ?2 ORDER BY period_id DESC")
+        .prepare(
+            "SELECT data FROM game_records WHERE uid = ?1 AND kind = ?2 ORDER BY period_id DESC",
+        )
         .map_err(db_err)?;
     let rows = stmt
         .query_map(rusqlite::params![uid, kind], |row| {
@@ -57,7 +71,10 @@ pub fn list_periods(conn: &rusqlite::Connection, uid: &str, kind: &str) -> ApiRe
             Ok(serde_json::from_str::<serde_json::Value>(&raw).unwrap_or(serde_json::Value::Null))
         })
         .map_err(db_err)?;
-    Ok(rows.filter_map(|r| r.ok()).filter(|v| !v.is_null()).collect())
+    Ok(rows
+        .filter_map(|r| r.ok())
+        .filter(|v| !v.is_null())
+        .collect())
 }
 
 /// 通用拉取：GameRecord 系 GET 接口，返回整个 data JSON
@@ -68,14 +85,18 @@ async fn fetch_record(
     user: &UserRecord,
     url: String,
     xrpc_challenge: Option<&str>,
-) -> ApiResult<serde_json::Value> {    let mut spec = record_spec(user, url, reqwest::Method::GET, None)?;
+) -> ApiResult<serde_json::Value> {
+    let mut spec = record_spec(user, url, reqwest::Method::GET, None)?;
     if let Some(challenge) = xrpc_challenge {
         spec = spec.with_header("x-rpc-challenge", challenge);
     }
     let resp = match http::request::<serde_json::Value>(client, salts, devices, spec).await {
         Ok(r) => r,
         Err(e) if e.code == 1034 || e.code == 5003 => {
-            return Err(ApiError::retcode(e.code, "当前账号被标记风险，需要完成安全验证后重试"));
+            return Err(ApiError::retcode(
+                e.code,
+                "当前账号被标记风险，需要完成安全验证后重试",
+            ));
         }
         Err(e) => return Err(e),
     };
@@ -99,7 +120,10 @@ async fn fetch_record_post(
     let resp = match http::request::<serde_json::Value>(client, salts, devices, spec).await {
         Ok(r) => r,
         Err(e) if e.code == 1034 || e.code == 5003 => {
-            return Err(ApiError::retcode(e.code, "当前账号被标记风险，需要完成安全验证后重试"));
+            return Err(ApiError::retcode(
+                e.code,
+                "当前账号被标记风险，需要完成安全验证后重试",
+            ));
         }
         Err(e) => return Err(e),
     };
@@ -209,6 +233,7 @@ pub struct AbyssMonster {
 }
 
 /// schedule_type: 1=本期, 2=上期
+#[allow(clippy::too_many_arguments)] // 与现有调用处的请求参数一一对应，避免只为阈值引入一次性参数结构体
 pub async fn fetch_spiral_abyss(
     client: &reqwest::Client,
     salts: &Salts,
@@ -221,7 +246,8 @@ pub async fn fetch_spiral_abyss(
 ) -> ApiResult<SpiralAbyss> {
     let url = constants::url_spiral_abyss(uid, region, user.is_oversea, schedule_type);
     let value = fetch_record(client, salts, devices, user, url, xrpc_challenge).await?;
-    serde_json::from_value(value).map_err(|e| ApiError::transport(format!("spiralAbyss 解析失败: {e}")))
+    serde_json::from_value(value)
+        .map_err(|e| ApiError::transport(format!("spiralAbyss 解析失败: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +424,8 @@ pub async fn fetch_role_combat(
 ) -> ApiResult<RoleCombat> {
     let url = constants::url_role_combat(uid, region, user.is_oversea);
     let value = fetch_record(client, salts, devices, user, url, xrpc_challenge).await?;
-    serde_json::from_value(value).map_err(|e| ApiError::transport(format!("role_combat 解析失败: {e}")))
+    serde_json::from_value(value)
+        .map_err(|e| ApiError::transport(format!("role_combat 解析失败: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +511,10 @@ pub struct HcBestAvatar {
     #[serde(deserialize_with = "de_i64_flexible")]
     pub dps: i64,
     /// 1=最强一击 2=最高总伤害
-    #[serde(rename(serialize = "kind", deserialize = "type"), deserialize_with = "de_i32_flexible")]
+    #[serde(
+        rename(serialize = "kind", deserialize = "type"),
+        deserialize_with = "de_i32_flexible"
+    )]
     pub kind: i32,
 }
 
@@ -528,7 +558,8 @@ pub async fn fetch_hard_challenge(
 ) -> ApiResult<HardChallenge> {
     let url = constants::url_hard_challenge(uid, region, user.is_oversea);
     let value = fetch_record(client, salts, devices, user, url, xrpc_challenge).await?;
-    serde_json::from_value(value).map_err(|e| ApiError::transport(format!("hard_challenge 解析失败: {e}")))
+    serde_json::from_value(value)
+        .map_err(|e| ApiError::transport(format!("hard_challenge 解析失败: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +597,7 @@ pub async fn fetch_character_list(
 }
 
 /// POST character/detail：角色详情（属性/技能/命座/圣遗物），ids 为空则拉全部
+#[allow(clippy::too_many_arguments)] // 与 character/list 的请求签名保持一致
 pub async fn fetch_character_detail(
     client: &reqwest::Client,
     salts: &Salts,

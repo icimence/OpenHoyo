@@ -13,7 +13,8 @@ use tauri::{AppHandle, Emitter, State};
 #[tauri::command]
 pub async fn list_users(state: State<'_, AppState>) -> ApiResult<Vec<UserDto>> {
     let db = state.db.lock().unwrap();
-    let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    let records =
+        store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
     drop(db);
     Ok(records.iter().map(UserDto::from).collect())
 }
@@ -64,7 +65,8 @@ pub async fn qr_login_poll(
     ticket: String,
 ) -> ApiResult<QrPollDto> {
     let salts = salts(&state).await;
-    let result: QrLoginResult = passport::query_qr_login_status(&state.http, &salts, &state.devices, &ticket).await?;
+    let result: QrLoginResult =
+        passport::query_qr_login_status(&state.http, &salts, &state.devices, &ticket).await?;
 
     if result.status == "Confirmed" {
         // token_type == 1 即 stoken（对应原版 Tokens.Single(t => t.TokenType is 1)）
@@ -80,7 +82,10 @@ pub async fn qr_login_poll(
 
         let cookie = cookie::build_stoken_cookie(&user_info.aid, &user_info.mid, &stoken);
         let user = service::login_with_stoken(&state, &handle, cookie, false).await?;
-        return Ok(QrPollDto { status: "Confirmed".into(), user: Some(user) });
+        return Ok(QrPollDto {
+            status: "Confirmed".into(),
+            user: Some(user),
+        });
     }
 
     Ok(QrPollDto {
@@ -97,8 +102,15 @@ pub async fn qr_login_poll(
 #[derive(Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum CaptchaSendDto {
-    Sent { action_type: String, countdown: i64 },
-    Risk { session_id: String, gt: String, challenge: String },
+    Sent {
+        action_type: String,
+        countdown: i64,
+    },
+    Risk {
+        session_id: String,
+        gt: String,
+        challenge: String,
+    },
 }
 
 #[tauri::command]
@@ -108,7 +120,15 @@ pub async fn mobile_captcha_send(
     aigis: Option<String>,
 ) -> ApiResult<CaptchaSendDto> {
     let salts = salts(&state).await;
-    match passport::create_login_captcha(&state.http, &salts, &state.devices, &mobile, aigis.as_deref()).await? {
+    match passport::create_login_captcha(
+        &state.http,
+        &salts,
+        &state.devices,
+        &mobile,
+        aigis.as_deref(),
+    )
+    .await?
+    {
         passport::CaptchaStep::Sent(data) => Ok(CaptchaSendDto::Sent {
             action_type: data.action_type,
             countdown: data.countdown,
@@ -125,8 +145,14 @@ pub async fn mobile_captcha_send(
 #[derive(Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum CaptchaLoginDto {
-    Ok { user: UserDto },
-    Risk { session_id: String, gt: String, challenge: String },
+    Ok {
+        user: UserDto,
+    },
+    Risk {
+        session_id: String,
+        gt: String,
+        challenge: String,
+    },
 }
 
 #[tauri::command]
@@ -161,9 +187,7 @@ pub async fn mobile_captcha_login(
         }
     };
 
-    let token = result
-        .token
-        .ok_or_else(|| ApiError::empty_data("token"))?;
+    let token = result.token.ok_or_else(|| ApiError::empty_data("token"))?;
     let user_info = result
         .user_info
         .ok_or_else(|| ApiError::empty_data("user_info"))?;
@@ -216,7 +240,8 @@ pub async fn refresh_cookie_token(
 ) -> ApiResult<UserDto> {
     let mut rec = {
         let db = state.db.lock().unwrap();
-        let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+        let records =
+            store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
         records
             .into_iter()
             .find(|r: &UserRecord| r.id == id)
@@ -224,8 +249,12 @@ pub async fn refresh_cookie_token(
     };
 
     let salts = salts(&state).await;
-    let data = passport::get_cookie_token_by_stoken(&state.http, &salts, &state.devices, &rec).await?;
-    rec.cookie_token = Some(cookie::build_cookie_token_cookie(&rec.aid, &data.cookie_token));
+    let data =
+        passport::get_cookie_token_by_stoken(&state.http, &salts, &state.devices, &rec).await?;
+    rec.cookie_token = Some(cookie::build_cookie_token_cookie(
+        &rec.aid,
+        &data.cookie_token,
+    ));
     rec.cookie_token_updated_at = service::now_ms();
 
     service::save(&state, &mut rec)?;
@@ -237,7 +266,8 @@ pub async fn refresh_cookie_token(
 #[tauri::command]
 pub async fn export_user_cookies(state: State<'_, AppState>, id: i64) -> ApiResult<String> {
     let db = state.db.lock().unwrap();
-    let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    let records =
+        store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
     drop(db);
     let rec = records
         .into_iter()
@@ -265,7 +295,10 @@ pub async fn gacha_archives(state: State<'_, AppState>) -> ApiResult<Vec<GachaAr
 }
 
 #[tauri::command]
-pub async fn gacha_statistics(state: State<'_, AppState>, archive_id: i64) -> ApiResult<crate::gacha_stats::GachaStatisticsDto> {
+pub async fn gacha_statistics(
+    state: State<'_, AppState>,
+    archive_id: i64,
+) -> ApiResult<crate::gacha_stats::GachaStatisticsDto> {
     let items = crate::gacha::load_items(&state, archive_id)?;
     let uid = crate::gacha::list_archives(&state)?
         .into_iter()
@@ -290,7 +323,8 @@ pub async fn gacha_refresh_by_stoken(
 ) -> ApiResult<String> {
     let rec = {
         let db = state.db.lock().unwrap();
-        let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+        let records =
+            store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
         records
             .into_iter()
             .find(|r| r.id == user_id)
@@ -312,7 +346,8 @@ pub async fn gacha_refresh_by_stoken(
             return Err(e);
         }
     };
-    let result = crate::gacha::refresh_gacha_log(&state, &handle, &query, rec.is_oversea, false).await;
+    let result =
+        crate::gacha::refresh_gacha_log(&state, &handle, &query, rec.is_oversea, false).await;
     match &result {
         Ok(msg) => log::info!("[gacha] SToken 刷新完成: {msg}"),
         Err(e) => log::warn!("[gacha] SToken 刷新失败({}): {}", e.code, e.message),
@@ -348,7 +383,8 @@ pub async fn gacha_refresh_by_manual(
     log::info!("[gacha] 手动输入刷新开始");
     let query = crate::gacha::build_query_from_manual(&input)?;
     let is_oversea = query.contains("region=os_");
-    let result = crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, aggressive).await;
+    let result =
+        crate::gacha::refresh_gacha_log(&state, &handle, &query, is_oversea, aggressive).await;
     match &result {
         Ok(msg) => log::info!("[gacha] 手动输入刷新完成: {msg}"),
         Err(e) => log::warn!("[gacha] 手动输入刷新失败({}): {}", e.code, e.message),
@@ -362,7 +398,8 @@ pub async fn gacha_refresh_by_manual(
 
 fn find_user(state: &State<'_, AppState>, user_id: i64) -> ApiResult<UserRecord> {
     let db = state.db.lock().unwrap();
-    let records = store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
+    let records =
+        store::list(&db).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
     records
         .into_iter()
         .find(|r| r.id == user_id)
@@ -377,7 +414,10 @@ pub async fn daily_note(
     game_uid: String,
     challenge: Option<String>,
 ) -> ApiResult<crate::daily_note::DailyNoteData> {
-    log::info!("[dailynote] 拉取实时便签（uid={game_uid}，携带验证挑战={}）", challenge.is_some());
+    log::info!(
+        "[dailynote] 拉取实时便签（uid={game_uid}，携带验证挑战={}）",
+        challenge.is_some()
+    );
     let mut rec = find_user(&state, user_id)?;
     let role = rec
         .game_roles
@@ -408,7 +448,11 @@ pub async fn daily_note(
     .await;
     match &result {
         Ok(_) => log::info!("[dailynote] 拉取成功（uid={game_uid}）"),
-        Err(e) => log::warn!("[dailynote] 拉取失败（uid={game_uid}）: ({}) {}", e.code, e.message),
+        Err(e) => log::warn!(
+            "[dailynote] 拉取失败（uid={game_uid}）: ({}) {}",
+            e.code,
+            e.message
+        ),
     }
     result
 }
@@ -436,8 +480,15 @@ pub async fn card_verify_verification(
     log::info!("[verify] 提交极验验证结果");
     let rec = find_user(&state, user_id)?;
     let salts = salts(&state).await;
-    let result =
-        crate::daily_note::verify_verification(&state.http, &salts, &state.devices, &rec, &challenge, &validate).await;
+    let result = crate::daily_note::verify_verification(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &challenge,
+        &validate,
+    )
+    .await;
     match &result {
         Ok(_) => log::info!("[verify] 验证通过"),
         Err(e) => log::warn!("[verify] 验证失败: ({}) {}", e.code, e.message),
@@ -450,7 +501,11 @@ pub async fn card_verify_verification(
 // 官方 API 只返回近期期数；刷新后按期落库，历史由本地保存
 // ---------------------------------------------------------------------------
 
-async fn prepare_record_user(state: &State<'_, AppState>, user_id: i64, game_uid: &str) -> ApiResult<(UserRecord, crate::models::GameRole)> {
+async fn prepare_record_user(
+    state: &State<'_, AppState>,
+    user_id: i64,
+    game_uid: &str,
+) -> ApiResult<(UserRecord, crate::models::GameRole)> {
     let mut rec = find_user(state, user_id)?;
     let role = rec
         .game_roles
@@ -474,8 +529,10 @@ pub async fn chronicle_list(
     game_uid: String,
     kind: String,
 ) -> ApiResult<Vec<serde_json::Value>> {
+    let _ = user_id;
     let db = state.db.lock().unwrap();
-    crate::game_record::list_periods(&db, &game_uid, &kind).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
+    crate::game_record::list_periods(&db, &game_uid, &kind)
+        .map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
 }
 
 /// 拉取官方数据并合并入库，返回合并后的全部历史期
@@ -499,7 +556,14 @@ pub async fn chronicle_refresh(
             let mut out = Vec::new();
             for schedule_type in [1u8, 2u8] {
                 let data = crate::game_record::fetch_spiral_abyss(
-                    &state.http, &salts, &state.devices, &rec, &uid, &region, schedule_type, challenge.as_deref(),
+                    &state.http,
+                    &salts,
+                    &state.devices,
+                    &rec,
+                    &uid,
+                    &region,
+                    schedule_type,
+                    challenge.as_deref(),
                 )
                 .await?;
                 out.push(serde_json::to_value(&data).unwrap_or(serde_json::Value::Null));
@@ -507,7 +571,16 @@ pub async fn chronicle_refresh(
             out.into_iter().filter(|v| !v.is_null()).collect()
         }
         "theater" => {
-            let data = crate::game_record::fetch_role_combat(&state.http, &salts, &state.devices, &rec, &uid, &region, challenge.as_deref()).await?;
+            let data = crate::game_record::fetch_role_combat(
+                &state.http,
+                &salts,
+                &state.devices,
+                &rec,
+                &uid,
+                &region,
+                challenge.as_deref(),
+            )
+            .await?;
             serde_json::to_value(&data)
                 .ok()
                 .and_then(|v| v.get("data").cloned())
@@ -515,7 +588,16 @@ pub async fn chronicle_refresh(
                 .unwrap_or_default()
         }
         "hard" => {
-            let data = crate::game_record::fetch_hard_challenge(&state.http, &salts, &state.devices, &rec, &uid, &region, challenge.as_deref()).await?;
+            let data = crate::game_record::fetch_hard_challenge(
+                &state.http,
+                &salts,
+                &state.devices,
+                &rec,
+                &uid,
+                &region,
+                challenge.as_deref(),
+            )
+            .await?;
             serde_json::to_value(&data)
                 .ok()
                 .and_then(|v| v.get("data").cloned())
@@ -532,17 +614,26 @@ pub async fn chronicle_refresh(
             let period_id = period
                 .get("schedule_id")
                 .and_then(|v| v.as_i64())
-                .or_else(|| period.get("schedule").and_then(|s| s.get("schedule_id")).and_then(|v| v.as_i64()))
+                .or_else(|| {
+                    period
+                        .get("schedule")
+                        .and_then(|s| s.get("schedule_id"))
+                        .and_then(|v| v.as_i64())
+                })
                 .unwrap_or(0);
             if period_id > 0 {
                 crate::game_record::save_period(&db, &uid, &kind, period_id, period)?;
             }
         }
     }
-    log::info!("[chronicle] kind={kind} 拉取 {} 期并合并入库", fetched.len());
+    log::info!(
+        "[chronicle] kind={kind} 拉取 {} 期并合并入库",
+        fetched.len()
+    );
 
     let db = state.db.lock().unwrap();
-    crate::game_record::list_periods(&db, &uid, &kind).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
+    crate::game_record::list_periods(&db, &uid, &kind)
+        .map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
 }
 
 // ---------------------------------------------------------------------------
@@ -574,8 +665,26 @@ pub async fn avatar_property_refresh(
     log::info!("[avatar_property] 刷新我的角色（uid={uid}）");
 
     let ch = challenge.as_deref();
-    let index = crate::game_record::fetch_player_info(&state.http, &salts, &state.devices, &rec, &uid, &region, ch).await?;
-    let list = crate::game_record::fetch_character_list(&state.http, &salts, &state.devices, &rec, &uid, &region, ch).await?;
+    let index = crate::game_record::fetch_player_info(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &uid,
+        &region,
+        ch,
+    )
+    .await?;
+    let list = crate::game_record::fetch_character_list(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &uid,
+        &region,
+        ch,
+    )
+    .await?;
 
     // 角色列表为 detail 提供 ids（与原版 GetCharacterDetailAsync 一致）
     let ids: Vec<i64> = list
@@ -587,7 +696,17 @@ pub async fn avatar_property_refresh(
                 .collect()
         })
         .unwrap_or_default();
-    let detail = crate::game_record::fetch_character_detail(&state.http, &salts, &state.devices, &rec, &uid, &region, &ids, ch).await?;
+    let detail = crate::game_record::fetch_character_detail(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec,
+        &uid,
+        &region,
+        &ids,
+        ch,
+    )
+    .await?;
 
     log::info!("[avatar_property] 刷新完成（{} 个角色）", ids.len());
     // 顺带回填游戏内头像（index.role.game_head_icon）到角色档案，侧边栏选中该角色时展示
@@ -606,7 +725,11 @@ pub async fn avatar_property_refresh(
             }
         }
     }
-    let dto = AvatarPropertyDto { index, list, detail };
+    let dto = AvatarPropertyDto {
+        index,
+        list,
+        detail,
+    };
     // 落库：下次进入页面秒显缓存（kind=avatar_property 单条 upsert）
     if let Ok(value) = serde_json::to_value(&dto) {
         let db = state.db.lock().unwrap();

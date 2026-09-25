@@ -4,6 +4,7 @@
 //! - notice.json（OSS）是版本检查的国内主源，含灰度比例；
 //!   应用侧按 deviceId 哈希决定是否提示更新（前端实现）。
 //! - 更新说明 md 优先取 OSS，失败回退 GitHub Release API（海外用户路径）。
+//!
 //! OSS 元数据由 CI 用 OIDC→STS 临时凭证写入，无长期密钥（见 AGENTS.md）。
 
 use crate::response::{ApiError, ApiResult};

@@ -102,7 +102,10 @@ pub async fn login_with_stoken(
     stoken_cookie: Cookie,
     is_oversea: bool,
 ) -> ApiResult<UserDto> {
-    log::info!("[user] 登录流程开始（{}）", if is_oversea { "HoYoLAB" } else { "米游社" });
+    log::info!(
+        "[user] 登录流程开始（{}）",
+        if is_oversea { "HoYoLAB" } else { "米游社" }
+    );
     let stuid = stoken_cookie
         .get(cookie::STUID)
         .ok_or_else(|| ApiError::retcode(-3, "Cookie 缺少 stuid"))?
@@ -164,15 +167,29 @@ pub async fn initialize_user(state: &AppState, rec: &mut UserRecord, fresh: bool
     }
 
     // ② CookieToken：刚登录或超过 1 天则用 SToken 兑换
-    let need_cookie_token = fresh || rec.cookie_token.is_none() || now_ms() - rec.cookie_token_updated_at > COOKIE_TOKEN_TTL_MS;
+    let need_cookie_token = fresh
+        || rec.cookie_token.is_none()
+        || now_ms() - rec.cookie_token_updated_at > COOKIE_TOKEN_TTL_MS;
     if need_cookie_token {
-        let data = passport::get_cookie_token_by_stoken(&state.http, &salts, &state.devices, rec).await?;
-        rec.cookie_token = Some(cookie::build_cookie_token_cookie(&rec.aid, &data.cookie_token));
+        let data =
+            passport::get_cookie_token_by_stoken(&state.http, &salts, &state.devices, rec).await?;
+        rec.cookie_token = Some(cookie::build_cookie_token_cookie(
+            &rec.aid,
+            &data.cookie_token,
+        ));
         rec.cookie_token_updated_at = now_ms();
     }
 
     // ③ 用户信息
-    let info = user_api::get_user_full_info(&state.http, &salts, &state.devices, &rec.aid, rec.is_oversea, rec.ltoken.as_ref()).await?;
+    let info = user_api::get_user_full_info(
+        &state.http,
+        &salts,
+        &state.devices,
+        &rec.aid,
+        rec.is_oversea,
+        rec.ltoken.as_ref(),
+    )
+    .await?;
     if !info.nickname.is_empty() {
         rec.nickname = Some(info.nickname);
     }
@@ -181,7 +198,11 @@ pub async fn initialize_user(state: &AppState, rec: &mut UserRecord, fresh: bool
     }
     // 头像：接口的 avatar 是纯数字 ID（不可直接当图片地址），完整 URL 在 avatar_url；
     // 只接受 http 开头的值，避免把 ID 写进记录（存量记录里的 ID 会被这里覆盖）
-    let avatar_url = if info.avatar_url.is_empty() { info.avatar.clone() } else { info.avatar_url.clone() };
+    let avatar_url = if info.avatar_url.is_empty() {
+        info.avatar.clone()
+    } else {
+        info.avatar_url.clone()
+    };
     if avatar_url.starts_with("http") {
         rec.avatar = Some(avatar_url);
     }
@@ -240,7 +261,13 @@ pub async fn startup_resume(state: &AppState, handle: &tauri::AppHandle) {
 /// 从 salt 分发端点刷新（原版在编译期做，这里改为运行时）
 async fn refresh_salts_best_effort(state: &AppState) {
     const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
-    let Ok(resp) = state.http.get(constants::SALT_LATEST_URL).timeout(TIMEOUT).send().await else {
+    let Ok(resp) = state
+        .http
+        .get(constants::SALT_LATEST_URL)
+        .timeout(TIMEOUT)
+        .send()
+        .await
+    else {
         return;
     };
     let Ok(envelope) = resp.json::<constants::SaltLatestEnvelope>().await else {

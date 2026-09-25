@@ -18,7 +18,9 @@ where
             .parse::<i32>()
             .map_err(|_| serde::de::Error::custom(format!("invalid numeric string: {s}"))),
         serde_json::Value::Null => Ok(0),
-        other => Err(serde::de::Error::custom(format!("expected number or string, got {other}"))),
+        other => Err(serde::de::Error::custom(format!(
+            "expected number or string, got {other}"
+        ))),
     }
 }
 
@@ -36,7 +38,9 @@ where
             .parse::<i64>()
             .map_err(|_| serde::de::Error::custom(format!("invalid numeric string: {s}"))),
         serde_json::Value::Null => Ok(0),
-        other => Err(serde::de::Error::custom(format!("expected number or string, got {other}"))),
+        other => Err(serde::de::Error::custom(format!(
+            "expected number or string, got {other}"
+        ))),
     }
 }
 
@@ -54,7 +58,9 @@ where
             .parse::<f64>()
             .map_err(|_| serde::de::Error::custom(format!("invalid numeric string: {s}"))),
         serde_json::Value::Null => Ok(0.0),
-        other => Err(serde::de::Error::custom(format!("expected number or string, got {other}"))),
+        other => Err(serde::de::Error::custom(format!(
+            "expected number or string, got {other}"
+        ))),
     }
 }
 
@@ -118,7 +124,6 @@ pub struct UidCookieToken {
     #[serde(default = "empty_str")]
     pub cookie_token: String,
 }
-
 
 #[derive(Debug, Deserialize)]
 pub struct LTokenData {

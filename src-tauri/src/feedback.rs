@@ -45,7 +45,9 @@ fn windows_display_version() -> String {
         let key = RegKey::predef(HKEY_LOCAL_MACHINE)
             .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
             .ok()?;
-        let name: String = key.get_value("ProductName").unwrap_or_else(|_| "Windows".into());
+        let name: String = key
+            .get_value("ProductName")
+            .unwrap_or_else(|_| "Windows".into());
         let ver: String = key.get_value("DisplayVersion").ok()?;
         let build: String = key.get_value("CurrentBuildNumber").ok()?;
         Some(format!("{name} {ver} (build {build})"))
@@ -97,9 +99,21 @@ fn keep_recent_lines(content: &str, now: NaiveDateTime, minutes: i64) -> String 
             kept.push(line);
         }
     }
-    let joined = if any_ts { kept.join("\n") } else { content.lines().rev().take(400).collect::<Vec<_>>().join("\n") };
+    let joined = if any_ts {
+        kept.join("\n")
+    } else {
+        content
+            .lines()
+            .rev()
+            .take(400)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     if joined.chars().count() > INLINE_LOG_MAX_CHARS {
-        joined.chars().skip(joined.chars().count() - INLINE_LOG_MAX_CHARS).collect()
+        joined
+            .chars()
+            .skip(joined.chars().count() - INLINE_LOG_MAX_CHARS)
+            .collect()
     } else {
         joined
     }
@@ -114,8 +128,12 @@ fn collect_log_text(app: &tauri::AppHandle) -> String {
             rd.flatten()
                 .map(|e| e.path())
                 .filter(|p| {
-                    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-                    name.starts_with("hoyoauth.log") && name.ends_with(".log") || name.ends_with(".old")
+                    let name = p
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    name.starts_with("hoyoauth.log") && name.ends_with(".log")
+                        || name.ends_with(".old")
                 })
                 .collect()
         })
@@ -144,13 +162,20 @@ fn scan_dumps(app: &tauri::AppHandle) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Ok(local) = std::env::var("LOCALAPPDATA") {
         let base = PathBuf::from(&local);
-        dirs.push(base.join(&app.config().identifier).join("WebView2").join("Crashpad").join("reports"));
+        dirs.push(
+            base.join(&app.config().identifier)
+                .join("WebView2")
+                .join("Crashpad")
+                .join("reports"),
+        );
         dirs.push(base.join("CrashDumps"));
     }
     let week_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(7 * 24 * 3600);
     let mut out = Vec::new();
     for dir in dirs {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for e in rd.flatten() {
             let p = e.path();
             if p.extension().and_then(|x| x.to_str()) != Some("dmp") {
@@ -183,7 +208,12 @@ fn build_issue_title(user_text: &str, app_version: &str) -> String {
 const URL_TEXT_MAX_CHARS: usize = 400;
 
 /// URL 预填正文：只有元数据与用户描述（无日志），打开即可见、无需用户粘贴
-fn build_issue_body_compact(user_text: &str, app: &tauri::AppHandle, zip_name: &str, image_names: &[String]) -> String {
+fn build_issue_body_compact(
+    user_text: &str,
+    app: &tauri::AppHandle,
+    zip_name: &str,
+    image_names: &[String],
+) -> String {
     build_issue_body_compact_inner(
         user_text,
         &app.package_info().version.to_string(),
@@ -196,6 +226,7 @@ fn build_issue_body_compact(user_text: &str, app: &tauri::AppHandle, zip_name: &
     )
 }
 
+#[allow(clippy::too_many_arguments)] // 描述与环境字段仅用于拼接正文，保持调用处清晰
 fn build_issue_body_compact_inner(
     user_text: &str,
     app_version: &str,
@@ -225,7 +256,11 @@ fn build_issue_body_compact_inner(
          已在本机生成，反馈向导已打开所在文件夹，请拖入本 Issue 上传。\n"
     ));
     if !image_names.is_empty() {
-        md.push_str(&format!("\n所选图片 {} 张：{}\n", image_names.len(), image_names.join("、")));
+        md.push_str(&format!(
+            "\n所选图片 {} 张：{}\n",
+            image_names.len(),
+            image_names.join("、")
+        ));
     }
     md
 }
@@ -244,8 +279,15 @@ fn percent_encode(s: &str) -> String {
 // 打包与提交
 // ---------------------------------------------------------------------------
 
-fn unique_entry_name(prefix: &str, name: &str, used: &mut std::collections::HashSet<String>) -> String {
-    let safe: String = name.chars().filter(|c| !c.is_control() && *c != '/' && *c != '\\').collect();
+fn unique_entry_name(
+    prefix: &str,
+    name: &str,
+    used: &mut std::collections::HashSet<String>,
+) -> String {
+    let safe: String = name
+        .chars()
+        .filter(|c| !c.is_control() && *c != '/' && *c != '\\')
+        .collect();
     let mut candidate = safe.clone();
     let mut i = 1;
     while used.contains(&candidate) {
@@ -270,19 +312,36 @@ pub fn build_feedback_zip(
     let fb_dir = data_dir.join("feedback");
     std::fs::create_dir_all(&fb_dir)
         .map_err(|e| ApiError::retcode(-21, format!("创建反馈目录失败: {e}")))?;
-    let zip_path = fb_dir.join(format!("feedback-{}.zip", Local::now().format("%Y%m%d-%H%M%S")));
+    let zip_path = fb_dir.join(format!(
+        "feedback-{}.zip",
+        Local::now().format("%Y%m%d-%H%M%S")
+    ));
 
     let log_text = collect_log_text(app);
     let log_excerpt = keep_recent_lines(&log_text, Local::now().naive_local(), LOG_WINDOW_MINUTES);
-    let dumps = if include_dumps { scan_dumps(app) } else { Vec::new() };
+    let dumps = if include_dumps {
+        scan_dumps(app)
+    } else {
+        Vec::new()
+    };
 
     let meta = build_meta_json(app, user_text);
     let title = build_issue_title(user_text, &app.package_info().version.to_string());
     let image_names: Vec<String> = image_paths
         .iter()
-        .map(|p| PathBuf::from(p).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "image".into()))
+        .map(|p| {
+            PathBuf::from(p)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "image".into())
+        })
         .collect();
-    let compact = build_issue_body_compact(user_text, app, &zip_path.file_name().unwrap().to_string_lossy(), &image_names);
+    let compact = build_issue_body_compact(
+        user_text,
+        app,
+        &zip_path.file_name().unwrap().to_string_lossy(),
+        &image_names,
+    );
     let body = build_issue_body_full(&compact, &log_excerpt);
 
     let file = std::fs::File::create(&zip_path)
@@ -293,7 +352,8 @@ pub fn build_feedback_zip(
 
     zip.start_file("meta.json", opts)
         .map_err(|e| ApiError::retcode(-23, format!("写入 meta 失败: {e}")))?;
-    zip.write_all(meta.as_bytes()).map_err(|e| ApiError::retcode(-23, format!("写入 meta 失败: {e}")))?;
+    zip.write_all(meta.as_bytes())
+        .map_err(|e| ApiError::retcode(-23, format!("写入 meta 失败: {e}")))?;
 
     // Issue 正文快照（剪贴板被占用时的兜底）
     zip.start_file("issue-body.md", opts)
@@ -315,20 +375,28 @@ pub fn build_feedback_zip(
     let mut used = std::collections::HashSet::new();
     for dump in &dumps {
         if let Ok(bytes) = std::fs::read(dump) {
-            let name = dump.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let name = dump
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
             let entry = unique_entry_name("dumps", &name, &mut used);
             zip.start_file(entry, opts)
                 .map_err(|e| ApiError::retcode(-23, format!("写入转储失败: {e}")))?;
-            zip.write_all(&bytes).map_err(|e| ApiError::retcode(-23, format!("写入转储失败: {e}")))?;
+            zip.write_all(&bytes)
+                .map_err(|e| ApiError::retcode(-23, format!("写入转储失败: {e}")))?;
         }
     }
     for (i, img) in image_paths.iter().enumerate() {
         if let Ok(bytes) = std::fs::read(img) {
-            let base = PathBuf::from(img).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| format!("image-{i}"));
+            let base = PathBuf::from(img)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| format!("image-{i}"));
             let entry = unique_entry_name("images", &base, &mut used);
             zip.start_file(entry, opts)
                 .map_err(|e| ApiError::retcode(-23, format!("写入图片失败: {e}")))?;
-            zip.write_all(&bytes).map_err(|e| ApiError::retcode(-23, format!("写入图片失败: {e}")))?;
+            zip.write_all(&bytes)
+                .map_err(|e| ApiError::retcode(-23, format!("写入图片失败: {e}")))?;
         }
     }
     zip.finish()
@@ -379,7 +447,11 @@ pub async fn feedback_submit(
         "[feedback] 反馈包已生成: {}（转储 {dump_count}，图片 {}，剪贴板 {}）",
         zip_path.display(),
         image_paths.len(),
-        if clipboard_ok { "已写入" } else { "写入失败" }
+        if clipboard_ok {
+            "已写入"
+        } else {
+            "写入失败"
+        }
     );
 
     Ok(FeedbackResult {
@@ -405,19 +477,30 @@ mod tests {
                        续行跟随旧行\n\
                        [2026-09-06 10:55:00][INFO][app] 新事件\n\
                        续行跟随新行\n";
-        let now = NaiveDateTime::parse_from_str("2026-09-06 11:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let now =
+            NaiveDateTime::parse_from_str("2026-09-06 11:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let kept = keep_recent_lines(content, now, 10);
         assert!(!kept.contains("旧事件"), "窗口外的事件应被过滤: {kept}");
-        assert!(!kept.contains("续行跟随旧行"), "无时间戳续行应跟随前一行被过滤");
+        assert!(
+            !kept.contains("续行跟随旧行"),
+            "无时间戳续行应跟随前一行被过滤"
+        );
         assert!(kept.contains("新事件") && kept.contains("续行跟随新行"));
     }
 
     #[test]
     fn log_fallback_without_timestamps() {
-        let content = (0..1000).map(|i| format!("line-{i}")).collect::<Vec<_>>().join("\n");
-        let now = NaiveDateTime::parse_from_str("2026-09-06 11:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
+        let content = (0..1000)
+            .map(|i| format!("line-{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let now =
+            NaiveDateTime::parse_from_str("2026-09-06 11:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
         let kept = keep_recent_lines(&content, now, 10);
-        assert!(kept.contains("line-999") && !kept.contains("line-0"), "无时间戳时退化为保留末尾 400 行");
+        assert!(
+            kept.contains("line-999") && !kept.contains("line-0"),
+            "无时间戳时退化为保留末尾 400 行"
+        );
     }
 
     #[test]
@@ -464,13 +547,24 @@ mod tests {
             percent_encode("[反馈] 测试标题测试标题测试标题测试标题测试标题 - v0.1.5"),
             percent_encode(&body)
         );
-        assert!(encoded.len() < 7000, "URL 编码后 {} 字符，超出安全范围", encoded.len());
+        assert!(
+            encoded.len() < 7000,
+            "URL 编码后 {} 字符，超出安全范围",
+            encoded.len()
+        );
     }
 
     #[test]
     fn full_body_contains_log_section() {
         let compact = build_issue_body_compact_inner(
-            "测试", "0.1.5", "2.11.5", "Windows", "zh-CN", "t", "z.zip", &[]
+            "测试",
+            "0.1.5",
+            "2.11.5",
+            "Windows",
+            "zh-CN",
+            "t",
+            "z.zip",
+            &[],
         );
         let full = build_issue_body_full(&compact, "[2026-09-07 00:00:00][INFO][app] 日志行");
         assert!(full.contains("### 最近运行日志"));
