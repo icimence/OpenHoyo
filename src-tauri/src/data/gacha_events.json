@@ -4466,5 +4466,48 @@
    10000116
   ],
   "UpPurpleList": []
+ },
+ {
+  "Name": "煦风欢舞时",
+  "Version": "7.1",
+  "Order": 520,
+  "Banner": "",
+  "Banner2": null,
+  "From": "2026-09-23T06:00:00+08:00",
+  "To": "2026-10-13T17:59:59+08:00",
+  "Type": 301,
+  "UpOrangeList": [
+   10000143
+  ],
+  "UpPurpleList": []
+ },
+ {
+  "Name": "神铸赋形",
+  "Version": "7.1",
+  "Order": 520,
+  "Banner": "",
+  "Banner2": null,
+  "From": "2026-09-23T06:00:00+08:00",
+  "To": "2026-10-13T17:59:59+08:00",
+  "Type": 302,
+  "UpOrangeList": [
+   11522,
+   14524
+  ],
+  "UpPurpleList": []
+ },
+ {
+  "Name": "涌浪叙歌",
+  "Version": "7.1",
+  "Order": 520,
+  "Banner": "",
+  "Banner2": null,
+  "From": "2026-09-23T06:00:00+08:00",
+  "To": "2026-10-13T17:59:59+08:00",
+  "Type": 400,
+  "UpOrangeList": [
+   10000140
+  ],
+  "UpPurpleList": []
  }
 ]
