@@ -4,6 +4,7 @@ import { closeDialog, confirmDialog, onDialogCancel, onDialogOk, openDialog, run
 import { importUigf } from "./gacha-import";
 import { renderEventHistory } from "./gacha-history";
 import { renderCountdown } from "./gacha-countdown";
+import { combineLimitedOrange } from "./gacha-combined";
 import { esc, iconSrc } from "./gacha-view-utils";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +26,7 @@ let refreshMenuOpen = false;
 let moreMenuOpen = false;
 let listenerReady = false;
 let outsideClickReady = false;
+let combineAvatarOrange = false;
 
 const POOL_NAMES: Record<number, string> = {
   100: "新手祈愿",
@@ -414,7 +416,7 @@ function openManualDialog(): void {
 function renderOverview(body: HTMLElement): void {
   const s = stats!;
   const cards: WishSummary[] = [s.avatar_wish, s.weapon_wish, s.standard_wish, s.chronicled_wish];
-  body.innerHTML = `<div class="stats-cards">${cards.map((w) => statsCard(w)).join("")}</div>`;
+  body.innerHTML = `<div class="stats-cards">${cards.map((w, index) => statsCard(w, index === 0)).join("")}</div>`;
   clampCollapsedGrids(body);
 
   // 五星列表的展开/收起
@@ -430,13 +432,17 @@ function renderOverview(body: HTMLElement): void {
       renderOverview(body);
     });
   });
+  body.querySelector<HTMLButtonElement>(".combine-toggle")?.addEventListener("click", () => {
+    combineAvatarOrange = !combineAvatarOrange;
+    renderOverview(body);
+  });
 }
 
 const statsViewMode = new Map<string, "stats" | "ratio">();
 
 /** 五星出货列表：平铺（图标+正下方抽数）+ 智能展开收起 */
-function orangeListHtml(w: WishSummary): string {
-  const entries = w.orange_list.slice().reverse(); // 最新在前
+function orangeListHtml(w: WishSummary, combined: boolean): string {
+  const entries = (combined ? combineLimitedOrange(w.orange_list) : w.orange_list).slice().reverse(); // 最新在前
   if (entries.length === 0) {
     return `<div class="orange-empty">暂无五星记录</div>`;
   }
@@ -449,7 +455,7 @@ function orangeListHtml(w: WishSummary): string {
   // 列数随卡片宽度变化，固定数量必然出现"一行半"
   const inner = `<div class="orange-flat${isExpanded ? "" : " collapsible"}">${entries
     .map(
-      (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽 · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
+      (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽${combined && o.is_up ? "（含此前歪出的抽数）" : ""} · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
         <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" onerror="this.remove()" loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
         <span class="flat-count orange">${o.pull}</span>
       </div>`,
@@ -464,7 +470,7 @@ function orangeListHtml(w: WishSummary): string {
   return `${inner}${footer}`;
 }
 
-function statsCard(w: WishSummary): string {
+function statsCard(w: WishSummary, isAvatar: boolean): string {
   const orangePct = (w.orange_percent * 100).toFixed(1);
   const purplePct = (w.purple_percent * 100).toFixed(1);
   const bluePct = (w.blue_percent * 100).toFixed(1);
@@ -476,6 +482,7 @@ function statsCard(w: WishSummary): string {
   <div class="stats-card">
     <div class="stats-title-row">
       <div class="stats-title">${esc(w.name)}</div>
+      ${isAvatar ? `<button class="combine-toggle ${combineAvatarOrange ? "active" : ""}" type="button" title="${combineAvatarOrange ? "显示每个五星的抽数" : "合并显示限定金总抽数"}" aria-label="${combineAvatarOrange ? "显示每个五星的抽数" : "合并显示限定金总抽数"}" aria-pressed="${combineAvatarOrange}">★</button>` : ""}
       ${w.has_up ? `<span class="pity-state ${w.guaranteed ? "lost" : ""}" title="${w.guaranteed ? "最近一个五星是歪的，下一个五星必为 UP" : "下一个五星有 50% 概率为 UP"}">${w.guaranteed ? "大保底" : "小保底"}</span>` : ""}
     </div>
     <div class="stats-total"><span class="big">${w.total_count}</span> 抽</div>
@@ -501,7 +508,7 @@ function statsCard(w: WishSummary): string {
       ${w.has_up ? `<div class="q"><span class="q-name">UP / 歪</span><span class="q-count">${w.total_up_orange} / ${w.total_lost_orange}</span><span class="q-pct">五星结果</span></div>` : ""}
     </div>`}
 
-    ${orangeListHtml(w)}
+    ${orangeListHtml(w, isAvatar && combineAvatarOrange)}
   </div>`;
 }
 
@@ -527,7 +534,9 @@ function clampCollapsedGrids(root: ParentNode): void {
     }
     const tile = (grid.firstElementChild as HTMLElement | null)?.offsetWidth ?? 64;
     const gap = Number.parseFloat(getComputedStyle(grid).columnGap) || 8;
-    const cols = Math.max(1, Math.floor((grid.clientWidth + gap) / (tile + gap)));
+    const cols = grid.classList.contains("orange-flat")
+      ? 5
+      : Math.max(1, Math.floor((grid.clientWidth + gap) / (tile + gap)));
     const keep = cols * 2;
     const tiles = Array.from(grid.children) as HTMLElement[];
     tiles.forEach((t, i) => {
