@@ -79,6 +79,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Sync item names and import metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -fLsS --retry 3 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/SnapHutaoRemasteringProject/Snap.Metadata/tarball/main" \
+            -o "$RUNNER_TEMP/snap-meta.tar.gz"
+          node scripts/build-item-names.mjs "$RUNNER_TEMP/snap-meta.tar.gz"
+          node scripts/build-item-meta.mjs "$RUNNER_TEMP/snap-meta.tar.gz"
+
       - name: Generate gacha events (时间=算术, UP=官方公告)
         run: node scripts/gen-gacha-events.mjs
 
@@ -94,12 +105,13 @@ jobs:
             if (evs.length < 250) throw new Error('事件数异常');
             console.log('OK,', evs.length, '期');
           "
+          node scripts/validate-gacha-icons.mjs
 
       - name: Commit data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src-tauri/src/data/gacha_events.json public/gacha-icons
+          git add src-tauri/src/data/gacha_events.json src-tauri/src/data/item_names.json src-tauri/src/data/item_meta.json public/gacha-icons
           git diff --cached --quiet && echo "数据无变化" && exit 0
           git commit -m "chore(data): gacha events + icons for ${{ needs.check.outputs.game_version }}"
           git push

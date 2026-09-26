@@ -1,9 +1,9 @@
 // 构建 item_id → 名称 精简映射（src-tauri/src/data/item_names.json）
 // 数据源: Snap.Hutao.Remastered 官方元数据仓库（Avatar/*.json 按单人拆分 + Weapon.json 单文件）
 // 用法: node scripts/build-item-names.mjs [tarball路径]  （缺省时自动下载）
-import { writeFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, cpSync } from "node:fs";
+import { writeFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, cpSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, sep, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
@@ -15,12 +15,13 @@ const REPO_TARBALL = "https://api.github.com/repos/SnapHutaoRemasteringProject/S
 const work = mkdtempSync(join(tmpdir(), "snap-meta-"));
 try {
   // 下载整仓库 tarball（Avatar 为按人拆分的多文件，逐个拉太慢）
-  // 注: 本机网络环境的 schannel 证书吊销检查会失败，统一加 --ssl-no-revoke
+  // 本机 Windows schannel 需要跳过证书吊销检查；Linux CI 不传此参数。
   const tarball = join(work, "repo.tar.gz");
   if (process.argv[2]) {
     cpSync(process.argv[2], tarball);
   } else {
-    execSync(`curl -fsSL --ssl-no-revoke --retry 3 "${REPO_TARBALL}" -o "${tarball}"`, { stdio: "inherit" });
+    const tlsOption = process.platform === "win32" ? "--ssl-no-revoke " : "";
+    execSync(`curl -fsSL ${tlsOption}--retry 3 "${REPO_TARBALL}" -o "${tarball}"`, { stdio: "inherit" });
   }
   execSync(`tar --force-local -xzf "${tarball}" -C "${work}"`, { stdio: "inherit" });
 
@@ -52,5 +53,10 @@ try {
   const mb = (readFileSync(out).length / 1024).toFixed(1);
   console.log(`✓ item_names.json: 角色 ${avatarCount} + 武器 ${weapons.length - 0} 项，共 ${Object.keys(map).length} 条，${mb} KB`);
 } finally {
+  const tempRoot = realpathSync(tmpdir());
+  const target = realpathSync(work);
+  if (!target.startsWith(`${tempRoot}${sep}`) || !basename(target).startsWith("snap-meta-")) {
+    throw new Error(`拒绝清理非预期临时目录: ${target}`);
+  }
   rmSync(work, { recursive: true, force: true });
 }

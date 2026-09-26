@@ -2,9 +2,9 @@
 // 源：https://github.com/SnapHutaoRemasteringProject/Snap.Metadata（Remastered 项目维护的元数据 fork）
 // 输出 src-tauri/src/data/item_meta.json：{ id: [name, type, rank] }
 // 类型：角色 / 武器；星级：角色 4-5（Quality 字段）、武器 1-5（RankLevel 字段）
-import { writeFileSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, readdirSync, readFileSync, rmSync, cpSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, sep, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
 
@@ -16,7 +16,12 @@ const REPO_PREFIX = "SnapHutaoRemasteringProject-Snap.Metadata";
 const work = mkdtempSync(join(tmpdir(), "snap-meta2-"));
 try {
   const tarball = join(work, "repo.tar.gz");
-  execSync(`curl -fsSL --ssl-no-revoke --retry 5 -C - "${REPO_TARBALL}" -o "${tarball}"`, { stdio: "inherit" });
+  if (process.argv[2]) {
+    cpSync(process.argv[2], tarball);
+  } else {
+    const tlsOption = process.platform === "win32" ? "--ssl-no-revoke " : "";
+    execSync(`curl -fsSL ${tlsOption}--retry 3 "${REPO_TARBALL}" -o "${tarball}"`, { stdio: "inherit" });
+  }
   execSync(`tar --force-local -xzf "${tarball}" -C "${work}"`, { stdio: "inherit" });
 
   const repoDir = readdirSync(work).find((d) => d.startsWith(REPO_PREFIX));
@@ -46,5 +51,10 @@ try {
   writeFileSync(out, JSON.stringify(map));
   console.log(`✓ item_meta.json: 角色 ${avatarCount} + 武器 ${weapons.length}，共 ${Object.keys(map).length} 条`);
 } finally {
+  const tempRoot = realpathSync(tmpdir());
+  const target = realpathSync(work);
+  if (!target.startsWith(`${tempRoot}${sep}`) || !basename(target).startsWith("snap-meta2-")) {
+    throw new Error(`拒绝清理非预期临时目录: ${target}`);
+  }
   rmSync(work, { recursive: true, force: true });
 }

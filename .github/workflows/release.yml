@@ -31,6 +31,9 @@ jobs:
       version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # 自动版本流水线会先提交新卡池与图标；发布时必须取该提交后的分支最新状态。
+          ref: ${{ inputs.game_version && github.event.repository.default_branch || github.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -52,6 +55,9 @@ jobs:
         run: node scripts/bump-version.mjs ${{ env.VERSION }}
 
       - run: npm ci
+
+      - name: Verify featured item icons before release
+        run: node scripts/validate-gacha-icons.mjs
 
       - uses: dtolnay/rust-toolchain@stable
 

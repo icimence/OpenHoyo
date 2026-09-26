@@ -183,11 +183,9 @@ for (let idx = 0; idx <= activeIdx; idx++) {
       if (isTarget) {
         if (!p.ups || p.ups.length === 0) continue;
         name = p.name;
-        upOrange = p.ups.map((n) => nameToId[n]).filter((id) => id !== undefined);
-        if (upOrange.length === 0) {
-          console.warn(`⚠ 公告「${name}」UP 无法映射 ID: ${p.ups.join(",")}`);
-          continue;
-        }
+        const unmapped = p.ups.filter((n) => nameToId[n] === undefined);
+        if (unmapped.length) throw new Error(`公告「${name}」的 UP 物品缺少名称映射：${unmapped.join("、")}`);
+        upOrange = p.ups.map((n) => nameToId[n]);
         source = "api";
         fromApi++;
       } else {
