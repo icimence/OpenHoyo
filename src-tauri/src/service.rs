@@ -207,8 +207,17 @@ pub async fn initialize_user(state: &AppState, rec: &mut UserRecord, fresh: bool
         rec.avatar = Some(avatar_url);
     }
 
-    // ④ 游戏角色
-    rec.game_roles = user_api::get_game_roles(&state.http, &salts, &state.devices, rec).await?;
+    // ④ 游戏角色：接口不返回游戏内头像，沿用旧记录里已回填的 game_head_icon，
+    //   否则每次刷新凭证都会把头像清空，侧边栏退化为首字母
+    let mut roles = user_api::get_game_roles(&state.http, &salts, &state.devices, rec).await?;
+    for role in &mut roles {
+        if role.avatar.is_empty() {
+            if let Some(old) = rec.game_roles.iter().find(|o| o.game_uid == role.game_uid) {
+                role.avatar = old.avatar.clone();
+            }
+        }
+    }
+    rec.game_roles = roles;
 
     // ⑤ 设备指纹（仅国服；超过 7 天重换）
     if !rec.is_oversea {
@@ -244,6 +253,7 @@ pub async fn startup_resume(state: &AppState, handle: &tauri::AppHandle) {
     for mut rec in records {
         match initialize_user(state, &mut rec, false).await {
             Ok(()) => {
+                fill_missing_role_avatars(state, &mut rec).await;
                 if save(state, &mut rec).is_ok() {
                     any_changed = true;
                 }
@@ -255,6 +265,60 @@ pub async fn startup_resume(state: &AppState, handle: &tauri::AppHandle) {
     }
     if any_changed {
         emit_users_changed(handle);
+    }
+}
+
+/// 游戏内头像（米哈游官方 index 接口 role.game_head_icon）：返回是否拉到新头像。
+/// 失败（含风控 1034）只记 warn，不影响调用方流程。
+pub async fn refresh_role_avatar(state: &AppState, rec: &mut UserRecord, game_uid: &str) -> ApiResult<bool> {
+    let Some(region) = rec
+        .game_roles
+        .iter()
+        .find(|r| r.game_uid == game_uid)
+        .map(|r| r.region.clone())
+    else {
+        return Err(ApiError::retcode(-6, "用户没有该游戏角色"));
+    };
+    let salts = salts(state).await;
+    let index = crate::game_record::fetch_player_info(
+        &state.http,
+        &salts,
+        &state.devices,
+        rec,
+        game_uid,
+        &region,
+        None,
+    )
+    .await?;
+    let Some(head) = crate::game_record::head_icon_of(&index) else {
+        return Ok(false);
+    };
+    let role = rec
+        .game_roles
+        .iter_mut()
+        .find(|r| r.game_uid == game_uid)
+        .expect("角色已在上方确认存在");
+    if role.avatar == head {
+        return Ok(false);
+    }
+    role.avatar = head.to_string();
+    Ok(true)
+}
+
+/// 启动时为尚无头像的角色补拉一次游戏内头像（已有的不重复请求）
+async fn fill_missing_role_avatars(state: &AppState, rec: &mut UserRecord) {
+    let missing: Vec<String> = rec
+        .game_roles
+        .iter()
+        .filter(|r| r.avatar.is_empty())
+        .map(|r| r.game_uid.clone())
+        .collect();
+    for uid in missing {
+        match refresh_role_avatar(state, rec, &uid).await {
+            Ok(true) => log::info!("[user] 已补拉游戏内头像"),
+            Ok(false) => {}
+            Err(e) => log::warn!("[user] 游戏内头像补拉失败: retcode={} {}", e.code, e.message),
+        }
     }
 }
 

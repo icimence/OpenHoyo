@@ -55,12 +55,25 @@ export type CaptchaLoginDto =
 export interface AvatarPropertyDto {
   index: PlayerIndexData;
   list: { list: CharacterListItem[] };
-  detail: { list: DetailedCharacter[] };
+  detail: {
+    list: DetailedCharacter[];
+    /** 属性类型 → 官方名称与图标（act-webstatic） */
+    property_map?: Record<string, { name: string; icon: string; property_type: number }>;
+  };
+}
+
+/** character/detail 的面板属性：base 为白字，add 为绿字，final 为合计 */
+export interface PanelProperty {
+  property_type: number;
+  base: string;
+  add: string;
+  final: string;
 }
 
 export interface PlayerIndexData {
   stats?: Record<string, number>;
   avatars: IndexAvatar[];
+  role?: { nickname?: string; level?: number; game_head_icon?: string };
 }
 
 export interface IndexAvatar {
@@ -94,13 +107,33 @@ export interface CharacterListItem {
 
 export interface DetailedCharacter {
   base: CharacterListItem;
-  weapon: { id: number; type: number; rarity: number; level: number; affix_level: number; name?: string; icon?: string; promote_level?: number };
+  weapon: {
+    id: number;
+    type: number;
+    rarity: number;
+    level: number;
+    affix_level: number;
+    name?: string;
+    icon?: string;
+    desc?: string;
+    promote_level?: number;
+    main_property?: PanelProperty;
+    sub_property?: PanelProperty | null;
+  };
   relics: Reliquary[];
   constellations: { id: number; name: string; icon: string; effect: string; is_actived: boolean; pos: number }[];
   costumes?: { id: number; icon?: string }[];
-  selected_properties: { property_type: number; val: string; base?: string }[];
-  base_properties?: { property_type: number; val: string }[];
+  selected_properties: PanelProperty[];
+  base_properties?: PanelProperty[];
   skills: CharacterSkill[];
+  recommend_relic_property?: {
+    recommend_properties?: {
+      sand_main_property_list?: number[];
+      goblet_main_property_list?: number[];
+      circlet_main_property_list?: number[];
+      sub_property_list?: number[];
+    };
+  };
 }
 
 /** 技能：skill_type=1 战斗天赋（普攻/E/Q），=2 固有天赋；图标为完整 URL */
@@ -129,7 +162,10 @@ export interface Reliquary {
 
 export interface ReliquaryProperty {
   property_type: number;
-  val: string;
+  /** 带单位的字符串（如 "5.8%" / "311"） */
+  value: string;
+  /** 强化命中次数（显示为 times + 1） */
+  times: number;
 }
 
 /** 后端 ApiError 的序列化结构 */
@@ -179,6 +215,10 @@ export const api = {
   removeUser: (id: number) => invoke<void>("remove_user", { id }),
 
   refreshCookieToken: (id: number) => invoke<UserDto>("refresh_cookie_token", { id }),
+
+  /** 重新拉取角色的游戏内头像（官方 index 接口 role.game_head_icon） */
+  refreshRoleAvatar: (userId: number, gameUid: string) =>
+    invoke<UserDto>("refresh_role_avatar", { userId, gameUid }),
 
   exportUserCookies: (id: number) => invoke<string>("export_user_cookies", { id }),
 
@@ -240,7 +280,66 @@ export const api = {
 
   /** 指定版本的更新说明 markdown（OSS 主源，GitHub 兜底） */
   updateNotes: (version: string) => invoke<string>("update_notes", { version }),
+
+  // ---- 图像资源 / 数据文件夹 / 首次启动引导 ----
+
+  staticStatus: () => invoke<StaticStatus>("static_res_status"),
+
+  /** 后台下载任务快照（标题栏「后台任务」） */
+  staticActivity: () =>
+    invoke<{ downloading: boolean; items: (GroupProgress & { name: string })[] }>("static_res_activity"),
+
+  staticSetEnabled: (enabled: boolean) => invoke<void>("static_res_set_enabled", { enabled }),
+
+  /** 下载资源组，进度经 static://progress 事件推送 */
+  staticDownload: (groups: string[]) => invoke<GroupProgress[]>("static_res_download", { groups }),
+
+  staticCancel: () => invoke<void>("static_res_cancel"),
+
+  staticClear: () => invoke<void>("static_res_clear"),
+
+  guideSetStep: (step: number) => invoke<void>("guide_set_step", { step }),
+
+  dataFolderCheck: (path: string) => invoke<{ has_existing_data: boolean }>("data_folder_check", { path }),
+
+  dataFolderSet: (path: string) => invoke<void>("data_folder_set", { path }),
+
+  dataFolderOpen: () => invoke<void>("data_folder_open"),
 };
+
+export interface StaticGroupStatus {
+  key: string;
+  name: string;
+  description: string;
+  /** 上次完整下载时间（unix 毫秒），0 为从未完成 */
+  fulfilled_at: number;
+}
+
+export interface StaticStatus {
+  data_dir: string;
+  default_dir: string;
+  is_default_dir: boolean;
+  /** 用户是否同意把官方图片缓存到本地 */
+  enabled: boolean;
+  /** 首次启动引导进度（4 = 已完成） */
+  guide_step: number;
+  cache_files: number;
+  cache_bytes: number;
+  downloading: boolean;
+  groups: StaticGroupStatus[];
+}
+
+export interface GroupProgress {
+  key: string;
+  done: number;
+  total: number;
+  failed: number;
+  bytes: number;
+  state: "pending" | "running" | "done" | "failed" | "cancelled";
+  message: string;
+}
+
+export const GUIDE_COMPLETED = 4;
 
 /** feedback_submit 命令的返回（后端 serde rename_all = camelCase） */
 export interface FeedbackResult {

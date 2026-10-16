@@ -1,11 +1,23 @@
-// 我的角色（1:1 复刻原版 AvatarPropertyPage：卡片墙/列表详情双布局、排序、筛选、导出）
+// 我的角色（复刻原版 AvatarPropertyPage：CommandBar 卡片 + 列表/网格双布局、排序、Token 筛选、导出；
+// 列表布局右侧为角色详情：名片大卡 / 角色属性 Expander / 推荐主属性 / 圣遗物评分）。
 // 数据：index + character/list + character/detail 三接口前端组装；
-// 图标：index 原生 URL 优先，名字型 icon（UI_XXX）走 enka 镜像。
+// 图片只使用接口返回的米哈游官方 URL（act-webstatic），不经任何第三方镜像。
 import "./avatarproperty.css";
-import { api, type AvatarPropertyDto, type DetailedCharacter, type IndexAvatar, type Reliquary, type UserDto } from "./api";
+import {
+  api,
+  type AvatarPropertyDto,
+  type CharacterListItem,
+  type DetailedCharacter,
+  type PanelProperty,
+  type Reliquary,
+  type UserDto,
+} from "./api";
+import { closeFlyout, openFlyout, openMenuFlyout } from "./flyout";
+import { img } from "./img";
 import { currentRoleOf } from "./role";
+import { bindSelect, selectTrigger } from "./select";
+import { closeDialog, openDialog, toast } from "./ui";
 import { fetchWithVerification, isRiskError } from "./verify";
-import { toast } from "./ui";
 
 function esc(s: string): string {
   const d = document.createElement("div");
@@ -14,620 +26,1012 @@ function esc(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// 常量映射（FightProperty / 元素 / 武器类型，对应原版 Model.Intrinsic）
+// 常量（对应原版 Model.Intrinsic：FightProperty / ElementType / WeaponType / QualityType）
 // ---------------------------------------------------------------------------
 
+/** property_map 缺失时的兜底名称 */
 const FIGHT_PROP_NAMES: Record<number, string> = {
-  2: "生命值", 3: "生命值", 5: "攻击力", 6: "攻击力", 8: "防御力", 9: "防御力",
-  20: "暴击率", 22: "暴击伤害", 23: "元素充能效率", 26: "治疗加成", 28: "元素精通",
-  30: "物理伤害加成", 40: "火元素伤害加成", 41: "雷元素伤害加成", 42: "水元素伤害加成",
-  43: "草元素伤害加成", 44: "风元素伤害加成", 45: "岩元素伤害加成", 46: "冰元素伤害加成",
-  2000: "最大生命值", 2001: "当前攻击力", 2002: "当前防御力",
-  3002: "暴击率", 3004: "暴击伤害", 3005: "元素充能效率", 3008: "元素精通",
+  1: "基础生命值", 2: "生命值", 3: "生命值", 4: "基础攻击力", 5: "攻击力", 6: "攻击力",
+  7: "基础防御力", 8: "防御力", 9: "防御力", 20: "暴击率", 22: "暴击伤害", 23: "元素充能效率",
+  26: "治疗加成", 27: "受治疗加成", 28: "元素精通", 29: "物理抗性", 30: "物理伤害加成",
+  40: "火元素伤害加成", 41: "雷元素伤害加成", 42: "水元素伤害加成", 43: "草元素伤害加成",
+  44: "风元素伤害加成", 45: "岩元素伤害加成", 46: "冰元素伤害加成",
+  50: "火元素抗性", 51: "雷元素抗性", 52: "水元素抗性", 53: "草元素抗性",
+  54: "风元素抗性", 55: "岩元素抗性", 56: "冰元素抗性",
+  80: "冷却缩减", 81: "护盾强效", 2000: "生命值上限", 2001: "攻击力", 2002: "防御力",
 };
 
-/** 百分比展示的词条 */
-const PERCENT_PROPS = new Set([3, 6, 9, 20, 22, 23, 26, 30, 40, 41, 42, 43, 44, 45, 46, 3002, 3004, 3005]);
+/** 游戏内面板顺序（对应 InGameFightPropertyComparer），未列出的按数值排在后面 */
+const IN_GAME_ORDER: Record<number, number> = {
+  2000: 1, 2001: 2, 2002: 3, 28: 4, 20: 6, 22: 7, 26: 8, 27: 9, 23: 10, 80: 11, 81: 12,
+  40: 13, 50: 14, 42: 15, 52: 16, 43: 17, 53: 18, 41: 19, 51: 20, 44: 21, 54: 22,
+  46: 23, 56: 24, 45: 25, 55: 26, 30: 27, 29: 28,
+};
 
-const ELEMENTS: { key: string; label: string; color: string }[] = [
-  { key: "Pyro", label: "火", color: "#ef7938" },
-  { key: "Hydro", label: "水", color: "#4cc2f1" },
-  { key: "Anemo", label: "风", color: "#73daca" },
-  { key: "Electro", label: "雷", color: "#af8ec1" },
-  { key: "Dendro", label: "草", color: "#a5c83b" },
-  { key: "Cryo", label: "冰", color: "#9fd6e3" },
-  { key: "Geo", label: "岩", color: "#ffb628" },
-];
+/** 接口元素 → 中文名 / ElementType 数值（排序用） / 筛选点颜色 */
+const ELEMENTS: Record<string, { label: string; order: number; color: string }> = {
+  Pyro: { label: "火", order: 1, color: "#ef7938" },
+  Hydro: { label: "水", order: 2, color: "#4cc2f1" },
+  Dendro: { label: "草", order: 3, color: "#a5c83b" },
+  Electro: { label: "雷", order: 4, color: "#af8ec1" },
+  Cryo: { label: "冰", order: 5, color: "#9fd6e3" },
+  Anemo: { label: "风", order: 7, color: "#73daca" },
+  Geo: { label: "岩", order: 8, color: "#ffb628" },
+};
 
-/** 武器类型（对应原版 WeaponType 枚举数值） */
-const WEAPON_TYPES: { key: number; label: string }[] = [
-  { key: 1, label: "单手剑" },
-  { key: 10, label: "法器" },
-  { key: 11, label: "双手剑" },
-  { key: 12, label: "弓" },
-  { key: 13, label: "长柄武器" },
-];
+const WEAPON_TYPES: Record<number, string> = { 1: "单手剑", 10: "法器", 11: "双手剑", 12: "弓", 13: "长柄武器" };
 
-/** 等级 → 突破阶段（角色突破星；武器 API 直接给 promote_level） */
-function promoteOfLevel(level: string | number): number {
-  const lv = typeof level === "number" ? level : Number.parseInt(String(level), 10) || 0;
-  if (lv > 80) return 6;
-  if (lv > 70) return 5;
-  if (lv > 60) return 4;
-  if (lv > 50) return 3;
-  if (lv > 40) return 2;
-  if (lv > 20) return 1;
-  return 0;
-}
+const QUALITY_NAMES: Record<number, string> = { 5: "五星", 4: "四星" };
 
-/** UI_XXX 名字型图标 → enka 镜像；http 开头原样返回 */
-function iconUrl(icon?: string): string {
-  if (!icon) {
-    return "";
-  }
-  return icon.startsWith("http") ? icon : `https://enka.network/ui/${icon}.png`;
-}
+/** 珊瑚宫心海：双爆不强制视为有效（对应 AvatarIds.IsCritEffective） */
+const KOKOMI_ID = 10000054;
+const TARTAGLIA_ID = 10000033;
 
-function propValue(type: number, val: string): string {
-  const n = Number.parseFloat(val) || 0;
-  if (PERCENT_PROPS.has(type)) {
-    return `${n.toFixed(1)}%`;
-  }
-  return n.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
-}
+/** 圣遗物部位 emoji（对应 AvatarViewTextTemplating.ReliquaryEmoji） */
+const RELIC_EMOJI: Record<number, string> = { 1: "🌷", 2: "🪶", 3: "⏳", 4: "🍷", 5: "👑" };
 
 // ---------------------------------------------------------------------------
-// 视图模型（对应原版 AvatarView：三接口按 id 合并）
+// 视图模型（对应原版 AvatarView / WeaponView / SkillView / ReliquaryView）
 // ---------------------------------------------------------------------------
+
+interface NameValue {
+  name: string;
+  value: string;
+}
+
+interface SkillView {
+  name: string;
+  icon: string;
+  description: string;
+  /** "Lv. 13 (10 +3)" 形式（对应 LevelFormat.Format(value, extra)） */
+  level: string;
+  levelNumber: number;
+  parameters: NameValue[];
+}
+
+interface ConstellationView {
+  name: string;
+  icon: string;
+  description: string;
+  activated: boolean;
+}
+
+interface PropertyView {
+  type: number;
+  name: string;
+  icon: string;
+  value: string;
+  add: string;
+}
+
+interface ReliquaryView {
+  name: string;
+  icon: string;
+  quality: number;
+  pos: number;
+  setName: string;
+  level: string;
+  main: NameValue;
+  subs: { name: string; value: string; enhanced: number }[];
+  score: number;
+}
+
+interface WeaponView {
+  name: string;
+  icon: string;
+  quality: number;
+  levelNumber: number;
+  affix: number;
+  promote: boolean[];
+  main: NameValue | null;
+  sub: NameValue | null;
+  description: string;
+  type: number;
+}
 
 interface AvatarView {
   id: number;
   name: string;
   element: string;
-  elementLabel: string;
-  weaponType: number;
-  weaponTypeLabel: string;
   quality: number;
-  level: number;
+  levelNumber: number;
   fetter: number;
   constellationCount: number;
-  promoteArray: boolean[];
+  promote: boolean[];
   icon: string;
   sideIcon: string;
-  nameCard: string;
-  weapon: { icon: string; name: string; quality: number; level: number; affix: number; promote: number };
-  skills: { name: string; icon: string; level: number }[];
-  constellations: { icon: string; effect: string; name: string; activated: boolean }[];
-  properties: { type: number; name: string; value: string; add: string }[];
-  reliquaries: Reliquary[];
-  // 排序用属性值
+  /** 名片位背景：接口无名片图，使用官方立绘 */
+  background: string;
+  weapon: WeaponView;
+  skills: SkillView[];
+  constellations: ConstellationView[];
+  properties: PropertyView[];
+  reliquaries: ReliquaryView[];
+  score: number;
+  recommended: { sand: string[]; goblet: string[]; circlet: string[]; sub: string[] };
   maxHp: number;
-  curAtk: number;
-  curDef: number;
-  em: number;
+  curAttack: number;
+  curDefense: number;
+  elementMastery: number;
 }
 
-/** 战斗天赋按 API 顺序：普攻/元素战技/元素爆发 */
-const SKILL_LABELS: Record<number, string> = { 1: "A", 2: "E", 3: "Q" };
+/** 只接受官方接口给的完整 URL（名字型 UI_xxx 等一律不展示），并走本地图像缓存 */
+const officialUrl = img;
+
+function num(s: string | number | undefined): number {
+  if (typeof s === "number") {
+    return s;
+  }
+  return Number.parseFloat(String(s ?? "").replace(/[%,]/g, "")) || 0;
+}
+
+/** 等级 → 突破阶段（接口不返回角色突破等级，按等级上限推断） */
+function promoteOfLevel(level: number): number {
+  if (level > 80) return 6;
+  if (level > 70) return 5;
+  if (level > 60) return 4;
+  if (level > 50) return 3;
+  if (level > 40) return 2;
+  if (level > 20) return 1;
+  return 0;
+}
+
+/** 米哈游富文本：<color=#RRGGBBAA>、{LINK#..}..{/LINK}、字面量 \n → HTML */
+function richText(raw: string): string {
+  const text = raw.replace(/\\n/g, "\n").replace(/\{LINK#[^}]*\}|\{\/LINK\}/g, "");
+  let html = "";
+  let last = 0;
+  const re = /<color=(#[0-9A-Fa-f]{6,8})>([\s\S]*?)<\/color>/g;
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    html += esc(text.slice(last, m.index));
+    html += `<span class="rt-color" style="color:${m[1]}">${esc(m[2])}</span>`;
+    last = m.index + m[0].length;
+  }
+  html += esc(text.slice(last));
+  return html.replace(/\n/g, "<br>");
+}
+
+function plainText(raw: string): string {
+  return raw.replace(/\\n/g, "\n").replace(/<[^>]+>|\{LINK#[^}]*\}|\{\/LINK\}/g, "");
+}
+
+// ---- 圣遗物评分（对应 ReliquaryScoreCalculator；接口无特殊能量类型，按常规角色处理）----
+
+function scoreStat(type: number, value: number, weight: number): number {
+  switch (type) {
+    case 20: return value * 2.0 * weight;
+    case 22: return value * 1.0 * weight;
+    case 28: return value * 0.33 * weight;
+    case 23: return value * 1.1979 * weight;
+    case 3: return value * 1.33 * weight;
+    case 6: return value * 1.33 * weight;
+    case 9: return value * 1.06 * weight;
+    case 5: return value * 0.398 * 0.5 * weight;
+    case 2: return value * 0.026 * 0.66 * weight;
+    case 8: return value * 0.335 * 0.66 * weight;
+    default: return 0;
+  }
+}
+
+function relicScore(subs: { property_type: number; value: string }[], recommended: number[], isCritEffective: boolean): number {
+  const hasCritHurt = isCritEffective || recommended.includes(22);
+  let total = 0;
+  for (const s of subs) {
+    const type = s.property_type;
+    let weight: number;
+    if (isCritEffective && (type === 20 || type === 22)) {
+      weight = 1;
+    } else if (type === 23 && !recommended.includes(23)) {
+      weight = hasCritHurt ? 0.2 : 1;
+    } else if (!recommended.includes(type)) {
+      weight = 0;
+    } else {
+      weight = type === 2 || type === 5 || type === 8 ? 0.5 : 1;
+    }
+    if (weight > 0) {
+      total += scoreStat(type, num(s.value), weight);
+    }
+  }
+  return total;
+}
+
+/** 渐变色（对应 Int32ToGradientColorConverter / UInt32ToGradientColorConverter） */
+function gradient(value: number, min: number, max: number, from: string, to: string): string {
+  const t = (Math.min(Math.max(value, min), max) - min) / (max - min);
+  const a = from.match(/\w\w/g)!.map((h) => Number.parseInt(h, 16));
+  const b = to.match(/\w\w/g)!.map((h) => Number.parseInt(h, 16));
+  return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(",")})`;
+}
+
+const scoreColor = (s: number, max: number): string => gradient(Math.round(s), 0, max, "9E9E9E", "FF8F00");
+const enhancedColor = (count: number): string =>
+  document.documentElement.dataset.theme === "light" ? gradient(count, 1, 6, "4B00D9", "FD0093") : gradient(count, 1, 6, "9F69FF", "FF69BF");
+
+const fmtScore = (s: number): string => `${s.toFixed(1)} 分`;
+
+/** 命座/固有天赋带来的技能等级提升（对应 ProcessConstellations 的 ExtraLevel） */
+function extraLevels(detail: DetailedCharacter, combatSkills: { name: string }[]): Map<number, number> {
+  const extras = new Map<number, number>();
+  for (const c of detail.constellations ?? []) {
+    if (!c.is_actived) {
+      continue;
+    }
+    const m = /(.+?)的技能等级提升(\d+)级/.exec(plainText(c.effect));
+    if (m) {
+      const idx = combatSkills.findIndex((s) => m[1].endsWith(s.name));
+      if (idx >= 0) {
+        extras.set(idx, (extras.get(idx) ?? 0) + Number(m[2]));
+      }
+    }
+  }
+  // 达达利亚固有天赋「诸武精通」：普通攻击等级 +1（原版按固有天赋 GroupId 3323 判定）
+  if (detail.base.id === TARTAGLIA_ID) {
+    extras.set(0, (extras.get(0) ?? 0) + 1);
+  }
+  return extras;
+}
 
 function buildAvatarViews(dto: AvatarPropertyDto): AvatarView[] {
-  const indexById = new Map<number, IndexAvatar>();
-  for (const a of dto.index?.avatars ?? []) {
-    indexById.set(a.id, a);
-  }
+  const propMap = dto.detail?.property_map ?? {};
+  const propName = (t: number): string => propMap[t]?.name ?? FIGHT_PROP_NAMES[t] ?? `属性${t}`;
+  const filterName = (t: number): string => (propMap[t] as { filter_name?: string } | undefined)?.filter_name ?? propName(t);
+  const propIcon = (t: number): string => officialUrl(propMap[t]?.icon);
+
   const detailById = new Map<number, DetailedCharacter>();
   for (const d of dto.detail?.list ?? []) {
     detailById.set(d.base.id, d);
   }
 
-  return (dto.list?.list ?? []).map((c): AvatarView => {
-    const idx = indexById.get(c.id);
+  const views: AvatarView[] = [];
+  for (const c of dto.list?.list ?? []) {
     const detail = detailById.get(c.id);
-    const lv = typeof c.level === "number" ? c.level : Number.parseInt(c.level, 10) || 0;
-    const promote = promoteOfLevel(c.level);
-    const element = ELEMENTS.find((e) => e.key === (c.element ?? idx?.element));
-    const wt = WEAPON_TYPES.find((w) => w.key === (c.weapon?.type ?? 0));
+    if (!detail) {
+      continue;
+    }
+    views.push(buildOne(c, detail));
+  }
+  return views;
 
-    const selected = new Map<number, number>();
-    for (const p of detail?.selected_properties ?? []) {
-      selected.set(p.property_type, Number.parseFloat(p.val) || 0);
-    }
-    const base = new Map<number, number>();
-    for (const p of detail?.base_properties ?? []) {
-      base.set(p.property_type, Number.parseFloat(p.val) || 0);
-    }
-    const properties = (detail?.selected_properties ?? []).map((p) => {
-      const name = FIGHT_PROP_NAMES[p.property_type] ?? `属性${p.property_type}`;
-      const total = Number.parseFloat(p.val) || 0;
-      const baseVal = base.get(p.property_type);
-      // 绿字加值：总值 - 基础值（面板 2000 系才有意义）
-      const add = baseVal !== undefined && total > baseVal ? total - baseVal : 0;
+  function buildOne(c: CharacterListItem, detail: DetailedCharacter): AvatarView {
+    const level = num(c.level);
+    const isCritEffective = c.id !== KOKOMI_ID;
+    const rec = detail.recommend_relic_property?.recommend_properties ?? {};
+    const recommendedSubs = rec.sub_property_list ?? [];
+
+    // 战斗天赋：skill_type=1 且不是替代冲刺（对应 CompositeSkillsNoInherents）
+    const combat = (detail.skills ?? []).filter((s) => s.skill_type === 1 && !plainText(s.desc).startsWith("替代冲刺"));
+    const extras = extraLevels(detail, combat);
+    const skills: SkillView[] = combat.map((s, i) => {
+      const extra = extras.get(i) ?? 0;
+      const base = s.level - extra;
       return {
-        type: p.property_type,
-        name,
-        value: propValue(p.property_type, p.val),
-        add: add > 0 ? `+${propValue(p.property_type, String(add))}` : "",
+        name: s.name,
+        icon: officialUrl(s.icon),
+        description: s.desc,
+        level: extra > 0 ? `Lv. ${s.level} (${base} +${extra})` : `Lv. ${s.level}`,
+        levelNumber: base,
+        parameters: (s.skill_affix_list ?? []).map((a) => ({ name: a.name, value: a.value })),
       };
     });
+
+    const properties: PropertyView[] = [...(detail.selected_properties ?? [])]
+      .sort((a, b) => (IN_GAME_ORDER[a.property_type] ?? 100 + a.property_type) - (IN_GAME_ORDER[b.property_type] ?? 100 + b.property_type))
+      .map((p) => ({
+        type: p.property_type,
+        name: propName(p.property_type),
+        icon: propIcon(p.property_type),
+        value: p.base,
+        add: p.add ?? "",
+      }));
+    const finalOf = (t: number): number => num(detail.selected_properties?.find((p) => p.property_type === t)?.final);
+
+    const reliquaries: ReliquaryView[] = [...(detail.relics ?? [])]
+      .sort((a, b) => a.pos - b.pos)
+      .map((r: Reliquary) => ({
+        name: r.name,
+        icon: officialUrl(r.icon),
+        quality: r.rarity,
+        pos: r.pos,
+        setName: r.set?.name ?? "",
+        level: `+${r.level}`,
+        main: { name: propName(r.main_property.property_type), value: r.main_property.value },
+        subs: r.sub_property_list.map((s) => ({ name: propName(s.property_type), value: s.value, enhanced: (s.times ?? 0) + 1 })),
+        score: relicScore(r.sub_property_list, recommendedSubs, isCritEffective),
+      }));
+
+    const w = detail.weapon;
+    const weaponPromoteMax = w.rarity >= 3 ? 6 : 4;
+    const toNv = (p: PanelProperty | null | undefined): NameValue | null => (p && p.final ? { name: propName(p.property_type), value: p.final } : null);
+    const weapon: WeaponView = {
+      name: w.name ?? c.weapon?.name ?? "",
+      icon: officialUrl(w.icon ?? c.weapon?.icon),
+      quality: w.rarity,
+      levelNumber: num(w.level),
+      affix: w.affix_level,
+      promote: Array.from({ length: weaponPromoteMax }, (_, i) => i < (w.promote_level ?? promoteOfLevel(num(w.level)))),
+      main: toNv(w.main_property),
+      sub: toNv(w.sub_property),
+      description: w.desc ?? "",
+      type: w.type ?? c.weapon?.type ?? 0,
+    };
 
     return {
       id: c.id,
       name: c.name,
-      element: c.element ?? idx?.element ?? "",
-      elementLabel: element?.label ?? "?",
-      weaponType: c.weapon?.type ?? 0,
-      weaponTypeLabel: wt?.label ?? "?",
+      element: c.element,
       quality: c.rarity,
-      level: lv,
+      levelNumber: level,
       fetter: c.fetter,
       constellationCount: c.actived_constellation_num,
-      promoteArray: Array.from({ length: 6 }, (_, i) => i < promote),
-      icon: iconUrl(c.image ?? idx?.image ?? c.icon ?? ""),
-      sideIcon: iconUrl(idx?.side_icon),
-      nameCard: idx?.card_image ?? "",
-      weapon: {
-        icon: iconUrl(detail?.weapon?.icon ?? c.weapon?.icon),
-        name: detail?.weapon?.name ?? c.weapon?.name ?? "",
-        quality: detail?.weapon?.rarity ?? c.weapon?.rarity ?? 5,
-        level: typeof (detail?.weapon?.level ?? c.weapon?.level) === "number" ? (detail?.weapon?.level ?? c.weapon?.level ?? 0) : Number.parseInt(String(detail?.weapon?.level ?? c.weapon?.level ?? "0"), 10) || 0,
-        affix: detail?.weapon?.affix_level ?? c.weapon?.affix_level ?? 0,
-        promote: detail?.weapon?.promote_level ?? promoteOfLevel(String(detail?.weapon?.level ?? c.weapon?.level ?? 0)),
-      },
-      skills: (detail?.skills ?? []).filter((s) => s.skill_type === 1).map((s) => ({ name: s.name, icon: s.icon, level: s.level })),
-      constellations: (detail?.constellations ?? []).map((k) => ({
-        icon: iconUrl(k.icon),
-        effect: k.effect,
-        name: k.name,
-        activated: k.is_actived,
-      })),
+      promote: Array.from({ length: 6 }, (_, i) => i < promoteOfLevel(level)),
+      icon: officialUrl(c.icon),
+      sideIcon: officialUrl(c.side_icon),
+      background: officialUrl(c.image),
+      weapon,
+      skills,
+      constellations: (detail.constellations ?? [])
+        .slice()
+        .sort((a, b) => a.pos - b.pos)
+        .map((k) => ({ name: k.name, icon: officialUrl(k.icon), description: k.effect, activated: k.is_actived })),
       properties,
-      reliquaries: [...(detail?.relics ?? [])].sort((a, b) => a.pos - b.pos),
-      maxHp: selected.get(2000) ?? 0,
-      curAtk: selected.get(2001) ?? 0,
-      curDef: selected.get(2002) ?? 0,
-      em: selected.get(28) ?? 0,
+      reliquaries,
+      score: reliquaries.reduce((s, r) => s + r.score, 0),
+      recommended: {
+        sand: (rec.sand_main_property_list ?? []).map(filterName),
+        goblet: (rec.goblet_main_property_list ?? []).map(filterName),
+        circlet: (rec.circlet_main_property_list ?? []).map(filterName),
+        sub: recommendedSubs.map(filterName),
+      },
+      maxHp: finalOf(2000),
+      curAttack: finalOf(2001),
+      curDefense: finalOf(2002),
+      elementMastery: finalOf(28),
     };
-  });
+  }
 }
 
 // ---------------------------------------------------------------------------
-// 页面
+// 排序 / 筛选（对应 AvatarPropertySortDescriptions / AvatarViewFilter）
 // ---------------------------------------------------------------------------
 
-type SortKind = "default" | "level" | "quality" | "constellation" | "fetter" | "hp" | "atk" | "def" | "em";
+type SortKind = "Default" | "LevelNumber" | "Quality" | "ActivatedConstellationCount" | "FetterLevel" | "MaxHp" | "CurAttack" | "CurDefense" | "ElementMastery";
 
 const SORTS: { key: SortKind; label: string }[] = [
-  { key: "default", label: "默认" },
-  { key: "level", label: "等级" },
-  { key: "quality", label: "品质" },
-  { key: "constellation", label: "命座" },
-  { key: "fetter", label: "好感" },
-  { key: "hp", label: "生命值" },
-  { key: "atk", label: "攻击力" },
-  { key: "def", label: "防御力" },
-  { key: "em", label: "元素精通" },
+  { key: "Default", label: "默认顺序" },
+  { key: "LevelNumber", label: "等级顺序" },
+  { key: "Quality", label: "品质顺序" },
+  { key: "ActivatedConstellationCount", label: "命之座解锁层数顺序" },
+  { key: "FetterLevel", label: "好感度顺序" },
+  { key: "MaxHp", label: "生命值上限顺序" },
+  { key: "CurAttack", label: "攻击力顺序" },
+  { key: "CurDefense", label: "防御力顺序" },
+  { key: "ElementMastery", label: "元素精通顺序" },
 ];
 
+const SORT_OPTIONS = SORTS.map((s) => ({ value: s.key, label: s.label }));
+
+type SortField = (v: AvatarView) => number;
+const F = {
+  level: (v: AvatarView) => v.levelNumber,
+  quality: (v: AvatarView) => v.quality,
+  element: (v: AvatarView) => ELEMENTS[v.element]?.order ?? 0,
+  id: (v: AvatarView) => v.id,
+} satisfies Record<string, SortField>;
+
+const SORT_FIELDS: Record<SortKind, SortField[]> = {
+  Default: [],
+  LevelNumber: [F.level, F.quality, F.element, F.id],
+  Quality: [F.quality, F.level, F.element, F.id],
+  ActivatedConstellationCount: [(v) => v.constellationCount, F.level, F.quality, F.element, F.id],
+  FetterLevel: [(v) => v.fetter, F.level, F.quality, F.element, F.id],
+  MaxHp: [(v) => v.maxHp, F.level, F.quality, F.element, F.id],
+  CurAttack: [(v) => v.curAttack, F.level, F.quality, F.element, F.id],
+  CurDefense: [(v) => v.curDefense, F.level, F.quality, F.element, F.id],
+  ElementMastery: [(v) => v.elementMastery, F.level, F.quality, F.element, F.id],
+};
+
+type TokenKind = "element" | "quality" | "weapon" | "none";
+
+interface SearchToken {
+  kind: TokenKind;
+  value: string;
+  color?: string;
+}
+
+const AVAILABLE_TOKENS: SearchToken[] = [
+  ...Object.values(ELEMENTS).map((e) => ({ kind: "element" as const, value: e.label, color: e.color })),
+  { kind: "quality", value: "五星", color: "#bc6932" },
+  { kind: "quality", value: "四星", color: "#a256e1" },
+  ...Object.values(WEAPON_TYPES).map((w) => ({ kind: "weapon" as const, value: w })),
+];
+
+const MAX_TOKENS = 5;
+
+function matchesTokens(v: AvatarView, tokens: SearchToken[]): boolean {
+  if (tokens.length === 0) {
+    return true;
+  }
+  const groups = new Map<TokenKind, string[]>();
+  for (const t of tokens) {
+    groups.set(t.kind, [...(groups.get(t.kind) ?? []), t.value]);
+  }
+  for (const [kind, values] of groups) {
+    const ok =
+      kind === "element" ? values.includes(ELEMENTS[v.element]?.label ?? "")
+      : kind === "quality" ? values.includes(QUALITY_NAMES[v.quality] ?? "")
+      : kind === "weapon" ? values.includes(WEAPON_TYPES[v.weapon.type] ?? "")
+      : values.some((s) => v.name.toLowerCase().includes(s.toLowerCase()));
+    if (!ok) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// 页面状态
+// ---------------------------------------------------------------------------
+
+const SORT_KEY = "hoyo-avatar-property-sort";
+const LAYOUT_KEY = "hoyo-avatar-property-layout";
+
+/** 视图缓存按 用户:角色 区分，切换角色不会串数据 */
+let viewsKey = "";
 let views: AvatarView[] = [];
-let currentIdx = -1;
-let layout: "grid" | "list" = "grid";
-let sortKind: SortKind = "default";
-const filterElements = new Set<string>();
-const filterWeapons = new Set<number>();
-let refreshing = false;
-/** 当前渲染页面对应的用户（refresh 复用） */
-let currentUserRef: UserDto | undefined;
-/** 缓存/刷新的上次更新时间（unix 毫秒） */
+let currentId: number | null = null;
 let lastUpdated = 0;
+let refreshing = false;
+let tokens: SearchToken[] = [];
+let sortKind: SortKind = (localStorage.getItem(SORT_KEY) as SortKind | null) ?? "Default";
+let layout: "List" | "Grid" = localStorage.getItem(LAYOUT_KEY) === "Grid" ? "Grid" : "List";
 
-function syncUpdatedLabel(): void {
-  const el = document.getElementById("ap-updated");
-  if (el) {
-    el.textContent = lastUpdated > 0 ? `上次更新 ${new Date(lastUpdated).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}` : "";
-  }
-}
-
-export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | undefined): void {
-  if (!user || user.game_roles.length === 0) {
-    content.innerHTML = `<div class="page-header"><h2>我的角色</h2><p>角色练度总览</p></div>
-      <div class="placeholder-page"><div class="placeholder-card"><svg><use href="#i-unimplemented"/></svg>
-      <div class="title">尚未登录</div><div class="desc">登录后可查看角色练度</div></div></div>`;
-    return;
-  }
-  const role = currentRoleOf(user);
-  if (!role) {
-    refreshing = false;
-    return;
-  }
-  currentUserRef = user;
-
-  content.innerHTML = `
-    <div class="page-header"><h2>我的角色</h2><p>角色练度总览（数据来自米游社游戏记录）</p></div>
-    <div class="ap-shell" id="ap-root">
-      <div class="ap-empty" id="ap-empty">
-        <div class="ap-empty-card">
-          <div class="ap-empty-emoji">📮</div>
-          <div class="ap-empty-title">还没有角色数据</div>
-          <button class="primary" id="ap-empty-refresh"><svg><use href="#i-refresh"/></svg>从米游社刷新</button>
-        </div>
-      </div>
-      <div class="ap-main hidden" id="ap-main">
-        <div class="ap-toolbar">
-          <div class="ap-toolbar-left">
-            <button class="ap-layout-btn active" id="ap-layout-grid" title="网格视图"><svg><use href="#i-setting"/></svg></button>
-            <button class="ap-layout-btn" id="ap-layout-list" title="列表视图"><svg><use href="#i-gacha"/></svg></button>
-            <select id="ap-sort" class="ap-sort">${SORTS.map((s) => `<option value="${s.key}">${s.label}</option>`).join("")}</select>
-            <button id="ap-export" class="ap-export" title="导出练度统计到剪贴板">导出文本</button>
-          </div>
-          <div class="ap-filters" id="ap-filters">
-            ${ELEMENTS.map((e) => `<button class="ap-filter-chip" data-element="${e.key}" title="${e.label}元素"><span class="dot" style="background:${e.color}"></span>${e.label}</button>`).join("")}
-            <span class="ap-filter-sep"></span>
-            ${WEAPON_TYPES.map((w) => `<button class="ap-filter-chip" data-weapon="${w.key}">${w.label}</button>`).join("")}
-          </div>
-          <span class="ap-updated" id="ap-updated"></span>
-          <button class="primary" id="ap-refresh"><svg><use href="#i-refresh"/></svg>刷新数据</button>
-        </div>
-        <div class="ap-body" id="ap-body"></div>
-      </div>
-    </div>`;
-
-  document.getElementById("ap-empty-refresh")?.addEventListener("click", () => void refresh(role.game_uid));
-  document.getElementById("ap-refresh")?.addEventListener("click", () => void refresh(role.game_uid));
-  document.getElementById("ap-layout-grid")?.addEventListener("click", () => {
-    layout = "grid";
-    syncLayoutBtns();
-    renderBody();
-  });
-  document.getElementById("ap-layout-list")?.addEventListener("click", () => {
-    layout = "list";
-    syncLayoutBtns();
-    renderBody();
-  });
-  document.getElementById("ap-sort")?.addEventListener("change", (ev) => {
-    sortKind = (ev.target as HTMLSelectElement).value as SortKind;
-    renderBody();
-  });
-  document.getElementById("ap-export")?.addEventListener("click", exportToText);
-  document.querySelectorAll<HTMLButtonElement>("#ap-filters .ap-filter-chip").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      if (btn.dataset.element) {
-        filterElements.has(btn.dataset.element) ? filterElements.delete(btn.dataset.element) : filterElements.add(btn.dataset.element);
-      } else if (btn.dataset.weapon) {
-        const wk = Number(btn.dataset.weapon);
-        filterWeapons.has(wk) ? filterWeapons.delete(wk) : filterWeapons.add(wk);
-      }
-      btn.classList.toggle("active");
-      renderBody();
-    });
-  });
-
-  // 先读本地缓存秒显（不触网；与原版一致：进入显示缓存，手动点刷新更新）
-  if (views.length === 0) {
-    void (async () => {
-      try {
-        const cached = await api.avatarPropertyCache(user.id, role.game_uid);
-        if (cached && views.length === 0) {
-          views = buildAvatarViews(cached.data);
-          currentIdx = views.length > 0 ? 0 : -1;
-          lastUpdated = cached.updated_at;
-          document.getElementById("ap-empty")?.classList.add("hidden");
-          document.getElementById("ap-main")?.classList.remove("hidden");
-          syncLayoutBtns();
-          renderBody();
-          syncUpdatedLabel();
-          console.info(`[avatar_property] 已加载本地缓存（${views.length} 个角色）`);
+function visibleViews(): AvatarView[] {
+  const out = views.filter((v) => matchesTokens(v, tokens));
+  const fields = SORT_FIELDS[sortKind];
+  if (fields.length > 0) {
+    out.sort((a, b) => {
+      for (const f of fields) {
+        const d = f(b) - f(a);
+        if (d !== 0) {
+          return d;
         }
-      } catch (e) {
-        console.warn(`[avatar_property] 缓存读取失败: ${e instanceof Error ? e.message : String(e)}`);
       }
-    })();
-  }
-
-  // 已有数据直接渲染（切页不重拉）
-  if (views.length > 0) {
-    document.getElementById("ap-empty")?.classList.add("hidden");
-    document.getElementById("ap-main")?.classList.remove("hidden");
-    syncLayoutBtns();
-    renderBody();
-  }
-}
-
-function syncLayoutBtns(): void {
-  document.getElementById("ap-layout-grid")?.classList.toggle("active", layout === "grid");
-  document.getElementById("ap-layout-list")?.classList.toggle("active", layout === "list");
-}
-
-async function refresh(gameUid: string): Promise<void> {
-  if (refreshing) {
-    return;
-  }
-  refreshing = true;
-  const user = currentUserRef;
-  if (!user) {
-    refreshing = false;
-    return;
-  }
-  const btn = document.getElementById("ap-refresh") as HTMLButtonElement | null;
-  if (btn) {
-    btn.disabled = true;
-  }
-  console.info("[avatar_property] 刷新数据…");
-  try {
-    const dto = await fetchWithVerification(user.id, (ch) => api.avatarPropertyRefresh(user.id, gameUid, ch));
-    views = buildAvatarViews(dto);
-    currentIdx = views.length > 0 ? 0 : -1;
-    document.getElementById("ap-empty")?.classList.add("hidden");
-    document.getElementById("ap-main")?.classList.remove("hidden");
-    syncLayoutBtns();
-    renderBody();
-    console.info(`[avatar_property] 刷新完成（${views.length} 个角色）`);
-    lastUpdated = Date.now();
-    syncUpdatedLabel();
-    toast(`已刷新 ${views.length} 个角色`, "success");
-  } catch (e) {
-    if (!isRiskError(e)) {
-      toast(`刷新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
-    }
-  } finally {
-    refreshing = false;
-    if (btn) {
-      btn.disabled = false;
-    }
-  }
-}
-
-function sortedFiltered(): AvatarView[] {
-  let out = [...views];
-  if (filterElements.size > 0) {
-    out = out.filter((v) => filterElements.has(v.element));
-  }
-  if (filterWeapons.size > 0) {
-    out = out.filter((v) => filterWeapons.has(v.weaponType));
-  }
-  const key = (v: AvatarView): number => {
-    switch (sortKind) {
-      case "level": return v.level;
-      case "quality": return v.quality;
-      case "constellation": return v.constellationCount;
-      case "fetter": return v.fetter;
-      case "hp": return v.maxHp;
-      case "atk": return v.curAtk;
-      case "def": return v.curDef;
-      case "em": return v.em;
-      default: return 0;
-    }
-  };
-  if (sortKind !== "default") {
-    out.sort((a, b) => key(b) - key(a));
+      return 0;
+    });
   }
   return out;
 }
 
-function renderBody(): void {
+function currentView(list: AvatarView[]): AvatarView | undefined {
+  return list.find((v) => v.id === currentId);
+}
+
+// ---------------------------------------------------------------------------
+// 共用片段
+// ---------------------------------------------------------------------------
+
+const SVG_FETTER = `<svg class="ap-fetter" viewBox="0 0 16 16"><path d="M8 14.2 2.6 8.8A3.3 3.3 0 0 1 8 4.4a3.3 3.3 0 0 1 5.4 4.4z"/></svg>`;
+const SVG_KIRA = `<svg viewBox="0 0 12 12"><path d="M6 .5 7.2 4.8 11.5 6 7.2 7.2 6 11.5 4.8 7.2.5 6 4.8 4.8z"/></svg>`;
+const SVG_LOCK = `<svg class="ap-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="7" rx="1.2"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>`;
+const SVG_CHEVRON = `<svg class="ap-chev" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4"/></svg>`;
+
+/** 物品图标：品质渐变底 + 图片（对应 ItemIcon） */
+function itemIcon(icon: string, quality: number, size: number, extra = ""): string {
+  const q = Math.min(Math.max(quality, 1), 5);
+  return `<div class="item-icon q${q}" style="width:${size}px;height:${size}px">${icon ? `<img src="${esc(icon)}" loading="lazy" onerror="this.remove()"/>` : ""}${extra}</div>`;
+}
+
+function promoteStars(arr: boolean[]): string {
+  return `<span class="ap-promote">${arr.map((on) => `<i class="${on ? "on" : ""}">${SVG_KIRA}</i>`).join("")}</span>`;
+}
+
+function emptyCard(title: string, inner: string): string {
+  return `<div class="ap-empty"><div class="ap-empty-card"><div class="ap-empty-title">${esc(title)}</div>${inner}</div></div>`;
+}
+
+/** Flyout 内容缓存：按钮只带 key，避免把长文本塞进属性 */
+let flyoutData = new Map<string, () => string>();
+
+// ---------------------------------------------------------------------------
+// 渲染入口
+// ---------------------------------------------------------------------------
+
+export function renderAvatarPropertyPage(content: HTMLElement, user: UserDto | undefined): void {
+  content.classList.add("content-flush");
+  const role = currentRoleOf(user);
+  if (!user || !role) {
+    content.innerHTML = emptyCard("尚未登录", `<p class="ap-empty-desc">登录米游社账号并选择角色后可查看角色练度</p>`);
+    return;
+  }
+
+  const key = `${user.id}:${role.game_uid}`;
+  if (key !== viewsKey) {
+    viewsKey = key;
+    views = [];
+    currentId = null;
+    lastUpdated = 0;
+  }
+
+  content.innerHTML = `<div class="ap-page" id="ap-page"></div>`;
+  const page = document.getElementById("ap-page")!;
+  const refresh = (): void => void doRefresh(user, role.game_uid, page);
+
+  if (views.length > 0) {
+    renderMain(page, refresh);
+    return;
+  }
+  renderEmpty(page, refresh);
+  // 进入页面先读本地缓存（不触网；对应原版 RefreshOptionKind.None）
+  void api
+    .avatarPropertyCache(user.id, role.game_uid)
+    .then((cached) => {
+      if (cached && viewsKey === key && views.length === 0) {
+        views = buildAvatarViews(cached.data);
+        lastUpdated = cached.updated_at;
+        console.info(`[avatar_property] 已加载本地缓存（${views.length} 个角色）`);
+        if (document.getElementById("ap-page") === page) {
+          renderMain(page, refresh);
+        }
+      }
+    })
+    .catch((e: unknown) => console.warn(`[avatar_property] 缓存读取失败: ${e instanceof Error ? e.message : String(e)}`));
+}
+
+function renderEmpty(page: HTMLElement, refresh: () => void): void {
+  page.innerHTML = emptyCard(
+    "尚未获取任何角色信息",
+    `<button class="settings-card" id="ap-empty-refresh" title="同步">
+      <span class="settings-card-text">从米游社原神战绩同步</span>${SVG_CHEVRON}
+    </button>`,
+  );
+  document.getElementById("ap-empty-refresh")?.addEventListener("click", refresh);
+}
+
+async function doRefresh(user: UserDto, gameUid: string, page: HTMLElement): Promise<void> {
+  if (refreshing) {
+    return;
+  }
+  refreshing = true;
+  const key = viewsKey;
+  console.info("[avatar_property] 同步角色信息…");
+  openDialog("获取数据中", `<div class="ap-progress"><span class="ap-spin"></span></div>`, null, { cancelable: false });
+  try {
+    const dto = await fetchWithVerification(user.id, (ch) => api.avatarPropertyRefresh(user.id, gameUid, ch));
+    if (viewsKey !== key) {
+      return;
+    }
+    views = buildAvatarViews(dto);
+    lastUpdated = Date.now();
+    console.info(`[avatar_property] 同步完成（${views.length} 个角色）`);
+    toast(`已同步 ${views.length} 个角色`, "success");
+    if (document.getElementById("ap-page") === page) {
+      renderMain(page, () => void doRefresh(user, gameUid, page));
+    }
+  } catch (e) {
+    if (!isRiskError(e)) {
+      console.warn(`[avatar_property] 同步失败: ${e instanceof Error ? e.message : String(e)}`);
+      toast(`同步失败: ${e instanceof Error ? e.message : String(e)}`, "error");
+    }
+  } finally {
+    refreshing = false;
+    closeDialog();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// CommandBar + 主体
+// ---------------------------------------------------------------------------
+
+function renderMain(page: HTMLElement, refresh: () => void): void {
+  closeFlyout();
+  const syncTitle = lastUpdated > 0 ? `同步角色信息（上次同步 ${new Date(lastUpdated).toLocaleString("zh-CN")}）` : "同步角色信息";
+  // 布局：左（布局切换 + 排序）固定宽，筛选框弹性伸缩，右侧操作按钮窄宽度下自动收为纯图标；
+  // 仍放不下时整体换行，各控件之间绝不重叠
+  page.innerHTML = `
+    <div class="ap-commandbar card">
+      <div class="ap-cb-left">
+        <div class="segmented" id="ap-layout">
+          <button data-layout="List" title="列表"><svg viewBox="0 0 16 16"><path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01"/></svg></button>
+          <button data-layout="Grid" title="网格"><svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx=".8"/><rect x="9" y="2.5" width="4.5" height="4.5" rx=".8"/><rect x="2.5" y="9" width="4.5" height="4.5" rx=".8"/><rect x="9" y="9" width="4.5" height="4.5" rx=".8"/></svg></button>
+        </div>
+        ${selectTrigger("ap-sort", SORT_OPTIONS, sortKind, { cls: "ap-sort" })}
+      </div>
+      <div class="ap-filter sc-input" id="ap-tokens"></div>
+      <div class="ap-cb-right">
+        <button class="appbar-btn" id="ap-export" title="导出文本到剪贴板"><svg viewBox="0 0 16 16"><rect x="4" y="2.5" width="8" height="11" rx="1"/><path d="M6 2.5V2h4v.5M6 6h4M6 8.5h4M6 11h2.5"/></svg><span class="lbl">导出文本到剪贴板</span></button>
+        <button class="appbar-btn" id="ap-calc" title="养成计算"><svg viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.2"/><path d="M5 4.5h6M5.5 7.5h.01M8 7.5h.01M10.5 7.5h.01M5.5 10h.01M8 10h.01M10.5 10h.01M5.5 12h.01M8 12h.01M10.5 12h.01"/></svg><span class="lbl">养成计算</span></button>
+        <span class="appbar-sep"></span>
+        <button class="appbar-btn" id="ap-refresh" title="${esc(syncTitle)}"><svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5"/><path d="M13 2.5V5h-2.5"/></svg><span class="lbl">同步角色信息</span></button>
+      </div>
+    </div>
+    <div class="ap-body card" id="ap-body"></div>`;
+
+  page.querySelectorAll<HTMLButtonElement>("#ap-layout button").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.layout === layout);
+    btn.addEventListener("click", () => {
+      layout = btn.dataset.layout === "Grid" ? "Grid" : "List";
+      localStorage.setItem(LAYOUT_KEY, layout);
+      page.querySelectorAll<HTMLButtonElement>("#ap-layout button").forEach((b) => b.classList.toggle("active", b === btn));
+      renderBody();
+    });
+  });
+  bindSelect(page.querySelector<HTMLButtonElement>("#ap-sort")!, SORT_OPTIONS, sortKind, (value) => {
+    sortKind = value as SortKind;
+    localStorage.setItem(SORT_KEY, sortKind);
+    // 对应 PrivateSortAvatars → MoveCurrentToFirst
+    currentId = visibleViews()[0]?.id ?? null;
+    renderBody(true);
+  });
+  const exportBtn = page.querySelector<HTMLButtonElement>("#ap-export")!;
+  exportBtn.addEventListener("click", () =>
+    openMenuFlyout(exportBtn, [
+      { label: "导出当前角色", onClick: () => void exportText(false) },
+      { label: "导出所有角色", onClick: () => void exportText(true) },
+    ]),
+  );
+  const calcBtn = page.querySelector<HTMLButtonElement>("#ap-calc")!;
+  calcBtn.addEventListener("click", () =>
+    openMenuFlyout(
+      calcBtn,
+      ["当前角色与武器", "部分角色与武器", "所有角色与武器"].map((label) => ({ label, disabled: true, title: "养成计划开发中", onClick: () => undefined })),
+    ),
+  );
+  page.querySelector<HTMLButtonElement>("#ap-refresh")!.addEventListener("click", refresh);
+
+  renderTokenBox(page.querySelector<HTMLElement>("#ap-tokens")!);
+  renderBody(true);
+}
+
+// ---- AutoSuggestTokenBox（shadcn Combobox：Input + Badge + Popover 联想） ----
+
+function tokenDot(t: SearchToken): string {
+  return `<i class="token-dot ${t.color ? "" : "none"}" ${t.color ? `style="background:${t.color}"` : ""}></i>`;
+}
+
+function renderTokenBox(box: HTMLElement): void {
+  const chips = tokens
+    .map((t, i) => `<span class="sc-badge">${t.color ? tokenDot(t) : ""}${esc(t.value)}<button type="button" data-rm="${i}" title="移除">×</button></span>`)
+    .join("");
+  box.innerHTML = `<svg class="token-search" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>${chips}<input id="ap-token-input" role="combobox" autocomplete="off" placeholder="${tokens.length ? "" : "筛选角色"}" ${tokens.length >= MAX_TOKENS ? "disabled" : ""}/>`;
+
+  box.querySelectorAll<HTMLButtonElement>("[data-rm]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      tokens.splice(Number(btn.dataset.rm), 1);
+      applyFilter(box);
+    });
+  });
+  const input = box.querySelector<HTMLInputElement>("#ap-token-input")!;
+  const suggest = (): void => {
+    const q = input.value.trim();
+    if (input.disabled) {
+      return;
+    }
+    const candidates = AVAILABLE_TOKENS.filter((t) => !tokens.some((x) => x.kind === t.kind && x.value === t.value) && (!q || t.value.includes(q)));
+    const html = candidates.length
+      ? candidates.map((t, i) => `<button type="button" class="sc-item token-suggest" role="option" data-i="${i}">${tokenDot(t)}<span>${esc(t.value)}</span></button>`).join("")
+      : `<div class="sc-empty">${q ? `回车按名称筛选「${esc(q)}」` : "没有更多可选条件"}</div>`;
+    const el = openFlyout(box, `<div role="listbox">${html}</div>`, "bottom", "sc-popover", { toggle: false, matchWidth: true });
+    el?.querySelectorAll<HTMLButtonElement>(".token-suggest").forEach((btn) => {
+      btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+      btn.addEventListener("click", () => {
+        tokens.push(candidates[Number(btn.dataset.i)]);
+        closeFlyout();
+        applyFilter(box);
+      });
+    });
+  };
+  input.addEventListener("focus", suggest);
+  input.addEventListener("input", suggest);
+  // 点击输入框任意空白处都聚焦输入（与 shadcn Input 的整框可点一致）
+  box.addEventListener("mousedown", (ev) => {
+    if (ev.target === box) {
+      ev.preventDefault();
+      input.focus();
+    }
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && input.value.trim()) {
+      const text = input.value.trim();
+      const exact = AVAILABLE_TOKENS.find((t) => t.value === text);
+      tokens.push(exact ?? { kind: "none", value: text });
+      closeFlyout();
+      applyFilter(box);
+    } else if (ev.key === "Backspace" && !input.value && tokens.length) {
+      tokens.pop();
+      applyFilter(box);
+    }
+  });
+}
+
+function applyFilter(box: HTMLElement): void {
+  renderTokenBox(box);
+  const list = visibleViews();
+  if (!currentView(list)) {
+    currentId = list[0]?.id ?? null;
+  }
+  renderBody(true);
+  box.querySelector<HTMLInputElement>("#ap-token-input")?.focus();
+}
+
+// ---------------------------------------------------------------------------
+// 主体：网格 / 列表 + 详情
+// ---------------------------------------------------------------------------
+
+function renderBody(scrollTop = false): void {
   const body = document.getElementById("ap-body");
   if (!body) {
     return;
   }
-  const list = sortedFiltered();
-  // 当前选中角色可能被筛掉，回退到第一个
-  if (!list.some((v) => v === views[currentIdx])) {
-    currentIdx = views.indexOf(list[0] ?? views[0]);
+  flyoutData = new Map();
+  const list = visibleViews();
+  if (currentId === null || !currentView(list)) {
+    currentId = list[0]?.id ?? null;
   }
-  body.innerHTML = layout === "grid" ? renderGrid(list) : renderListDetail(list);
-  bindBodyEvents(body);
-}
-
-// ---------------------------------------------------------------------------
-// 网格视图（对应原版 AvatarGridViewTemplate：名片背景 + 头像/武器/技能三列）
-// ---------------------------------------------------------------------------
-
-function starIcons(promote: boolean[]): string {
-  return promote.map((on) => `<span class="ap-star ${on ? "on" : ""}">★</span>`).join("");
+  body.innerHTML = layout === "Grid" ? renderGrid(list) : renderList(list);
+  bindBody(body);
+  if (scrollTop) {
+    body.querySelectorAll<HTMLElement>(".ap-grid, .ap-split-list, .ap-detail-scroll").forEach((el) => (el.scrollTop = 0));
+  }
 }
 
 function renderGrid(list: AvatarView[]): string {
-  return `<div class="ap-grid">${list
-    .map((v) => {
-      const cur = v === views[currentIdx];
-      return `
-      <button class="ap-card ${cur ? "active" : ""}" data-id="${v.id}">
-        ${v.nameCard ? `<img class="ap-card-bg" src="${esc(v.nameCard)}" loading="lazy" onerror="this.remove()"/>` : ""}
-        <div class="ap-card-mask"></div>
-        <div class="ap-card-top">
-          <div class="ap-card-portrait q${v.quality}">
-            <img src="${esc(v.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
-            <span class="ap-badge pill">Lv.${v.level}</span>
-            <span class="ap-badge corner">✦${v.constellationCount}</span>
-          </div>
-          <div class="ap-card-title">
-            <b>${esc(v.name)}</b>
-            <span class="ap-card-sub">♥ 好感 ${v.fetter} · ${v.weaponTypeLabel}</span>
-          </div>
-          <div class="ap-card-weapon q${v.weapon.quality}" title="${esc(v.weapon.name)} Lv.${v.weapon.level} · 精${v.weapon.affix}">
-            <img src="${esc(v.weapon.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
-            <span class="ap-badge pill">Lv.${v.weapon.level}</span>
-          </div>
-        </div>
-        <div class="ap-card-skills">
-          ${v.skills
-            .map((s, i) => `<span class="ap-skill-pill" title="${esc(s.name)} Lv.${s.level}"><b>${SKILL_LABELS[i + 1] ?? "?"}</b> ${s.level}</span>`)
-            .join("")}
-        </div>
-      </button>`;
-    })
-    .join("")}</div>`;
+  if (list.length === 0) {
+    return `<div class="ap-not-found">未找到结果</div>`;
+  }
+  return `<div class="ap-grid">${list.map(gridItem).join("")}</div>`;
 }
 
-// ---------------------------------------------------------------------------
-// 列表视图（对应原版 SplitView：左角色列表 + 右详情面板）
-// ---------------------------------------------------------------------------
+function verticalCard(top: string, bottom: string): string {
+  return `<div class="vcard"><div class="vcard-top">${top}</div><div class="vcard-bottom">${bottom}</div></div>`;
+}
 
-function renderListDetail(list: AvatarView[]): string {
-  const cur = currentIdx >= 0 ? views[currentIdx] : undefined;
+function gridItem(v: AvatarView): string {
+  const avatar = verticalCard(
+    itemIcon(
+      v.icon,
+      v.quality,
+      64,
+      `<span class="ii-bottom">${SVG_FETTER}${v.fetter}</span><span class="ii-corner">${v.constellationCount}</span>`,
+    ),
+    `Lv. ${v.levelNumber}`,
+  );
+  const weapon = verticalCard(itemIcon(v.weapon.icon, v.weapon.quality, 64, `<span class="ii-corner">${v.weapon.affix}</span>`), `Lv. ${v.weapon.levelNumber}`);
+  const skills = v.skills
+    .map((s) => verticalCard(`<div class="ap-grid-skill">${s.icon ? `<img class="mono" src="${esc(s.icon)}" loading="lazy" onerror="this.remove()"/>` : ""}</div>`, String(s.levelNumber)))
+    .join("");
   return `
-  <div class="ap-split">
-    <div class="ap-split-pane">
-      ${list
-        .map(
-          (v) => `
-        <button class="ap-list-item ${v === cur ? "active" : ""}" data-id="${v.id}">
-          <img class="ap-side-icon" src="${esc(v.sideIcon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
-          <span class="ap-list-text"><b>${esc(v.name)}</b><small>Lv.${v.level} · 命${v.constellationCount}</small></span>
-        </button>`,
-        )
-        .join("")}
-      <div class="ap-list-count">共 ${list.length} 个角色</div>
-    </div>
-    <div class="ap-split-main">${cur ? renderDetail(cur) : `<div class="ap-no-select">选择一个角色查看详情</div>`}</div>
-  </div>`;
+    <button class="ap-grid-item ${v.id === currentId ? "active" : ""}" data-id="${v.id}">
+      ${v.background ? `<img class="ap-grid-bg" src="${esc(v.background)}" loading="lazy" onerror="this.remove()"/>` : ""}
+      <div class="ap-grid-acrylic"></div>
+      <div class="ap-grid-row">${avatar}${weapon}${skills}</div>
+    </button>`;
+}
+
+function renderList(list: AvatarView[]): string {
+  const cur = currentView(list);
+  const items = list
+    .map(
+      (v) => `
+      <button class="ap-list-item ${v === cur ? "active" : ""}" data-id="${v.id}">
+        <span class="ap-side">${v.sideIcon ? `<img src="${esc(v.sideIcon)}" loading="lazy" onerror="this.remove()"/>` : ""}</span>
+        <span class="ap-list-text"><span class="name">${esc(v.name)}</span><span class="lv">Lv. ${v.levelNumber}</span></span>
+      </button>`,
+    )
+    .join("");
+  return `
+    <div class="ap-split">
+      <div class="ap-split-pane">
+        <div class="ap-split-list">${items}</div>
+        <div class="ap-split-count">共 ${list.length} 位角色</div>
+      </div>
+      <div class="ap-detail-scroll">${cur ? renderDetail(cur) : `<div class="ap-not-found">未找到结果</div>`}</div>
+    </div>`;
 }
 
 function renderDetail(v: AvatarView): string {
-  return `
-  <div class="ap-detail">
-    <!-- 名片大卡：840:400 全宽、轻渐变遮罩（对应原版 AcrylicGridCard + 黑遮罩） -->
-    <div class="ap-hero">
-      ${v.nameCard ? `<img class="ap-hero-bg" src="${esc(v.nameCard)}" loading="lazy" onerror="this.remove()"/>` : ""}
-      <div class="ap-hero-mask"></div>
-      <div class="ap-hero-left">
-        <div class="ap-hero-id">
-          <div class="ap-icon big q${v.quality}"><img src="${esc(v.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/></div>
-          <div class="ap-hero-name">
-            <b>${esc(v.name)}</b>
-            <div class="ap-stars">${starIcons(v.promoteArray)}</div>
-            <span>Lv. ${v.level} · ♥ ${v.fetter}</span>
-          </div>
-        </div>
-        <div class="ap-hero-weapon">
-          <div class="ap-icon q${v.weapon.quality}"><img src="${esc(v.weapon.icon)}" loading="lazy" onerror="this.style.opacity=0.2"/></div>
-          <div class="ap-weapon-info">
-            <b>${esc(v.weapon.name || "武器")}</b>
-            <div class="ap-stars small">${starIcons(Array.from({ length: 6 }, (_, i) => i < v.weapon.promote))}</div>
-            <span>Lv. ${v.weapon.level} · 精炼 ${v.weapon.affix}</span>
-          </div>
-        </div>
-      </div>
-      <div class="ap-hero-skills">
-        ${v.skills
-          .map(
-            (s) => `
-          <div class="ap-skill-row" title="${esc(s.name)} Lv.${s.level}">
-            <img src="${esc(iconUrl(s.icon))}" loading="lazy" onerror="this.remove()"/>
-            <span>Lv.${s.level}</span>
-          </div>`,
-          )
-          .join("")}
-      </div>
-      <div class="ap-hero-cons">
-        ${v.constellations
-          .map(
-            (k) => `
-        <button class="ap-cons-btn" data-cons='${esc(JSON.stringify({ name: k.name, effect: k.effect }))}' title="${esc(k.name)}">
-          <img class="${k.activated ? "" : "off"}" src="${esc(k.icon)}" loading="lazy" onerror="this.style.opacity=0.15"/>
-        </button>`,
-          )
-          .join("")}
-      </div>
-    </div>
+  const w = v.weapon;
+  flyoutData.set("weapon", () => {
+    const cards = [w.main, w.sub]
+      .filter((p): p is NameValue => !!p)
+      .map((p) => `<div class="settings-row"><span>${esc(p.name)}</span><span>${esc(p.value)}</span></div>`)
+      .join("");
+    return `<div class="ap-fly-weapon">${cards}${w.description ? `<div class="ap-fly-desc">${richText(w.description)}</div>` : ""}</div>`;
+  });
 
-    <!-- 角色属性：可折叠面板（对应原版 Expander） -->
-    <details class="ap-props" open>
-      <summary>角色属性</summary>
-      <div class="ap-props-body">
-        ${v.properties
-          .map(
-            (p) => `
-          <div class="ap-prop-row">
-            <span>${esc(p.name)}</span>
-            <span class="ap-prop-val">${esc(p.value)}</span>
-            <span class="ap-prop-add">${esc(p.add)}</span>
-          </div>`,
-          )
-          .join("")}
-      </div>
-    </details>
+  const skills = v.skills
+    .map((s, i) => {
+      flyoutData.set(`skill${i}`, () => {
+        const params = s.parameters.map((p) => `<div class="settings-row"><span>${esc(p.name)}</span><span>${esc(p.value)}</span></div>`).join("");
+        return `<div class="ap-fly-text"><div class="ap-fly-desc">${richText(s.description)}</div>${params ? `<div class="ap-fly-params">${params}</div>` : ""}</div>`;
+      });
+      return `
+        <button class="ap-skill" data-fly="skill${i}" data-place="left" title="${esc(s.name)}">
+          ${s.icon ? `<img src="${esc(s.icon)}" loading="lazy" onerror="this.remove()"/>` : `<span class="ap-skill-ph"></span>`}
+          <span>${esc(s.level)}</span>
+        </button>`;
+    })
+    .join("");
 
-    <!-- 圣遗物：一排 5 张（对应原版 UniformPanel），右上角强化等级 -->
-    ${v.reliquaries.length > 0 ? `<div class="ap-relics">
-      ${v.reliquaries
-        .map(
-          (r) => `
+  const cons = v.constellations
+    .map((k, i) => {
+      flyoutData.set(`cons${i}`, () => `<div class="ap-fly-text"><div class="ap-fly-title">${esc(k.name)}</div><div class="ap-fly-desc">${richText(k.description)}</div></div>`);
+      return `
+        <button class="ap-cons ${k.activated ? "" : "locked"}" data-fly="cons${i}" title="${esc(k.name)}">
+          ${k.icon ? `<img src="${esc(k.icon)}" loading="lazy" onerror="this.remove()"/>` : ""}
+          ${k.activated ? "" : SVG_LOCK}
+        </button>`;
+    })
+    .join("");
+
+  const props = v.properties
+    .map(
+      (p) => `
+      <div class="ap-prop">
+        <span class="ap-prop-icon">${p.icon ? `<img class="mono" src="${esc(p.icon)}" loading="lazy" onerror="this.remove()"/>` : ""}</span>
+        <span class="ap-prop-name">${esc(p.name)}</span>
+        <span class="ap-prop-val">${esc(p.value)}</span>
+        <span class="ap-prop-add">${esc(p.add)}</span>
+      </div>`,
+    )
+    .join("");
+
+  // 推荐主属性卡右侧配图：该角色当前穿戴的对应部位圣遗物（官方图标）
+  const relicIcon = (pos: number): string => {
+    const r = v.reliquaries.find((x) => x.pos === pos);
+    return r?.icon ? `<img class="ap-rec-img" src="${esc(r.icon)}" loading="lazy" onerror="this.remove()"/>` : "";
+  };
+  const recCard = (title: string, names: string[], pos?: number): string => `
+    <div class="ap-rec vcard">
+      <div class="ap-rec-title">${esc(title)}</div>
+      <div class="ap-rec-values">${names.map((n) => `<span>${esc(n)}</span>`).join("")}</div>
+      ${pos ? relicIcon(pos) : ""}
+    </div>`;
+
+  const relics = v.reliquaries
+    .map(
+      (r) => `
       <div class="ap-relic">
         <div class="ap-relic-head">
-          <div class="ap-icon q${r.rarity}"><img src="${esc(iconUrl(r.icon))}" loading="lazy" onerror="this.style.opacity=0.2"/></div>
-          <div class="ap-relic-name"><b>${esc(r.name)}</b><small>${esc(r.set?.name ?? "")}</small></div>
-          <span class="ap-relic-lv">+${Math.max(0, r.level - 1)}</span>
+          ${itemIcon(r.icon, r.quality, 48)}
+          <div class="ap-relic-name"><span>${esc(r.name)}</span><small>${esc(r.setName)}</small></div>
+          <b class="ap-relic-score" style="color:${scoreColor(r.score, 50)}">${fmtScore(r.score)}</b>
         </div>
-        <div class="ap-relic-main"><b>${esc(FIGHT_PROP_NAMES[r.main_property.property_type] ?? "")}</b><b>${esc(propValue(r.main_property.property_type, r.main_property.val))}</b></div>
+        <div class="ap-relic-main"><b>${esc(r.main.name)}</b><b>${esc(r.main.value)}</b></div>
         <div class="ap-relic-subs">
-          ${r.sub_property_list
+          ${r.subs
             .map(
-              (sp) => `
-          <div class="ap-relic-sub">
-            <span>${esc(FIGHT_PROP_NAMES[sp.property_type] ?? "")}</span>
-            <span>${esc(propValue(sp.property_type, sp.val))}</span>
-          </div>`,
+              (s) => `
+            <div class="ap-relic-sub">
+              <b>${esc(s.name)}</b>
+              <span>${esc(s.value)}</span>
+              <span class="ap-enh" style="color:${enhancedColor(s.enhanced)};border-color:${enhancedColor(s.enhanced)}">${s.enhanced}</span>
+            </div>`,
             )
             .join("")}
         </div>
       </div>`,
-        )
-        .join("")}
-    </div>` : ""}
+    )
+    .join("");
+
+  return `
+  <div class="ap-detail">
+    <div class="ap-hero">
+      ${v.background ? `<img class="ap-hero-bg" src="${esc(v.background)}" loading="lazy" onerror="this.remove()"/>` : ""}
+      <div class="ap-hero-mask"></div>
+      <div class="ap-hero-info">
+        <div class="ap-hero-row">
+          ${itemIcon(v.icon, v.quality, 80)}
+          <div class="ap-hero-text">
+            <div class="ap-subtitle">${esc(v.name)}</div>
+            ${promoteStars(v.promote)}
+            <div class="ap-base">Lv. ${v.levelNumber}</div>
+            <div class="ap-caption">${SVG_FETTER}${v.fetter}</div>
+            <div class="ap-base">角色总分：<b style="color:${scoreColor(v.score, 100)}">${fmtScore(v.score)}</b></div>
+          </div>
+        </div>
+        <div class="ap-hero-row weapon">
+          <button class="ap-weapon-btn" data-fly="weapon" data-place="bottom">${itemIcon(w.icon, w.quality, 80)}</button>
+          <div class="ap-hero-text">
+            <div class="ap-subtitle">${esc(w.name)}</div>
+            ${promoteStars(w.promote)}
+            <div class="ap-base">Lv. ${w.levelNumber}</div>
+            <div class="ap-caption">精炼 ${w.affix}</div>
+          </div>
+        </div>
+      </div>
+      <div class="ap-hero-skills">${skills}</div>
+      <div class="ap-hero-cons">${cons}</div>
+    </div>
+
+    <details class="ap-expander" open>
+      <summary><span>角色属性</span>${SVG_CHEVRON}</summary>
+      <div class="ap-expander-body">${props}</div>
+    </details>
+
+    <div class="ap-recs">
+      ${recCard("时之沙主属性推荐", v.recommended.sand, 3)}
+      ${recCard("空之杯主属性推荐", v.recommended.goblet, 4)}
+      ${recCard("理之冠主属性推荐", v.recommended.circlet, 5)}
+      ${recCard("追加属性推荐", v.recommended.sub)}
+    </div>
+
+    ${relics ? `<div class="ap-relics">${relics}</div>` : ""}
   </div>`;
 }
 
-function bindBodyEvents(body: HTMLElement): void {
-  body.querySelectorAll<HTMLButtonElement>(".ap-card, .ap-list-item").forEach((btn) => {
+function bindBody(body: HTMLElement): void {
+  body.querySelectorAll<HTMLButtonElement>(".ap-grid-item, .ap-list-item").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const id = Number(btn.dataset.id);
-      const target = views.findIndex((v) => v.id === id);
-      if (target >= 0) {
-        currentIdx = target;
-        // 网格点选仅高亮；列表点选刷新详情
-        if (layout === "list") {
-          renderBody();
-        } else {
-          body.querySelectorAll(".ap-card").forEach((c) => c.classList.remove("active"));
-          btn.classList.add("active");
-        }
+      currentId = Number(btn.dataset.id);
+      if (layout === "List") {
+        const list = body.querySelector(".ap-split-list");
+        const keep = list?.scrollTop ?? 0;
+        renderBody();
+        body.querySelector(".ap-split-list")!.scrollTop = keep;
+      } else {
+        body.querySelectorAll(".ap-grid-item").forEach((c) => c.classList.toggle("active", c === btn));
       }
     });
+    // 右键菜单（对应原版 ContextFlyout；养成计划尚未实现，入口置灰）
+    btn.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      openMenuFlyout(
+        btn,
+        ["添加角色到养成计划", "添加武器到养成计划", "添加角色与武器到养成计划"].map((label) => ({ label, disabled: true, title: "养成计划开发中", onClick: () => undefined })),
+        "right",
+      );
+    });
   });
-  body.querySelectorAll<HTMLButtonElement>(".ap-cons-btn").forEach((btn) => {
+  body.querySelectorAll<HTMLButtonElement>("[data-fly]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      try {
-        const info = JSON.parse(btn.dataset.cons ?? "{}") as { name: string; effect: string };
-        toast(`${info.name}：${info.effect}`, "info");
-      } catch {
-        /* 忽略 */
+      const html = flyoutData.get(btn.dataset.fly!)?.();
+      if (html) {
+        openFlyout(btn, html, (btn.dataset.place as "left" | "bottom" | undefined) ?? "bottom", "ap-flyout");
       }
     });
   });
 }
 
 // ---------------------------------------------------------------------------
-// 导出练度统计文本（对应原版 ExportToTextCommand 的简化版：复制到剪贴板）
+// 导出文本（对应 AvatarViewTextTemplating.GetTemplatedText）
 // ---------------------------------------------------------------------------
 
-async function exportToText(): Promise<void> {
-  if (views.length === 0) {
+function templatedText(v: AvatarView): string {
+  const lines: string[] = ["// =====================", `// ${v.name} [Lv. ${v.levelNumber}, ☆${v.quality}, C${v.constellationCount}] [${v.skills.map((s) => s.level).join(", ")}]`];
+  const w = v.weapon;
+  lines.push(
+    "// ---------------------",
+    `// ${w.name} [Lv. ${w.levelNumber}, ☆${w.quality}, ❖${w.affix}]`,
+    `// ${w.main ? `[${w.main.name}: ${w.main.value}]` : ""} ${w.sub ? `[${w.sub.name}: ${w.sub.value}]` : ""}`,
+  );
+  if (v.properties.length > 0) {
+    lines.push("// ---------------------");
+    for (const p of v.properties) {
+      lines.push(`// [${p.name}: ${p.value}${p.add ? ` + ${p.add}` : ""}]`);
+    }
+  }
+  if (v.reliquaries.length > 0) {
+    lines.push("// ---------------------");
+    for (const r of v.reliquaries) {
+      lines.push(`// ${RELIC_EMOJI[r.pos] ?? ""} ${r.main.name}: ${r.main.value} [☆${r.quality} ${r.level} ${r.setName}] 评分: ${fmtScore(r.score)}`);
+      lines.push(`// ${r.subs.map((s) => `[${s.name}: ${s.value} ${String.fromCharCode(0x2775 + s.enhanced)}]`).join("")}`);
+    }
+  }
+  lines.push("// =====================");
+  return lines.join("\n");
+}
+
+async function exportText(all: boolean): Promise<void> {
+  const list = visibleViews();
+  const target = all ? list : list.filter((v) => v.id === currentId);
+  if (target.length === 0) {
     return;
   }
-  const lines: string[] = ["我的角色练度统计", "".padEnd(24, "=")];
-  for (const v of sortedFiltered()) {
-    const skills = v.skills.map((s, i) => `${SKILL_LABELS[i + 1] ?? "?"}${s.level}`).join("/");
-    const relics = v.reliquaries.map((r) => `+${Math.max(0, r.level - 1)}`).join(" ");
-    lines.push(
-      `${v.name} Lv.${v.level} 命${v.constellationCount} ♥${v.fetter} | ${v.weaponTypeLabel} Lv.${v.weapon.level} R${v.weapon.affix} | ${skills} | ${relics}`,
-    );
-  }
-  lines.push("".padEnd(24, "="), `导出时间 ${new Date().toLocaleString("zh-CN")}`);
   try {
-    await navigator.clipboard.writeText(lines.join("\n"));
-    toast("练度统计已复制到剪贴板", "success");
+    await navigator.clipboard.writeText(target.map(templatedText).join("\n"));
+    toast("复制角色详情成功", "success");
   } catch {
-    toast("复制失败，请检查剪贴板权限", "error");
+    toast("复制角色详情失败", "error");
   }
 }

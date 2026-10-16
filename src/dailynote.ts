@@ -2,6 +2,7 @@
 // 顶栏手动刷新 + 页面停留期间 8 分钟自动刷新 + 30 秒倒计时走针。
 // 遇 1034/5003 账号风控时自动走安全验证（共享 verify.ts）。
 import { api, errText, isApiError, type DailyNoteData, type UserDto } from "./api";
+import { img } from "./img";
 import { toast } from "./ui";
 import { abandonActiveGeetest, fetchWithVerification } from "./verify";
 
@@ -171,7 +172,7 @@ function cardHtml(
     const remain = Math.max(0, e.remained_time - Math.floor((Date.now() - (data?.fetched_at_ms ?? Date.now())) / 1000));
     return `
     <div class="dn-exp ${done ? "done" : ""}">
-      <img src="${esc(e.avatar_side_icon)}" onerror="this.style.visibility='hidden'"/>
+      <img src="${esc(img(e.avatar_side_icon))}" onerror="this.style.visibility='hidden'"/>
       <span>${done ? "已完成" : remainText(remain)}</span>
     </div>`;
   }).join("");

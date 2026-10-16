@@ -186,6 +186,12 @@
   max-width: none;
 }
 
+/* 侧脸头像：画布顶部约 17%~24% 透明，取景裁成贴底的 86% 正方形（与对比图验证一致）；
+   object-view-box 只改取景，不影响圆框尺寸与品质描边 */
+.ch-avatar img.side {
+  object-view-box: inset(14% 7% 0 7%);
+}
+
 .ch-avatar img.r5 {
   box-shadow: 0 0 0 2px var(--gold, #d3bc8e);
 }

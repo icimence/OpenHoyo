@@ -581,6 +581,15 @@ pub async fn fetch_player_info(
     fetch_record(client, salts, devices, user, url, xrpc_challenge).await
 }
 
+/// index.role.game_head_icon：玩家在游戏内设置的头像（米哈游官方 act-webstatic 图片）
+pub fn head_icon_of(index: &serde_json::Value) -> Option<&str> {
+    index
+        .get("role")
+        .and_then(|r| r.get("game_head_icon"))
+        .and_then(|v| v.as_str())
+        .filter(|s| s.starts_with("http"))
+}
+
 /// POST character/list：角色基础（等级/命座/武器摘要）
 pub async fn fetch_character_list(
     client: &reqwest::Client,

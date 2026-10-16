@@ -316,10 +316,17 @@ body {
 
 /* ---- 用户区（PaneFooter） ---- */
 
+/* 原版 UserView 末尾自带 NavigationViewItemSeparator，设置项紧随其后 */
 .nav-footer {
   border-top: 1px solid var(--divider);
-  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--divider);
+  margin: 0 8px;
+  padding: 6px 0;
   position: relative;
+}
+
+.nav-settings {
+  padding: 4px 8px 8px;
 }
 
 .user-menu-btn {
@@ -407,7 +414,7 @@ body {
 .user-flyout {
   position: absolute;
   bottom: calc(100% + 4px);
-  left: 10px;
+  left: 0;
   background: var(--bg-card);
   border: 1px solid var(--stroke);
   border-radius: var(--radius);
@@ -553,18 +560,52 @@ body {
   background: rgba(76, 194, 255, 0.1);
 }
 
+/* 角色游戏内头像（原版 UserGameRoleTemplate：32px 圆形、#DAB79B 底、悬停出刷新按钮） */
 .role-avatar {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: #dab79b;
-  color: #3a2a1a;
-  font-size: 13px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.role-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.role-avatar-refresh {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  justify-content: center;
+  background: transparent;
+  color: #fff;
+  opacity: 0;
+}
+
+.role-avatar-refresh:hover:not(:disabled),
+.role-avatar-refresh.spinning {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.role-avatar-refresh svg {
+  width: 12px;
+  height: 12px;
+}
+
+.role-avatar-refresh.spinning svg {
+  animation: spin 0.8s linear infinite;
 }
 
 .role-name {
@@ -660,4 +701,137 @@ body {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* ---- 标题栏「后台任务」（对应原版 BackgroundActivity 按钮：悬停展开各任务进度） ---- */
+
+.bg-tasks {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.titlebar-actions .bg-tasks-btn {
+  width: auto;
+  height: 28px;
+  padding: 0 12px;
+  gap: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--stroke);
+  background: var(--hover-faint);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.titlebar-actions .bg-tasks-btn:hover {
+  background: var(--hover-strong);
+}
+
+.bg-tasks-spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--spinner-track);
+  border-top-color: var(--accent-light);
+  flex-shrink: 0;
+}
+
+.bg-tasks.running .bg-tasks-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.bg-tasks:not(.running) .bg-tasks-spin {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.bg-tasks.warn:not(.running) .bg-tasks-spin {
+  border-color: #e3a33a;
+  background: #e3a33a;
+}
+
+.bg-tasks-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 210;
+  width: 320px;
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-card);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  cursor: default;
+}
+
+/* 悬停或键盘聚焦时展开；面板与按钮之间的 6px 间隙用伪元素桥接，移动鼠标不会断开 */
+.bg-tasks:hover .bg-tasks-panel,
+.bg-tasks:focus-within .bg-tasks-panel {
+  display: flex;
+}
+
+.bg-tasks-panel::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+
+.bg-tasks-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bg-tasks-desc {
+  margin-top: -6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.bg-task {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--stroke);
+  background: var(--hover-faint);
+}
+
+.bg-task-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.bg-task-pct {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bg-task .sr-bar {
+  margin-top: 6px;
+}
+
+.bg-task.done .sr-bar-fill {
+  background: var(--success);
+}
+
+.bg-task.failed .sr-bar-fill {
+  background: #e3a33a;
+}
+
+.bg-task.cancelled .sr-bar-fill {
+  background: var(--text-tertiary);
+}
+
+.bg-task-status {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }

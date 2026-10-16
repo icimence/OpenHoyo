@@ -1,5 +1,7 @@
 import "./style.css";
 import "./common.css";
+import "./shadcn.css";
+import "./guide.css";
 import "./gacha.css";
 import "./settings.css";
 import "./dailynote.css";
@@ -24,6 +26,10 @@ import { initTheme, renderSettingsPage } from "./settings";
 import { renderAvatarPropertyPage } from "./avatarproperty";
 import { renderDailyNotePage } from "./dailynote";
 import { renderAbyssPage, renderHardChallengePage, renderTheaterPage } from "./chronicle";
+import { closeFlyout } from "./flyout";
+import { runGuideIfNeeded } from "./guide";
+import { initBackgroundTasks } from "./bg-tasks";
+import { img, installImageFallback } from "./img";
 
 // ---------------------------------------------------------------------------
 // 导航定义（对应原版 MainView.xaml 的 NavigationView 项与分组）
@@ -48,8 +54,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: "spiralabyss", label: "深境螺旋", icon: "i-abyss", iconImg: "/icons/nav/SpiralAbyss.png", group: "周期" },
   { id: "rolecombat", label: "幻想真境剧诗", icon: "i-rolecombat", iconImg: "/icons/nav/RoleCombat.png", group: "周期" },
   { id: "hardchallenge", label: "幽境危战", icon: "i-hardchallenge", iconImg: "/icons/nav/HardChallenge.png", group: "周期" },
-  { id: "setting", label: "设置", icon: "i-setting", group: "设置" },
 ];
+
+/** 设置项不在菜单列表里：对应 NavigationView.SettingsItem，固定在 PaneFooter（用户区）下方 */
+const SETTINGS_ITEM: NavItem = { id: "setting", label: "设置", icon: "i-setting" };
 
 let currentPage = "gachalog";
 let users: UserDto[] = [];
@@ -75,7 +83,7 @@ function avatarHtml(u: UserDto, mini = false): string {
   const initial = esc((u.nickname ?? u.mid).slice(0, 1).toUpperCase());
   if (u.avatar) {
     // 米游社头像是透明底 PNG：加载成功后去掉占位底色与首字母（has-img）
-    return `<div class="${cls}"><span class="initial">${initial}</span><img src="${esc(u.avatar)}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/></div>`;
+    return `<div class="${cls}"><span class="initial">${initial}</span><img src="${esc(img(u.avatar))}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/></div>`;
   }
   return `<div class="${cls}"><span class="initial">${initial}</span></div>`;
 }
@@ -97,6 +105,16 @@ async function copyText(text: string): Promise<void> {
 // 侧边栏渲染与路由
 // ---------------------------------------------------------------------------
 
+function navItemHtml(item: NavItem, implemented: Set<string>): string {
+  return (
+    `<button class="nav-item ${item.id === currentPage ? "active" : ""} ${implemented.has(item.id) ? "" : "disabled"}" data-page="${item.id}">` +
+    (item.iconImg
+      ? `<img class="nav-icon" src="${item.iconImg}" alt="" onerror="this.outerHTML='<svg><use href=\\'#${item.icon}\\'</svg>'"/>`
+      : `<svg><use href="#${item.icon}"/></svg>`) +
+    `<span>${esc(item.label)}</span></button>`
+  );
+}
+
 function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
@@ -107,17 +125,12 @@ function renderNav(): void {
       html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
     }
     lastGroup = item.group;
-    html.push(
-      `<button class="nav-item ${item.id === currentPage ? "active" : ""} ${implemented.has(item.id) ? "" : "disabled"}" data-page="${item.id}">` +
-        (item.iconImg
-          ? `<img class="nav-icon" src="${item.iconImg}" alt="" onerror="this.outerHTML='<svg><use href=\\'#${item.icon}\\'</svg>'"/>`
-          : `<svg><use href="#${item.icon}"/></svg>`) +
-        `<span>${esc(item.label)}</span></button>`,
-    );
+    html.push(navItemHtml(item, implemented));
   }
   holder.innerHTML = html.join("");
+  document.getElementById("nav-settings")!.innerHTML = navItemHtml(SETTINGS_ITEM, implemented);
 
-  holder.querySelectorAll<HTMLButtonElement>(".nav-item").forEach((btn) => {
+  document.querySelectorAll<HTMLButtonElement>("#nav-items .nav-item, #nav-settings .nav-item").forEach((btn) => {
     btn.addEventListener("click", () => {
       currentPage = btn.dataset.page!;
       renderNav();
@@ -129,6 +142,9 @@ function renderNav(): void {
 function renderPage(): void {
   const content = document.getElementById("content")!;
   console.info(`[nav] 进入页面: ${currentPage}`);
+  // 页面级布局修饰（如我的角色的全幅布局）只对所属页面生效
+  content.className = "content";
+  closeFlyout();
   if (currentPage === "gachalog") {
     const cur = currentUser();
     renderGachaPage(content, {
@@ -153,7 +169,7 @@ function renderPage(): void {
   } else if (currentPage === "hardchallenge") {
     renderHardChallengePage(content, currentUser());
   } else {
-    const item = NAV_ITEMS.find((n) => n.id === currentPage)!;
+    const item = NAV_ITEMS.find((n) => n.id === currentPage) ?? SETTINGS_ITEM;
     content.innerHTML = `
       <div class="placeholder-page">
         <div class="placeholder-card">
@@ -214,11 +230,9 @@ function renderFooterUser(): void {
   if (cur) {
     nickEl.textContent = cur.nickname ?? "未知昵称";
     const initial = esc((cur.nickname ?? cur.mid).slice(0, 1).toUpperCase());
-    // 选中角色的游戏内头像优先，其次米游社账号头像，最后首字母占位
-    const gameAvatar = currentRoleOf(cur)?.avatar;
-    const src = gameAvatar || cur.avatar;
-    avatarEl.innerHTML = src
-      ? `<span class="initial">${initial}</span><img src="${esc(src)}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/>`
+    // 与原版 UserView 一致：侧边栏按钮展示米游社账号头像（PersonPicture），游戏内头像只在角色列表中展示
+    avatarEl.innerHTML = cur.avatar
+      ? `<span class="initial">${initial}</span><img src="${esc(img(cur.avatar))}" loading="lazy" onload="this.parentElement.classList.add('has-img')" onerror="this.remove()"/>`
       : `<span class="initial">${initial}</span>`;
   } else {
     nickEl.textContent = "尚未登录";
@@ -256,8 +270,11 @@ function renderUserFlyout(): void {
     const roleRows = cur.game_roles
       .map(
         (r) => `
-        <div class="role-row${r.game_uid === localStorage.getItem(ROLE_KEY) ? " selected" : ""}" data-role="${esc(r.game_uid)}">
-          <div class="role-avatar">${r.avatar ? `<img src="${esc(r.avatar)}" loading="lazy" onerror="this.remove()"/>` : esc(r.nickname.slice(0, 1))}</div>
+        <div class="role-row${r.game_uid === currentRoleOf(cur)?.game_uid ? " selected" : ""}" data-role="${esc(r.game_uid)}">
+          <div class="role-avatar">
+            ${r.avatar ? `<img src="${esc(img(r.avatar))}" loading="lazy" onerror="this.remove()"/>` : ""}
+            <button class="role-avatar-refresh" data-refresh-role="${esc(r.game_uid)}" title="刷新游戏内头像"><svg><use href="#i-refresh"/></svg></button>
+          </div>
           <div class="role-text">
             <div class="role-name">${esc(r.nickname)}</div>
             <div class="role-desc">${esc(r.game_uid)} · ${esc(r.region_name)} · Lv.${r.level}</div>
@@ -353,6 +370,29 @@ function renderUserFlyout(): void {
       renderUserFlyout();
       renderFooterUser();
       renderPage();
+    });
+  });
+
+  // 角色头像悬停刷新（对应 UserGameRole.RefreshProfilePictureCommand）
+  flyout.querySelectorAll<HTMLButtonElement>("[data-refresh-role]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      if (!cur) {
+        return;
+      }
+      btn.disabled = true;
+      btn.classList.add("spinning");
+      void api
+        .refreshRoleAvatar(cur.id, btn.dataset.refreshRole!)
+        .then((updated) => {
+          users = users.map((u) => (u.id === updated.id ? updated : u));
+          renderUserFlyout();
+        })
+        .catch((e: unknown) => {
+          toast(`头像刷新失败: ${errText(e)}`, "error");
+          btn.disabled = false;
+          btn.classList.remove("spinning");
+        });
     });
   });
 
@@ -594,6 +634,8 @@ async function reload(): Promise<void> {
 async function main(): Promise<void> {
   // 尽早恢复主题，避免首帧闪烁暗色
   initTheme();
+  // 本地图像通道失败时自动直连官方地址（必须先于任何页面渲染）
+  installImageFallback();
 
   // console.* → 后端日志文件（反馈中心采集用；不要改用 attachConsole，方向相反）
   const { initFrontendLog } = await import("./log");
@@ -619,6 +661,7 @@ async function main(): Promise<void> {
   // 窗口初始隐藏（tauri.conf visible:false）以消除启动白屏；万一初始化异常，3 秒兜底强制显示
   window.setTimeout(() => void win.show(), 3000);
   initUpdateBadge();
+  void initBackgroundTasks();
   document.getElementById("win-min")!.addEventListener("click", () => {
     void win.minimize();
   });
@@ -633,6 +676,9 @@ async function main(): Promise<void> {
   renderNav();
   // 导航骨架已渲染，显示窗口（消除启动白屏；visible:false 起）
   void win.show();
+
+  // 首次启动引导（数据文件夹 + 图像资源），完成前不加载主界面数据
+  await runGuideIfNeeded();
   document.getElementById("user-menu-btn")!.addEventListener("click", () => {
     const el = document.getElementById("user-flyout")!;
     if (el.classList.contains("hidden")) {

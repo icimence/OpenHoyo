@@ -1,0 +1,495 @@
+/* 首次启动引导（样式参考 Langfuse 分步配置：顶部编号面包屑 + 纵向编号步骤条，
+   当前步骤展开、已完成步骤折叠为摘要、未开始步骤置灰） */
+
+.guide-layer {
+  position: fixed;
+  inset: var(--titlebar-height) 0 0 0;
+  /* 低于对话框（100）与 toast（200）之外的层级：引导内会弹出确认框，必须让对话框盖在引导之上 */
+  z-index: 90;
+  overflow-y: auto;
+  background: var(--bg-base);
+}
+
+.guide-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 32px 64px;
+}
+
+/* ---- 页头 ---- */
+
+.guide-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--accent-light);
+}
+
+.guide-header h1 {
+  margin-top: 8px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.guide-header > p {
+  margin-top: 8px;
+  max-width: 620px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+/* Breadcrumb：1. 数据文件夹 ✓ › 2. 图像资源 › 3. 下载 */
+.guide-crumbs {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 13.5px;
+}
+
+.guide-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+}
+
+.guide-crumb.past {
+  color: var(--text-secondary);
+}
+
+.guide-crumb.current {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.guide-crumb svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--success);
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.guide-crumb-sep {
+  color: var(--text-tertiary);
+}
+
+/* ---- 纵向步骤条 ---- */
+
+.guide-stepper {
+  margin-top: 28px;
+  list-style: none;
+  padding: 0;
+}
+
+.guide-item {
+  display: flex;
+  gap: 14px;
+}
+
+.guide-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.guide-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--stroke-strong);
+  color: var(--text-tertiary);
+  background: var(--bg-base);
+}
+
+.guide-item.current .guide-num {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-light) 22%, transparent);
+}
+
+.guide-item.complete .guide-num {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.guide-num svg {
+  width: 15px;
+  height: 15px;
+  stroke: var(--success);
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.guide-line {
+  flex: 1;
+  width: 1px;
+  margin: 6px 0;
+  background: var(--divider);
+}
+
+.guide-item.complete .guide-line {
+  background: color-mix(in srgb, var(--success) 45%, transparent);
+}
+
+.guide-item:last-child .guide-line {
+  display: none;
+}
+
+.guide-item-main {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 28px;
+}
+
+.guide-item:last-child .guide-item-main {
+  padding-bottom: 0;
+}
+
+.guide-item-head {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-item-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.guide-item.upcoming .guide-item-title {
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.guide-badge {
+  height: 20px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.guide-badge.current {
+  color: var(--accent-light);
+  background: color-mix(in srgb, var(--accent-light) 14%, transparent);
+}
+
+button.guide-edit {
+  margin-left: auto;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--accent-light);
+  font-size: 13px;
+}
+
+button.guide-edit:hover:not(:disabled) {
+  background: var(--hover-soft);
+}
+
+.guide-summary {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.guide-summary.muted {
+  color: var(--text-tertiary);
+}
+
+.guide-summary code,
+.guide-hint code,
+.guide-path code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12.5px;
+}
+
+/* 当前步骤主体：卡片（对应 Langfuse <Card className="p-3">） */
+.guide-item-body {
+  margin-top: 12px;
+  padding: 20px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--bg-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: guide-in 0.18s ease-out;
+}
+
+@keyframes guide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.guide-desc {
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.guide-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.guide-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.guide-path {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--sc-height);
+  padding: 8px 12px;
+  border: 1px solid var(--sc-input);
+  border-radius: var(--sc-radius);
+  background: var(--hover-faint);
+  word-break: break-all;
+}
+
+.guide-path.changed {
+  border-color: var(--accent-light);
+  background: color-mix(in srgb, var(--accent-light) 8%, transparent);
+}
+
+.guide-path svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: var(--text-secondary);
+  stroke-width: 1.3;
+  fill: none;
+  stroke-linejoin: round;
+}
+
+.guide-path code {
+  flex: 1;
+  min-width: 0;
+}
+
+.guide-tag {
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--accent-light);
+  background: color-mix(in srgb, var(--accent-light) 14%, transparent);
+}
+
+.guide-tag.ok {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+/* Alert / Callout */
+.guide-callout {
+  padding: 12px 14px;
+  border-radius: var(--sc-radius);
+  border: 1px solid color-mix(in srgb, var(--accent-light) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-light) 7%, transparent);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.guide-callout ol {
+  margin: 4px 0 0 18px;
+}
+
+.guide-callout p {
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
+
+.guide-callout.ok {
+  border-color: color-mix(in srgb, var(--success) 40%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+
+.guide-callout.warn {
+  border-color: color-mix(in srgb, #e3a33a 45%, transparent);
+  background: color-mix(in srgb, #e3a33a 9%, transparent);
+}
+
+.guide-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  word-break: break-all;
+}
+
+.guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.guide-actions button {
+  height: var(--sc-height);
+  padding: 0 16px;
+  border-radius: var(--sc-radius);
+}
+
+/* ---- 单选 / 复选卡片（shadcn RadioGroup / Checkbox 风格） ---- */
+
+.guide-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.guide-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sc-radio,
+.sc-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--sc-input);
+  border-radius: var(--sc-radius);
+  cursor: default;
+}
+
+.sc-check.disabled {
+  opacity: 0.45;
+}
+
+.sc-radio.checked {
+  border-color: var(--accent-light);
+  background: color-mix(in srgb, var(--accent-light) 6%, transparent);
+  box-shadow: 0 0 0 1px var(--accent-light) inset;
+}
+
+.sc-radio input,
+.sc-check input {
+  margin-top: 3px;
+  accent-color: var(--accent-light);
+  flex-shrink: 0;
+}
+
+.sc-radio span,
+.sc-check span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sc-radio b,
+.sc-check b {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.sc-radio small,
+.sc-check small {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ---- 下载进度（对应 DownloadSummaryTemplate）；设置页共用 ---- */
+
+.sr-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sr-progress {
+  padding: 12px 14px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--sc-radius);
+  background: var(--hover-faint);
+}
+
+.sr-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.sr-progress-pct {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-bar {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hover-strong);
+  overflow: hidden;
+}
+
+.sr-bar-fill {
+  height: 100%;
+  background: var(--accent-light);
+  transition: width 0.2s ease;
+}
+
+.sr-progress.done .sr-bar-fill {
+  background: var(--success);
+}
+
+.sr-progress.failed .sr-bar-fill {
+  background: #e3a33a;
+}
+
+.sr-progress.cancelled .sr-bar-fill {
+  background: var(--text-tertiary);
+}
+
+.sr-progress-text {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .guide-choice {
+    grid-template-columns: 1fr;
+  }
+}

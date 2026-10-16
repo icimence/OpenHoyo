@@ -13,6 +13,7 @@ import {
   type TheaterAvatar,
   type UserDto,
 } from "./api";
+import { img } from "./img";
 import { toast } from "./ui";
 import { abandonActiveGeetest, fetchWithVerification, isRiskError } from "./verify";
 
@@ -68,12 +69,14 @@ function fmtValue(v: number | string): string {
 }
 
 /** 角色头像方块：稀有度描边 + 可选角标（命座/试用/支援） */
-function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeCls?: string; dim?: boolean; size?: number } = {}): string {
+function avatarTile(icon: string, rarity: number, opts: { badge?: string; badgeCls?: string; dim?: boolean; size?: number; fitSide?: boolean } = {}): string {
   const size = opts.size ?? 48;
   const cls = rarity >= 5 ? "r5" : rarity >= 4 ? "r4" : "r3";
+  // 官方侧脸头像（side_icon）为 128px 画布，头顶约 20% 透明：识别后裁掉留白，正脸头像（256px）不受影响
+  const onload = opts.fitSide ? ` onload="if(this.naturalWidth<=128)this.classList.add('side')"` : "";
   return `
   <div class="ch-avatar ${opts.dim ? "dim" : ""}" title="">
-    <img class="${cls}" src="${esc(icon)}" style="width:${size}px;height:${size}px" loading="lazy" onerror="this.style.opacity=0.2"/>
+    <img class="${cls}" src="${esc(img(icon))}" style="width:${size}px;height:${size}px" loading="lazy"${onload} onerror="this.style.opacity=0.2"/>
     ${opts.badge ? `<span class="ch-badge ${opts.badgeCls ?? ""}">${esc(opts.badge)}</span>` : ""}
   </div>`;
 }
@@ -122,7 +125,7 @@ function renderStatCard(label: string, value: string, icon?: string, rarity?: nu
   return `
   <div class="ch-stat">
     <span class="ch-stat-label">${esc(label)}</span>
-    <span class="ch-stat-value">${esc(value)}${icon ? avatarTile(icon, rarity ?? 5, { size: 32 }).replace('title=""', "") : ""}</span>
+    <span class="ch-stat-value">${esc(value)}${icon ? avatarTile(icon, rarity ?? 5, { size: 32, fitSide: true }).replace('title=""', "") : ""}</span>
   </div>`;
 }
 
@@ -394,6 +397,7 @@ export function renderTheaterPage(content: HTMLElement, currentUser: UserDto | u
           d.has_data ? `${d.stat.max_round_id}幕` : "未挑战",
           `${fmtTime(d.schedule.start_time)} - ${fmtTime(d.schedule.end_time)}`,
           theaterIdx === i,
+          i === 0 ? "最新" : undefined,
         ),
       )
       .join("");
@@ -578,6 +582,7 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
           d.single.has_data || d.mp.has_data ? "有记录" : "未挑战",
           `${fmtTime(d.schedule.start_time)} - ${fmtTime(d.schedule.end_time)}`,
           hcIdx === i,
+          i === 0 ? "最新" : undefined,
         ),
       )
       .join("");
@@ -612,7 +617,7 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
           .map(
             (b) => `
           <div class="ch-hc-best">
-            <img src="${esc(b.side_icon)}" loading="lazy" onerror="this.style.opacity=0.2"/>
+            <img src="${esc(img(b.side_icon))}" loading="lazy" onerror="this.style.opacity=0.2"/>
             <span class="type">${HC_BEST_TYPE[b.kind] ?? ""}</span>
             <span class="value">${fmtValue(b.dps)}</span>
           </div>`,
@@ -622,7 +627,7 @@ export function renderHardChallengePage(content: HTMLElement, currentUser: UserD
         return `
         <div class="ch-card ch-hc-challenge">
           <div class="ch-hc-head">
-            <img class="ch-hc-monster" src="${esc(c.monster.icon)}" loading="lazy" onerror="this.style.opacity=0.2" title="${esc(c.monster.desc.join("\n"))}"/>
+            <img class="ch-hc-monster" src="${esc(img(c.monster.icon))}" loading="lazy" onerror="this.style.opacity=0.2" title="${esc(c.monster.desc.join("\n"))}"/>
             <div class="ch-hc-mtext">
               <div class="name">${esc(c.monster.name)}</div>
               <div class="level">Lv.${c.monster.level}</div>

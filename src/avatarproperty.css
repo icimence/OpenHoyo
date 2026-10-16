@@ -1,408 +1,559 @@
-/* 我的角色页（1:1 复刻原版 AvatarPropertyPage 的视觉语言） */
+/* 我的角色页（复刻原版 AvatarPropertyPage：CommandBar 卡片 + 内容卡片，均为 16px 外边距） */
 
-.ap-shell {
-  padding: 0 16px 16px;
+.content.content-flush {
+  padding: 0;
+  overflow: hidden;
 }
 
-.ap-empty {
+.ap-page {
+  height: 100%;
   display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  min-height: 0;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+/* ---------------- 空状态（StandardView.EmptyContent） ---------------- */
+
+.ap-empty {
+  height: 100%;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding-top: 80px;
 }
 
 .ap-empty-card {
+  min-width: 480px;
+  padding: 16px;
   background: var(--bg-card);
   border: 1px solid var(--stroke);
-  border-radius: 12px;
-  padding: 32px 48px;
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.ap-empty-emoji {
-  font-size: 56px;
-}
-
-.ap-empty-title {
-  font-size: 15px;
-  color: var(--text-secondary);
-}
-
-.ap-main {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ap-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  background: var(--bg-card);
-  border: 1px solid var(--stroke);
-  border-radius: 10px;
-  padding: 8px 12px;
-}
-
-.ap-toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ap-layout-btn {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg-layer);
-  color: var(--text-secondary);
-}
-
-.ap-layout-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.ap-sort {
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg-layer);
-  border: 1px solid var(--stroke);
-  color: var(--text);
-  font-family: var(--font);
-}
-
-.ap-export {
-  padding: 6px 12px;
-  border-radius: 6px;
-  background: var(--bg-layer);
-  color: var(--text-secondary);
-}
-
-.ap-filters {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-  flex: 1;
-}
-
-.ap-filter-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--stroke-strong);
-  margin: 0 6px;
-}
-
-.ap-filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: var(--bg-layer);
-  border: 1px solid var(--stroke);
-  color: var(--text-secondary);
-}
-
-.ap-filter-chip .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.ap-filter-chip.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-/* ---- 网格卡片（名片背景 + 头像/武器/技能） ---- */
-
-.ap-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
-}
-
-
-/* ---- 网格卡片：横版主次布局（角色大头+名字层 | 武器次级 | 技能底行） ---- */
-
-.ap-card {
-  position: relative;
-  height: 148px;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--stroke);
-  background: var(--bg-card);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  transition: transform 0.12s ease, border-color 0.12s ease;
-}
-
-.ap-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--stroke-strong);
-}
-
-.ap-card.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.ap-card-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: top;
-  opacity: 0.75;
-}
-
-.ap-card-mask {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.82) 100%);
-}
-
-.ap-card-top {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 10px 6px;
-}
-
-.ap-card-portrait {
-  position: relative;
-  width: 68px;
-  height: 68px;
-  flex-shrink: 0;
-}
-
-.ap-card-portrait img {
-  width: 100%;
-  height: 100%;
-  border-radius: 10px;
-  object-fit: cover;
-  display: block;
-}
-
-.ap-card-portrait.q5 { border: 2px solid #d3bc8e; box-shadow: 0 0 6px rgba(211,188,142,0.45); }
-.ap-card-portrait.q4 { border: 2px solid #a256e1; box-shadow: 0 0 6px rgba(162,86,225,0.4); }
-.ap-card-portrait.q3 { border: 2px solid var(--stroke-strong); }
-
-.ap-card-title {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  color: #fff;
-}
-
-.ap-card-title b {
-  font-size: 15px;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ap-card-sub {
-  font-size: 12px;
-  opacity: 0.85;
-}
-
-.ap-card-weapon {
-  position: relative;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-}
-
-.ap-card-weapon img {
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-  object-fit: cover;
-  display: block;
-}
-
-.ap-card-weapon.q5 { border: 2px solid #d3bc8e; }
-.ap-card-weapon.q4 { border: 2px solid #a256e1; }
-.ap-card-weapon.q3 { border: 2px solid var(--stroke-strong); }
-
-/* 徽标：底部胶囊 / 右上角标 */
-.ap-badge.pill {
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 1px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-.ap-badge.corner {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  background: rgba(0, 0, 0, 0.72);
-  color: #ffd49a;
-  font-size: 11.5px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-}
-
-/* 技能底行 */
-.ap-card-skills {
-  position: relative;
-  display: flex;
-  gap: 6px;
-  padding: 4px 10px 10px;
-}
-
-.ap-skill-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 2px 10px;
-  font-size: 12px;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.ap-skill-pill b {
-  color: rgba(255, 255, 255, 0.65);
-  font-weight: 600;
-}
-
-
-/* ---- 列表 + 详情（对应原版 SplitView，规格来自真机逐区观察） ---- */
-
-.ap-split {
-  display: flex;
-  gap: 16px;
-  min-height: 480px;
   align-items: stretch;
 }
 
-/* 左列：底色稍深与详情区分层（原版无分隔线，靠背景层次） */
-.ap-split-pane {
-  width: 240px;
-  flex-shrink: 0;
-  background: color-mix(in srgb, var(--bg-card) 92%, #000 8%);
+.ap-empty-title {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.ap-empty-desc {
+  margin-top: 12px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* SettingsCard（可点击） */
+.settings-card {
+  margin-top: 24px;
+  width: 100%;
+  min-height: 68px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--hover-faint);
   border: 1px solid var(--stroke);
-  border-radius: 8px;
-  overflow-y: auto;
-  max-height: calc(100vh - 200px);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.settings-card .ap-chev {
+  width: 14px;
+  height: 14px;
+  stroke: var(--text-secondary);
+  stroke-width: 1.4;
+  fill: none;
+}
+
+/* ---------------- CommandBar ----------------
+   左（布局切换 + 排序）不收缩；筛选框 flex 伸缩（220px~600px）；右侧按钮窄宽度时只留图标。
+   一行放不下就整体换行（flex-wrap），控件之间不会重叠。 */
+
+.ap-commandbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  container-type: inline-size;
+  container-name: apbar;
+}
+
+.ap-cb-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ap-cb-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.ap-sort {
+  width: 184px;
+}
+
+/* Segmented（LayoutSwitch，shadcn ToggleGroup 外观） */
+.ap-commandbar .segmented {
+  display: flex;
+  height: var(--sc-height);
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--sc-radius);
+  background: var(--hover-soft);
+}
+
+.ap-commandbar .segmented button {
+  width: 34px;
+  height: 100%;
+  padding: 0;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.ap-commandbar .segmented button:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+
+.ap-commandbar .segmented button.active,
+.ap-commandbar .segmented button.active:hover:not(:disabled) {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 0 0 1px var(--stroke);
+}
+
+.ap-commandbar .segmented svg,
+.appbar-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 操作按钮（shadcn Button variant=ghost） */
+.appbar-btn {
+  height: var(--sc-height);
+  padding: 0 12px;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--sc-radius);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.appbar-btn:hover:not(:disabled) {
+  background: var(--hover-soft);
+}
+
+.appbar-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--divider);
+}
+
+/* 筛选（shadcn Combobox：Input + Badge） */
+.ap-filter {
+  flex: 1 1 260px;
+  min-width: 220px;
+  max-width: 600px;
+  flex-wrap: wrap;
+  padding: 0 10px;
+  cursor: text;
+}
+
+/* 有 Badge 时换行仍保持紧凑：输入行高与 Badge 对齐 */
+.ap-filter input {
+  height: 34px;
+}
+
+.ap-filter:has(.sc-badge) {
+  padding-block: 2px;
+}
+
+.ap-filter:has(.sc-badge) input {
+  height: 30px;
+}
+
+.token-search {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  stroke: var(--text-secondary);
+  stroke-width: 1.3;
+  fill: none;
+}
+
+.token-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.token-dot.none {
+  background: transparent;
+  border: 1px dashed var(--stroke-strong);
+}
+
+/* 宽度不足时：右侧操作收为纯图标按钮（悬停 title 提示全名） */
+/* 阈值 = 左侧 266 + 筛选最小 220 + 三个带文字按钮约 400 + 间距内边距 ≈ 930 */
+@container apbar (max-width: 930px) {
+  .ap-cb-right .lbl {
+    display: none;
+  }
+
+  .appbar-btn {
+    width: var(--sc-height);
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* 再窄：筛选框独占第二行铺满 */
+@container apbar (max-width: 620px) {
+  .ap-filter {
+    order: 3;
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+/* ---------------- 内容卡 ---------------- */
+
+.ap-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.ap-not-found {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ---- ItemIcon：品质渐变底（取色自原版 UI_QUALITY_*）---- */
+
+.item-icon {
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.item-icon.q5 { background: linear-gradient(180deg, #755852, #a3734f 50%, #c79153); }
+.item-icon.q4 { background: linear-gradient(180deg, #63588a, #8c6fac 50%, #a97dbd); }
+.item-icon.q3 { background: linear-gradient(180deg, #51597b, #4e6c8a 50%, #4c8aa3); }
+.item-icon.q2 { background: linear-gradient(180deg, #4a5a5f, #486b67 50%, #52826e); }
+.item-icon.q1 { background: linear-gradient(180deg, #505862, #5d6371 50%, #727a88); }
+
+.item-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.item-icon .ii-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding-bottom: 1px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.item-icon .ii-corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 0 6px 1px;
+  border-radius: 0 0 0 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 13px;
+}
+
+.ap-fetter {
+  width: 14px;
+  height: 14px;
+  fill: #ff8fa3;
+  flex-shrink: 0;
+}
+
+/* VerticalCard */
+.vcard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border-radius: 6px;
+  background: var(--hover-soft);
+  overflow: hidden;
+}
+
+.vcard-top {
+  display: flex;
+  justify-content: center;
+}
+
+.vcard-bottom {
+  padding: 2px 0;
+  text-align: center;
+  font-size: 13.5px;
+}
+
+/* ---------------- 网格布局（AvatarGridViewTemplate） ---------------- */
+
+.ap-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 4px 4px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 12px;
+}
+
+.ap-grid-item {
+  position: relative;
+  overflow: hidden;
+  padding: 6px;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.ap-grid-item:hover:not(:disabled) {
+  background: var(--bg-card);
+  border-color: var(--stroke-strong);
+}
+
+.ap-grid-item.active {
+  outline: 2px solid var(--accent-light);
+  outline-offset: -2px;
+}
+
+.ap-grid-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  opacity: 0.5;
+}
+
+.ap-grid-acrylic {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  backdrop-filter: blur(24px);
+}
+
+.ap-grid-row {
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+
+.ap-grid-skill {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ap-grid-skill img {
+  width: 40px;
+  height: 40px;
+}
+
+/* 技能/属性图标为白色线稿：浅色主题下反相显示（对应 ShowAsMonoChrome） */
+html[data-theme="light"] img.mono {
+  filter: invert(1) brightness(0.35);
+}
+
+/* ---------------- 列表布局（SplitView） ---------------- */
+
+.ap-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.ap-split-pane {
+  width: 212px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--hover-faint);
+  border-right: 1px solid var(--stroke);
+}
+
+.ap-split-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0;
 }
 
 .ap-list-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 5px 10px;
-  text-align: left;
-  border-radius: 0;
-  min-height: 54px;
+  width: calc(100% - 10px);
+  margin: 2px 5px;
+  padding: 0 12px 0 16px;
+  height: 48px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  position: relative;
+  gap: 0;
+}
+
+.ap-list-item:hover:not(:disabled) {
+  background: var(--hover-soft);
 }
 
 .ap-list-item.active {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  border-left: 3px solid var(--accent);
+  background: var(--hover-strong);
 }
 
-.ap-side-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--bg-layer);
+.ap-list-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 30%;
+  height: 40%;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-light);
+}
+
+.ap-side {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: visible;
+}
+
+.ap-side img {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  top: -10px;
+  left: -6px;
 }
 
 .ap-list-text {
   display: flex;
   flex-direction: column;
-  line-height: 1.35;
   min-width: 0;
+  margin-left: 6px;
+  text-align: left;
 }
 
-.ap-list-text b {
-  font-size: 13.5px;
-  font-weight: 600;
+.ap-list-text .name {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.ap-list-text small {
-  color: var(--text-tertiary);
-  font-size: 11.5px;
+.ap-list-text .lv {
+  font-size: 12px;
+  opacity: 0.7;
 }
 
-.ap-list-count {
-  margin-top: auto;
-  padding: 8px;
+.ap-split-count {
+  padding: 6px 0;
   text-align: center;
   font-size: 12px;
-  color: var(--text-tertiary);
-  border-top: 1px solid var(--divider);
+  background: var(--hover-soft);
+  border-top: 1px solid var(--stroke);
 }
 
-.ap-split-main {
+.ap-detail-scroll {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
-  max-height: calc(100vh - 200px);
-  background: var(--bg-card);
-  border: 1px solid var(--stroke);
-  border-radius: 8px;
-  padding: 16px;
 }
-
-.ap-no-select {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-tertiary);
-}
-
-/* ---- 名片大卡：840:400 全宽，轻渐变遮罩（顶部近透明，底部文字区压暗） ---- */
 
 .ap-detail {
+  max-width: 800px;
+  margin: 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-width: 880px;
+  animation: ap-enter 0.25s ease-out;
 }
+
+@keyframes ap-enter {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
+
+/* ---- 卡片面板（840:400，名片位为官方立绘） ---- */
 
 .ap-hero {
   position: relative;
-  border-radius: 8px;
-  overflow: hidden;
+  min-width: 592px;
   aspect-ratio: 840 / 400;
-  width: 100%;
-  display: flex;
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: 1fr auto;
+  background: #3a3a3a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  color: #fff;
 }
 
 .ap-hero-bg {
@@ -411,349 +562,418 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center;
+  object-position: 70% 15%;
 }
 
 .ap-hero-mask {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.18) 45%, rgba(0, 0, 0, 0.55) 100%);
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
 }
 
-.ap-hero-left {
+.ap-hero-info {
   position: relative;
+  grid-row: 1;
+  grid-column: 1;
+  margin: 16px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  padding: 16px;
   gap: 16px;
 }
 
-.ap-hero-id {
+.ap-hero-row {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 16px;
 }
 
-.ap-hero-name {
+.ap-hero-row .item-icon {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.ap-hero-text {
   display: flex;
   flex-direction: column;
-  color: #fff;
-  gap: 3px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  gap: 2px;
 }
 
-.ap-hero-name b {
-  font-size: 21px;
+.ap-subtitle {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ap-base {
+  font-size: 14px;
   font-weight: 600;
 }
 
-.ap-hero-name > span {
-  font-size: 14px;
-}
-
-.ap-stars {
-  display: flex;
-  gap: 1px;
-}
-
-.ap-star {
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 13px;
-}
-
-.ap-star.on {
-  color: #ffd49a;
-}
-
-.ap-stars.small .ap-star {
-  font-size: 9px;
-}
-
-.ap-hero-weapon {
+.ap-caption {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 4px;
+  font-size: 12px;
 }
 
-.ap-weapon-info {
+.ap-promote {
   display: flex;
-  flex-direction: column;
-  color: #fff;
-  gap: 3px;
-  font-size: 14px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  gap: 2px;
 }
 
-.ap-weapon-info b {
-  font-size: 16px;
-  font-weight: 600;
+.ap-promote i {
+  width: 12px;
+  height: 12px;
+  display: flex;
 }
 
-/* 技能列：无框纯图标 + 数字（对应原版 AvatarSkillTemplate 无背景样式） */
+.ap-promote svg {
+  width: 12px;
+  height: 12px;
+  fill: #808080;
+}
+
+.ap-promote i.on svg {
+  fill: #fff;
+}
+
+.ap-weapon-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+}
+
+.ap-weapon-btn:hover:not(:disabled) {
+  background: transparent;
+  filter: brightness(1.1);
+}
+
 .ap-hero-skills {
   position: relative;
-  margin-left: auto;
-  padding: 16px;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: end;
+  margin: 16px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 14px;
 }
 
-.ap-skill-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-}
-
-.ap-skill-row img {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  display: block;
-}
-
-.ap-skill-row span {
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-/* 命座行：未激活 = 灰度 + 半透明（无锁图标，对应原版 BoolToOpacity） */
-.ap-hero-cons {
-  position: absolute;
-  bottom: 12px;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  gap: 6px;
-}
-
-.ap-cons-btn {
-  position: relative;
-  padding: 0;
-  background: transparent;
+.ap-skill {
+  margin-top: 2px;
+  padding: 4px;
   border: none;
-}
-
-.ap-cons-btn img {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-}
-
-.ap-cons-btn img.off {
-  opacity: 0.4;
-  filter: grayscale(1);
-}
-
-/* ---- 属性折叠面板（对应原版 Expander，默认展开） ---- */
-
-.ap-props {
-  border: 1px solid var(--stroke);
-  border-radius: 8px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--bg-layer) 55%, transparent);
-}
-
-.ap-props summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 12px 16px;
+  background: transparent;
+  color: #fff;
+  gap: 6px;
   font-weight: 600;
-  font-size: 14px;
-  user-select: none;
+  min-width: 142px;
+}
+
+.ap-skill:hover:not(:disabled),
+.ap-cons:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ap-skill img,
+.ap-skill-ph {
+  width: 36px;
+  height: 36px;
+}
+
+.ap-hero-cons {
+  position: relative;
+  grid-row: 2;
+  grid-column: 1;
+  margin: 16px;
+  display: flex;
+}
+
+.ap-cons {
+  position: relative;
+  margin-right: 2px;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  justify-content: center;
+}
+
+.ap-cons img {
+  width: 36px;
+  height: 36px;
+}
+
+.ap-cons.locked img {
+  opacity: 0.5;
+}
+
+.ap-lock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  stroke: #fff;
+  stroke-width: 1.4;
+  fill: rgba(0, 0, 0, 0.4);
+}
+
+/* ---- 角色属性 Expander ---- */
+
+.ap-expander {
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ap-expander summary {
+  list-style: none;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 16px;
+  background: var(--hover-soft);
+  cursor: default;
 }
 
-.ap-props summary::before {
-  content: "›";
-  display: inline-block;
-  transition: transform 0.15s ease;
-  font-size: 16px;
-  color: var(--text-tertiary);
-}
-
-.ap-props[open] summary::before {
-  transform: rotate(90deg);
-}
-
-.ap-props summary::-webkit-details-marker {
+.ap-expander summary::-webkit-details-marker {
   display: none;
 }
 
-.ap-props-body {
-  border-top: 1px solid var(--divider);
+.ap-expander summary .ap-chev {
+  width: 12px;
+  height: 12px;
+  stroke: var(--text-secondary);
+  stroke-width: 1.4;
+  fill: none;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
 }
 
-.ap-prop-row {
+.ap-expander[open] summary .ap-chev {
+  transform: rotate(-90deg);
+}
+
+.ap-expander-body {
+  background: var(--hover-soft);
+}
+
+.ap-prop {
   display: grid;
-  grid-template-columns: 1fr auto 96px;
+  grid-template-columns: 16px 1fr auto 108px;
   align-items: center;
-  padding: 0 16px;
-  min-height: 36px;
-  border-top: 1px solid color-mix(in srgb, var(--divider) 55%, transparent);
-  font-size: 14px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--stroke);
 }
 
-.ap-prop-row:first-child {
-  border-top: none;
+.ap-prop-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
 }
 
-.ap-prop-val {
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-  padding-right: 16px;
+.ap-prop-icon img {
+  width: 16px;
+  height: 16px;
+}
+
+.ap-prop-name {
+  margin-left: 16px;
 }
 
 .ap-prop-add {
-  color: #4cce63;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+  margin-left: 8px;
+  color: #90e800;
 }
 
-/* ---- 圣遗物：一排 5 张，右上角强化等级（对应原版 UniformPanel） ---- */
+html[data-theme="light"] .ap-prop-add {
+  color: #74bf00;
+}
+
+/* ---- 推荐主属性 ---- */
+
+.ap-recs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.ap-rec {
+  position: relative;
+  min-height: 92px;
+}
+
+.ap-rec-title {
+  margin: 12px 12px 0;
+  font-size: 12px;
+}
+
+.ap-rec-values {
+  margin: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 14px;
+}
+
+.ap-rec-img {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  transform: translateY(-50%);
+  opacity: 0.85;
+}
+
+/* ---- 圣遗物（UniformPanel MinItemWidth=240） ---- */
 
 .ap-relics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
 }
 
 .ap-relic {
-  position: relative;
+  border-radius: var(--radius);
+  background: var(--hover-soft);
   border: 1px solid var(--stroke);
-  border-radius: 6px;
-  padding: 12px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: color-mix(in srgb, var(--bg-layer) 40%, transparent);
 }
 
 .ap-relic-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.ap-relic-head .ap-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 6px;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--stroke);
 }
 
 .ap-relic-name {
-  min-width: 0;
   flex: 1;
-}
-
-.ap-relic-name b {
-  font-size: 12.5px;
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .ap-relic-name small {
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 12px;
+  opacity: 0.7;
 }
 
-.ap-relic-lv {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
+.ap-relic-score {
+  font-weight: 700;
 }
 
 .ap-relic-main {
   display: flex;
   justify-content: space-between;
-  gap: 6px;
-  border-top: 1px solid var(--divider);
-  border-bottom: 1px solid var(--divider);
-  padding: 6px 0;
-  font-size: 12.5px;
-}
-
-.ap-relic-main b {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ap-relic-main b:last-child {
-  flex-shrink: 0;
+  padding: 12px;
+  border-bottom: 1px solid var(--stroke);
 }
 
 .ap-relic-subs {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 12px;
+  padding: 12px 0;
 }
 
 .ap-relic-sub {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.ap-relic-sub b {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ap-enh {
+  width: 16px;
+  height: 16px;
+  border: 1px solid;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+/* ---------------- 详情弹层内容（弹层外观见 shadcn.css） ---------------- */
+
+.ap-fly-text,
+.ap-fly-weapon {
+  max-width: 320px;
+  line-height: 1.6;
+}
+
+.ap-fly-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.ap-fly-desc {
+  white-space: normal;
+}
+
+.ap-fly-params,
+.ap-fly-weapon {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ap-fly-params {
+  margin-top: 12px;
+}
+
+.ap-fly-weapon .ap-fly-desc {
+  margin-top: 12px;
+}
+
+.settings-row {
   display: flex;
   justify-content: space-between;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--hover-faint);
+  border: 1px solid var(--stroke);
 }
 
-.ap-relic-sub span:first-child {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.settings-row span:last-child {
+  text-align: right;
 }
 
-/* 通用品质图标（名片区的角色/武器大头像：外描边，对应原版 ItemIcon） */
-.ap-icon {
-  position: relative;
-  flex-shrink: 0;
-  border-radius: 8px;
-  overflow: hidden;
+.rt-color {
+  font-weight: 600;
 }
 
-.ap-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+/* 浅色主题下米哈游富文本的亮黄/亮蓝不可读，压暗显示 */
+html[data-theme="light"] .rt-color {
+  filter: brightness(0.6) saturate(1.4);
 }
 
-.ap-icon.big {
-  width: 86px;
-  height: 86px;
+/* ---------------- 同步进度对话框 ---------------- */
+
+.ap-progress {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
 }
 
-.ap-icon.q5 {
-  border: 2px solid #d3bc8e;
-  box-shadow: 0 0 6px rgba(211, 188, 142, 0.35);
-}
-
-.ap-icon.q4 {
-  border: 2px solid #a256e1;
-}
-
-.ap-icon.q3 {
-  border: 2px solid var(--stroke-strong);
+.ap-spin {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--spinner-track);
+  border-top-color: var(--accent-light);
+  animation: spin 0.8s linear infinite;
 }

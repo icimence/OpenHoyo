@@ -262,6 +262,31 @@ pub async fn refresh_cookie_token(
     Ok(UserDto::from(&rec))
 }
 
+/// 刷新角色游戏内头像（对应原版 UserGameRole.RefreshProfilePictureCommand）。
+/// 不广播 users://changed（防事件回环），前端拿返回值自行重绘。
+#[tauri::command]
+pub async fn refresh_role_avatar(
+    state: State<'_, AppState>,
+    user_id: i64,
+    game_uid: String,
+) -> ApiResult<UserDto> {
+    log::info!("[user] 刷新游戏内头像");
+    let (mut rec, _) = prepare_record_user(&state, user_id, &game_uid).await?;
+    match service::refresh_role_avatar(&state, &mut rec, &game_uid).await {
+        Ok(changed) => {
+            if changed {
+                service::save(&state, &mut rec)?;
+            }
+            log::info!("[user] 游戏内头像刷新完成（changed={changed}）");
+            Ok(UserDto::from(&rec))
+        }
+        Err(e) => {
+            log::warn!("[user] 游戏内头像刷新失败: retcode={} {}", e.code, e.message);
+            Err(e)
+        }
+    }
+}
+
 /// 导出用户完整 Cookie（对应原版 CopyCookieCommand）
 #[tauri::command]
 pub async fn export_user_cookies(state: State<'_, AppState>, id: i64) -> ApiResult<String> {
@@ -538,6 +563,7 @@ pub async fn chronicle_list(
 /// 拉取官方数据并合并入库，返回合并后的全部历史期
 #[tauri::command]
 pub async fn chronicle_refresh(
+    app: AppHandle,
     state: State<'_, AppState>,
     user_id: i64,
     game_uid: String,
@@ -631,6 +657,9 @@ pub async fn chronicle_refresh(
         fetched.len()
     );
 
+    // 新记录里可能出现新角色/敌人的图片：同意本地保存时后台补下
+    crate::static_res::sync_records_later(&app);
+
     let db = state.db.lock().unwrap();
     crate::game_record::list_periods(&db, &uid, &kind)
         .map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))
@@ -653,6 +682,7 @@ pub struct AvatarPropertyDto {
 /// 一次拉齐我的角色数据（index + list + detail 三接口）
 #[tauri::command]
 pub async fn avatar_property_refresh(
+    app: AppHandle,
     state: State<'_, AppState>,
     user_id: i64,
     game_uid: String,
@@ -710,12 +740,7 @@ pub async fn avatar_property_refresh(
 
     log::info!("[avatar_property] 刷新完成（{} 个角色）", ids.len());
     // 顺带回填游戏内头像（index.role.game_head_icon）到角色档案，侧边栏选中该角色时展示
-    if let Some(head) = index
-        .get("role")
-        .and_then(|r| r.get("game_head_icon"))
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-    {
+    if let Some(head) = crate::game_record::head_icon_of(&index) {
         if let Some(role) = rec.game_roles.iter_mut().find(|r| r.game_uid == uid) {
             if role.avatar != head {
                 role.avatar = head.to_string();
@@ -737,6 +762,7 @@ pub async fn avatar_property_refresh(
             log::warn!("[avatar_property] 缓存写入失败: {e}");
         }
     }
+    crate::static_res::sync_records_later(&app);
     Ok(dto)
 }
 

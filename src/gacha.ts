@@ -5,7 +5,8 @@ import { importUigf } from "./gacha-import";
 import { renderEventHistory } from "./gacha-history";
 import { renderCountdown } from "./gacha-countdown";
 import { combineLimitedOrange } from "./gacha-combined";
-import { esc, iconSrc } from "./gacha-view-utils";
+import { esc, iconFallbackAttr, iconSrc } from "./gacha-view-utils";
+import { bindSelect, selectTrigger, type SelectOption } from "./select";
 
 // ---------------------------------------------------------------------------
 // 模块状态与进度事件（单例监听，避免重复注册）
@@ -19,6 +20,10 @@ interface GachaPageContext {
 let ctx: GachaPageContext = { currentUser: null };
 let archives: GachaArchiveDto[] = [];
 let selectedArchive: number | null = null;
+
+function archiveOptions(): SelectOption[] {
+  return archives.length > 0 ? archives.map((a) => ({ value: String(a.id), label: `UID ${a.uid}` })) : [{ value: "", label: "暂无存档" }];
+}
 let stats: GachaStatisticsDto | null = null;
 let progressText = "";
 let activeTab = "overview";
@@ -111,7 +116,7 @@ function updateProgressDialog(p: GachaProgressEvent): void {
     grid.innerHTML = p.items
       .map((it) => {
         const q = it.rank_type === 5 ? "orange" : it.rank_type === 4 ? "purple" : "blue";
-        return `<div class="gp-tile ${q}">${esc(it.name.slice(0, 1))}<img src="${iconSrc(it.name)}" onerror="this.remove()" loading="lazy"/></div>`;
+        return `<div class="gp-tile ${q}">${esc(it.name.slice(0, 1))}<img src="${iconSrc(it.name)}" ${iconFallbackAttr(it.name)} loading="lazy"/></div>`;
       })
       .join("");
   }
@@ -154,11 +159,7 @@ function render(content: HTMLElement): void {
     : "";
   const toolbar = `
     <div class="gacha-commandbar">
-      <select id="gacha-archive-select" class="gacha-select" ${hasArchive ? "" : "disabled"}>
-        ${hasArchive
-          ? archives.map((a) => `<option value="${a.id}" ${a.id === selectedArchive ? "selected" : ""}>UID ${a.uid}</option>`).join("")
-          : '<option>暂无存档</option>'}
-      </select>
+      ${selectTrigger("gacha-archive-select", archiveOptions(), String(selectedArchive ?? ""), { disabled: !hasArchive, cls: "gacha-select" })}
       <div class="gacha-tabs">${tabs}</div>
       <div class="gacha-progress" id="gacha-progress">${esc(progressText)}</div>
       <div class="refresh-wrap">
@@ -233,12 +234,15 @@ function render(content: HTMLElement): void {
 }
 
 function wireToolbar(content: HTMLElement): void {
-  const select = content.querySelector<HTMLSelectElement>("#gacha-archive-select");
-  select?.addEventListener("change", () => {
-    console.info(`[gacha] 切换存档 → ${select.selectedOptions[0]?.textContent ?? select.value}`);
-    selectedArchive = Number(select.value);
-    void load().catch((e: unknown) => toast(errText(e), "error"));
-  });
+  const select = content.querySelector<HTMLButtonElement>("#gacha-archive-select");
+  if (select && archives.length > 0) {
+    const options = archiveOptions();
+    bindSelect(select, options, String(selectedArchive ?? ""), (value) => {
+      console.info(`[gacha] 切换存档 → ${options.find((o) => o.value === value)?.label ?? value}`);
+      selectedArchive = Number(value);
+      void load().catch((e: unknown) => toast(errText(e), "error"));
+    });
+  }
 
   // 刷新菜单与更多菜单：同一时刻只展开一个，点击外部全部收起
   const refreshBtn = content.querySelector<HTMLButtonElement>("#gacha-refresh-btn");
@@ -441,7 +445,7 @@ function orangeListHtml(w: WishSummary, combined: boolean): string {
   return `<div class="orange-scroll" role="region" aria-label="${esc(w.name)}五星记录" tabindex="0"><div class="orange-flat">${entries
     .map(
       (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽${combined && o.is_up ? "（含此前歪出的抽数）" : ""} · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
-        <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" onerror="this.remove()" loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
+        <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" ${iconFallbackAttr(o.name)} loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
         <span class="flat-count orange">${o.pull}</span>
       </div>`,
     )
@@ -514,7 +518,7 @@ function renderNameCount(body: HTMLElement, entries: NameCountEntry[], kind: "av
       const tiles = items
         .map(
           (e) => `<div class="flat-tile" title="${esc(e.name)} × ${e.count}">
-            <div class="tile-face ${q}">${esc(e.name.slice(0, 1))}<img src="${iconSrc(e.name)}" onerror="this.remove()" loading="lazy"/></div>
+            <div class="tile-face ${q}">${esc(e.name.slice(0, 1))}<img src="${iconSrc(e.name)}" ${iconFallbackAttr(e.name)} loading="lazy"/></div>
             <span class="flat-count ${q}">${e.count}</span>
           </div>`,
         )

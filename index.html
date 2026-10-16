@@ -100,6 +100,11 @@
           <span>胡桃工具箱 <small>学习复刻版</small></span>
         </div>
         <div class="titlebar-actions">
+          <!-- 后台任务（对应原版 TitleBar.RightHeader 的 BackgroundActivity 按钮；悬停展开详情） -->
+          <div id="bg-tasks" class="bg-tasks hidden">
+            <button class="bg-tasks-btn" id="bg-tasks-btn" aria-describedby="bg-tasks-panel"><span class="bg-tasks-spin"></span><span id="bg-tasks-label">后台任务</span></button>
+            <div class="bg-tasks-panel" id="bg-tasks-panel" role="tooltip"></div>
+          </div>
           <button id="win-update" class="update-btn hidden" title="发现新版本"><svg><use href="#i-download"/></svg><span></span></button>
           <button id="win-min" title="最小化"><svg><use href="#i-chevron"/></svg></button>
           <button id="win-max" title="最大化"><svg><rect x="4" y="4" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
@@ -122,6 +127,8 @@
             </button>
             <div id="user-flyout" class="user-flyout hidden"></div>
           </div>
+          <!-- 设置项（对应 NavigationView.SettingsItem：位于 PaneFooter 用户区与分隔线之下） -->
+          <div id="nav-settings" class="nav-settings"></div>
         </nav>
 
         <!-- 内容区 -->

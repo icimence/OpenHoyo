@@ -1,5 +1,5 @@
 import { api, errText, type GachaCountdown } from "./api";
-import { esc, iconSrc } from "./gacha-view-utils";
+import { esc, iconFallbackAttr, iconSrc } from "./gacha-view-utils";
 
 let cache: GachaCountdown[] | null = null;
 
@@ -12,7 +12,7 @@ export async function renderCountdown(body: HTMLElement): Promise<void> {
     const section = (title: string, filtered: GachaCountdown[]): string => `<section class="countdown-section">
       <h2>${title}</h2>
       ${filtered.length ? filtered.map((entry) => `<div class="countdown-item">
-        <div class="tile-face ${entry.rank_type === 5 ? "orange" : "purple"}">${esc(entry.name.slice(0, 1))}<img src="${iconSrc(entry.name)}" loading="lazy" onerror="this.remove()"/></div>
+        <div class="tile-face ${entry.rank_type === 5 ? "orange" : "purple"}">${esc(entry.name.slice(0, 1))}<img src="${iconSrc(entry.name)}" loading="lazy" ${iconFallbackAttr(entry.name)}/></div>
         <div class="countdown-copy"><strong>${esc(entry.name)}</strong><span>距离上次 UP 已有 <b>${entry.days}</b> 天</span><small>上次 UP：${esc(entry.last_up)} · ${esc(entry.version)}</small></div>
       </div>`).join("") : '<p class="countdown-empty">暂无记录</p>'}
     </section>`;

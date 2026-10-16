@@ -13,14 +13,10 @@
   margin-bottom: 5px;
 }
 
+/* 存档选择：外观见 shadcn.css 的 .sc-select，这里只定宽 */
 .gacha-select {
-  background: var(--bg-card);
-  color: var(--text);
-  border: 1px solid var(--stroke);
-  border-radius: 5px;
-  padding: 7px 10px;
-  font-size: 13px;
-  font-family: var(--font);
+  width: 168px;
+  flex-shrink: 0;
 }
 
 .refresh-wrap {
