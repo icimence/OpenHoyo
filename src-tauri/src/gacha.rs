@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::Duration;
 use tauri::Emitter;
+#[cfg(windows)]
 use winreg::enums::HKEY_CURRENT_USER;
 
 pub const QUERY_TYPES: &[i32] = &[100, 200, 301, 302, 500];
@@ -187,6 +188,7 @@ fn game_dir_candidates() -> Vec<(std::path::PathBuf, &'static str)> {
         }
     }
 
+    #[cfg(windows)]
     for (reg_path, data_folder) in [
         (r"Software\miHoYo\原神", "YuanShen_Data"),
         (r"Software\miHoYo\Genshin Impact", "GenshinImpact_Data"),

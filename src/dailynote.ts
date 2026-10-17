@@ -4,6 +4,7 @@
 import { api, errText, isApiError, type DailyNoteData, type UserDto } from "./api";
 import { img } from "./img";
 import { toast } from "./ui";
+import { isMobile } from "./platform";
 import { abandonActiveGeetest, fetchWithVerification } from "./verify";
 
 /** 每个角色的最新快照（uid -> data），供倒计时走针就地刷新 */
@@ -225,7 +226,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
       <div class="placeholder-page"><div class="placeholder-card">
         <svg><use href="#i-unimplemented"/></svg>
         <div class="title">尚未登录</div>
-        <div class="desc">通过左下角用户菜单登录后再来查看实时便签</div>
+        <div class="desc">通过${isMobile() ? "导航菜单底部的" : "左下角"}用户菜单登录后再来查看实时便签</div>
       </div></div>`;
     return;
   }

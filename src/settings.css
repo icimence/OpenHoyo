@@ -220,7 +220,7 @@ button.nowrap,
   display: flex;
   flex-direction: column;
   gap: 9px;
-  margin-top: 10px;
+  margin: 10px 0 14px;
 }
 
 .fb-textarea {

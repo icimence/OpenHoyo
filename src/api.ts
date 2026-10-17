@@ -354,6 +354,8 @@ export interface FeedbackResult {
 export interface UpdateNotice {
   version: string;
   gray: number;
+  /** 安卓 APK 下载地址（无安卓版本时为 null） */
+  androidUrl: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,543 @@
+/* ============================================================
+   安卓手机布局（html[data-platform="android"] 下生效，桌面不受影响）
+   - 标题栏 → 顶部应用栏：汉堡按钮 + 当前页标题，避开状态栏（edge-to-edge 安全区）
+   - 侧边栏 → 左侧滑出抽屉 + 遮罩
+   - 多列网格 → 单列；左右分栏 → 上下堆叠；触控目标 ≥ 44px
+   - 去掉仅对鼠标有意义的悬停交互
+   ============================================================ */
+
+html[data-platform="android"] {
+  --titlebar-height: 56px;
+  --nav-width: min(300px, 82vw);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+html[data-platform="android"] body {
+  font-size: 15px;
+  overscroll-behavior: none;
+}
+
+/* 触屏不需要常驻滚动条：桌面 12px 滚动槽会吃掉右侧内容宽度 */
+html[data-platform="android"] ::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* ---- 顶部应用栏 ---- */
+
+html[data-platform="android"] .titlebar {
+  height: calc(var(--titlebar-height) + var(--safe-top, env(safe-area-inset-top)));
+  padding-top: var(--safe-top, env(safe-area-inset-top));
+  justify-content: flex-start;
+  gap: 4px;
+  padding-left: 4px;
+  position: relative;
+  z-index: 70;
+}
+
+html[data-platform="android"] .titlebar-title,
+html[data-platform="android"] #win-min,
+html[data-platform="android"] #win-max,
+html[data-platform="android"] #win-close,
+html[data-platform="android"] #win-update {
+  display: none;
+}
+
+.nav-toggle,
+.appbar-title {
+  display: none;
+}
+
+html[data-platform="android"] .nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+}
+
+html[data-platform="android"] .nav-toggle svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  fill: none;
+  stroke-linecap: round;
+}
+
+html[data-platform="android"] .appbar-title {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+html[data-platform="android"] .titlebar-actions {
+  margin-left: auto;
+  padding-right: 8px;
+}
+
+/* 后台任务入口在手机上收为圆点（悬停面板改为点按展开，由 :focus-within 触发） */
+html[data-platform="android"] .bg-tasks-panel {
+  position: fixed;
+  top: calc(var(--titlebar-height) + var(--safe-top, env(safe-area-inset-top)) + 4px);
+  right: 8px;
+  left: 8px;
+  width: auto;
+}
+
+/* ---- 抽屉导航 ---- */
+
+html[data-platform="android"] .shell {
+  position: relative;
+}
+
+html[data-platform="android"] .nav {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 90;
+  width: var(--nav-width);
+  padding-top: var(--safe-top, env(safe-area-inset-top));
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom));
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+}
+
+html[data-platform="android"] body.drawer-open .nav {
+  transform: none;
+}
+
+.nav-scrim {
+  display: none;
+}
+
+html[data-platform="android"] .nav-scrim {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+
+html[data-platform="android"] body.drawer-open .nav-scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+html[data-platform="android"] .nav-item {
+  min-height: 48px;
+  font-size: 15px;
+}
+
+html[data-platform="android"] .nav-group-header {
+  padding-top: 18px;
+}
+
+/* 用户菜单：抽屉内向上展开，宽度不超出屏幕 */
+html[data-platform="android"] .user-flyout {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(76px + var(--safe-bottom, env(safe-area-inset-bottom)));
+  max-height: 70vh;
+}
+
+html[data-platform="android"] .flyout-cols {
+  flex-direction: column;
+  min-width: 0;
+}
+
+html[data-platform="android"] .flyout-left {
+  border-right: none;
+  border-bottom: 1px solid var(--stroke);
+}
+
+html[data-platform="android"] .flyout-right {
+  width: auto;
+}
+
+html[data-platform="android"] .flyout-item,
+html[data-platform="android"] .role-row,
+html[data-platform="android"] .flyout-user-row {
+  min-height: 48px;
+}
+
+/* 触屏没有悬停：用户行的复制/移除按钮常驻显示 */
+html[data-platform="android"] .flyout-user-row .row-btns {
+  display: flex;
+}
+
+/* 触屏没有悬停：不提供手动刷新入口（缺头像时自动补拉），只在补拉进行中显示转圈 */
+html[data-platform="android"] .role-avatar-refresh:not(.spinning) {
+  display: none;
+}
+
+/* ---- 内容区 ---- */
+
+html[data-platform="android"] .content {
+  padding: 16px 14px calc(28px + var(--safe-bottom, env(safe-area-inset-bottom)));
+}
+
+html[data-platform="android"] .page-header h2 {
+  display: none; /* 标题已在顶部应用栏 */
+}
+
+html[data-platform="android"] .page-header {
+  margin-bottom: 14px;
+}
+
+html[data-platform="android"] button {
+  min-height: 40px;
+}
+
+/* 对话框：贴底的全宽卡片（底部弹出更便于单手操作） */
+html[data-platform="android"] .dialog-layer {
+  align-items: flex-end;
+}
+
+html[data-platform="android"] .dialog {
+  width: 100%;
+  max-width: none;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  padding-bottom: calc(18px + var(--safe-bottom, env(safe-area-inset-bottom)));
+}
+
+html[data-platform="android"] .toast {
+  bottom: calc(24px + var(--safe-bottom, env(safe-area-inset-bottom)));
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+
+/* 弹层（Select / 菜单 / 详情说明）在手机上最多占满屏宽 */
+html[data-platform="android"] .flyout {
+  max-width: calc(100vw - 16px);
+}
+
+html[data-platform="android"] button.sc-item {
+  min-height: 44px;
+}
+
+/* ---- 首次启动引导 ---- */
+
+html[data-platform="android"] .guide-layer {
+  inset: calc(var(--titlebar-height) + var(--safe-top, env(safe-area-inset-top))) 0 0 0;
+}
+
+html[data-platform="android"] .guide-page {
+  padding: 20px 16px calc(40px + var(--safe-bottom, env(safe-area-inset-bottom)));
+}
+
+html[data-platform="android"] .guide-header h1 {
+  font-size: 24px;
+}
+
+html[data-platform="android"] .guide-item-body {
+  padding: 16px;
+}
+
+html[data-platform="android"] .guide-choice {
+  grid-template-columns: 1fr;
+}
+
+html[data-platform="android"] .guide-actions {
+  flex-wrap: wrap;
+}
+
+html[data-platform="android"] .guide-actions button {
+  flex: 1 1 auto;
+  min-height: 44px;
+}
+
+/* ---- 设置页 ---- */
+
+html[data-platform="android"] .settings-tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+html[data-platform="android"] .settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+html[data-platform="android"] .setting-row {
+  flex-wrap: wrap;
+}
+
+html[data-platform="android"] .setting-row > .setting-text {
+  flex-basis: 100%;
+}
+
+html[data-platform="android"] .setting-actions,
+html[data-platform="android"] .setting-row > .segmented {
+  margin-left: auto;
+}
+
+html[data-platform="android"] .sr-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+html[data-platform="android"] .sr-cell-when {
+  grid-column: 1;
+  grid-row: 2;
+  color: var(--text-secondary);
+}
+
+html[data-platform="android"] .sr-cell-action {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+html[data-platform="android"] .sr-head {
+  display: none;
+}
+
+/* ---- 祈愿记录 ---- */
+
+html[data-platform="android"] .gacha-commandbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+html[data-platform="android"] .gacha-tabs {
+  order: 3;
+  flex-basis: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+html[data-platform="android"] .gacha-select {
+  flex: 1 1 auto;
+}
+
+html[data-platform="android"] .stats-cards,
+html[data-platform="android"] .event-history-layout,
+html[data-platform="android"] .countdown-grid {
+  grid-template-columns: 1fr;
+}
+
+html[data-platform="android"] .event-list {
+  max-height: 300px;
+  min-height: 0;
+}
+
+html[data-platform="android"] .commandbar-menu button {
+  min-height: 44px;
+}
+
+/* ---- 实时便笺 ---- */
+
+html[data-platform="android"] .dn-grid {
+  grid-template-columns: 1fr;
+}
+
+/* ---- 周期挑战（深境螺旋 / 剧诗 / 幽境危战）：期号列表改为横向滑动条 ---- */
+
+html[data-platform="android"] .ch-shell {
+  flex-direction: column;
+}
+
+html[data-platform="android"] .ch-entries {
+  width: auto;
+  flex-direction: row;
+  overflow-x: auto;
+  padding: 8px 2px 4px;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+html[data-platform="android"] .ch-entry {
+  flex: 0 0 auto;
+  width: 200px;
+  scroll-snap-align: start;
+}
+
+html[data-platform="android"] .ch-stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-platform="android"] .ch-battle-grid,
+html[data-platform="android"] .ch-round-grid,
+html[data-platform="android"] .ch-hc-grid {
+  grid-template-columns: 1fr;
+}
+
+/* ---- 我的角色 ---- */
+
+html[data-platform="android"] .content.content-flush .ap-page {
+  padding: 10px;
+  gap: 10px;
+}
+
+html[data-platform="android"] .ap-commandbar {
+  padding: 8px;
+}
+
+html[data-platform="android"] .ap-filter {
+  order: 3;
+  flex-basis: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
+html[data-platform="android"] .ap-cb-right .lbl {
+  display: none;
+}
+
+html[data-platform="android"] .ap-cb-right .appbar-btn {
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+
+html[data-platform="android"] .ap-sort {
+  width: 150px;
+}
+
+/* 列表模式：手机上改为上方横向角色条 + 下方详情 */
+html[data-platform="android"] .ap-split {
+  flex-direction: column;
+}
+
+html[data-platform="android"] .ap-split-pane {
+  width: auto;
+  border-right: none;
+  border-bottom: 1px solid var(--stroke);
+}
+
+html[data-platform="android"] .ap-split-list {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px;
+  scrollbar-width: none;
+}
+
+html[data-platform="android"] .ap-list-item {
+  flex: 0 0 auto;
+  width: auto;
+  height: 56px;
+  margin: 0 2px;
+  padding: 0 12px 0 8px;
+}
+
+html[data-platform="android"] .ap-list-item.active::before {
+  left: 20%;
+  right: 20%;
+  top: auto;
+  bottom: 2px;
+  width: auto;
+  height: 3px;
+}
+
+html[data-platform="android"] .ap-split-count {
+  display: none;
+}
+
+html[data-platform="android"] .ap-detail {
+  margin: 10px 0;
+  max-width: none;
+}
+
+html[data-platform="android"] .ap-hero {
+  min-width: 0;
+  aspect-ratio: auto;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto;
+}
+
+html[data-platform="android"] .ap-hero-info {
+  grid-row: 1;
+  margin: 14px;
+}
+
+html[data-platform="android"] .ap-hero-skills {
+  grid-row: 2;
+  grid-column: 1;
+  margin: 0 14px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-self: auto;
+}
+
+html[data-platform="android"] .ap-skill {
+  min-width: 0;
+  flex: 1 1 30%;
+}
+
+html[data-platform="android"] .ap-hero-cons {
+  grid-row: 3;
+  margin: 10px 14px 14px;
+  flex-wrap: wrap;
+}
+
+html[data-platform="android"] .ap-hero .item-icon {
+  width: 64px !important;
+  height: 64px !important;
+}
+
+html[data-platform="android"] .ap-recs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+html[data-platform="android"] .ap-relics {
+  grid-template-columns: 1fr;
+}
+
+html[data-platform="android"] .ap-prop {
+  grid-template-columns: 16px 1fr auto auto;
+  padding: 12px;
+}
+
+html[data-platform="android"] .ap-prop-add {
+  min-width: 56px;
+  text-align: right;
+}
+
+/* 网格模式：卡片铺满宽度，内容按比例缩放 */
+html[data-platform="android"] .ap-grid {
+  padding: 10px;
+  gap: 10px;
+}
+
+html[data-platform="android"] .ap-grid-item {
+  width: 100%;
+}
+
+html[data-platform="android"] .ap-grid-row {
+  justify-content: space-between;
+}
+
+html[data-platform="android"] .ap-grid-row .item-icon,
+html[data-platform="android"] .ap-grid-skill {
+  width: 56px !important;
+  height: 56px !important;
+}
+
+html[data-platform="android"] .ap-grid-skill img {
+  width: 34px;
+  height: 34px;
+}
+
+html[data-platform="android"] .ap-empty-card {
+  min-width: 0;
+  width: calc(100vw - 32px);
+}

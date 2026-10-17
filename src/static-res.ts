@@ -89,7 +89,8 @@ export async function downloadGroups(groups: string[], onProgress: (p: GroupProg
 
 /** 进度卡 HTML（对应原版 DownloadSummaryTemplate） */
 export function progressCard(name: string, p: GroupProgress | undefined): string {
-  const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : 0;
+  // 没有需要下载的文件（total=0）而已完成时显示 100%，避免出现「0% · 完成」
+  const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : p?.state === "done" ? 100 : 0;
   const text = !p
     ? "等待中"
     : p.state === "running"

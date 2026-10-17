@@ -28,14 +28,15 @@ async fn import_file(handle: &AppHandle) -> ApiResult<crate::uigf::UigfImportDto
     let Some(fp) = file_path else {
         return Err(ApiError::retcode(-100, "已取消选择文件"));
     };
-    let Some(path) = fp.as_path().map(|p| p.to_path_buf()) else {
-        return Err(ApiError::retcode(-101, "选择的路径无效"));
-    };
     log::info!("[uigf] 开始导入文件");
     let worker_handle = handle.clone();
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
-        let content = std::fs::read_to_string(&path)
+        use tauri_plugin_fs::FsExt;
+        // 经 fs 插件读取：桌面为普通路径，安卓文件选择器返回的是 content:// URI
+        let content = worker_handle
+            .fs()
+            .read_to_string(fp)
             .map_err(|e| ApiError::retcode(-102, format!("读取文件失败: {e}")))?;
         let state = worker_handle.state::<AppState>();
         crate::uigf::import_uigf_with_progress(&state, &content, |progress| {
@@ -79,14 +80,20 @@ async fn export_file(handle: &AppHandle, uid: &str) -> ApiResult<String> {
     let Some(fp) = file_path else {
         return Err(ApiError::retcode(-100, "已取消保存"));
     };
-    let Some(path) = fp.as_path().map(|p| p.to_path_buf()) else {
-        return Err(ApiError::retcode(-101, "保存路径无效"));
-    };
-    let saved_path = path.to_string_lossy().into_owned();
-    tauri::async_runtime::spawn_blocking(move || std::fs::write(&path, json))
-        .await
-        .map_err(|e| ApiError::transport(format!("写入任务失败: {e}")))?
-        .map_err(|e| ApiError::retcode(-103, format!("写入文件失败: {e}")))?;
+    // 安卓保存对话框返回 content:// URI，展示给用户时只取文件名部分
+    let saved_path = fp.to_string();
+    let worker_handle = handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::io::Write;
+        use tauri_plugin_fs::FsExt;
+        let mut opts = tauri_plugin_fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        let mut file = worker_handle.fs().open(fp, opts)?;
+        file.write_all(json.as_bytes())
+    })
+    .await
+    .map_err(|e| ApiError::transport(format!("写入任务失败: {e}")))?
+    .map_err(|e| ApiError::retcode(-103, format!("写入文件失败: {e}")))?;
     Ok(saved_path)
 }
 

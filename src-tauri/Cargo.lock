@@ -1830,7 +1830,7 @@ dependencies = [
 
 [[package]]
 name = "hoyo-auth"
-version = "0.1.10"
+version = "0.1.12"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1848,6 +1848,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
+ "tauri-plugin-fs",
  "tauri-plugin-log",
  "tauri-plugin-opener",
  "tauri-plugin-process",

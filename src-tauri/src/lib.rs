@@ -42,13 +42,19 @@ mod user_api;
 
 use tauri::Manager;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // 自动更新与进程重启插件只有桌面端实现
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_fs::init())
         // 官方图片本地缓存协议（见 static_res.rs）
         .register_asynchronous_uri_scheme_protocol("hoyoimg", |ctx, request, responder| {
             let app = ctx.app_handle().clone();

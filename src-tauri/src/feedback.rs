@@ -38,6 +38,12 @@ pub struct FeedbackResult {
 // 元数据
 // ---------------------------------------------------------------------------
 
+#[cfg(not(windows))]
+fn windows_display_version() -> String {
+    format!("{} {}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+#[cfg(windows)]
 fn windows_display_version() -> String {
     use winreg::enums::HKEY_LOCAL_MACHINE;
     use winreg::RegKey;
@@ -441,6 +447,8 @@ pub async fn feedback_submit(
     app.opener()
         .open_url(&issue_url, None::<&str>)
         .map_err(|e| ApiError::retcode(-27, format!("打开浏览器失败: {e}")))?;
+    // 安卓没有文件管理器定位能力（zip 在应用沙盒内），日志正文已走剪贴板
+    #[cfg(desktop)]
     let _ = app.opener().reveal_item_in_dir(&zip_path);
 
     log::info!(

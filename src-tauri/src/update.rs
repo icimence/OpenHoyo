@@ -18,6 +18,8 @@ const OSS_BASE: &str = "https://openhoyo-updates.oss-cn-hangzhou.aliyuncs.com/up
 pub struct UpdateNotice {
     pub version: String,
     pub gray: u8,
+    /// 安卓 APK 下载地址（CNB 国内源）。旧版 notice.json 没有该字段时为 None
+    pub android_url: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -25,6 +27,14 @@ struct NoticeRaw {
     version: String,
     #[serde(default)]
     gray: u8,
+    #[serde(default)]
+    android: Option<AndroidNotice>,
+}
+
+/// notice.json 中的安卓条目：CI 发版时与桌面安装包一起写入
+#[derive(serde::Deserialize)]
+struct AndroidNotice {
+    url: String,
 }
 
 /// 拉取版本通告（国内主源）。失败由前端回退 tauri updater 的 GitHub 直查。
@@ -42,6 +52,7 @@ pub async fn update_notice() -> ApiResult<UpdateNotice> {
     Ok(UpdateNotice {
         version: raw.version,
         gray: raw.gray,
+        android_url: raw.android.map(|a| a.url).filter(|u| u.starts_with("https://")),
     })
 }
 

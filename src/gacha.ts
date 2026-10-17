@@ -7,6 +7,7 @@ import { renderCountdown } from "./gacha-countdown";
 import { combineLimitedOrange } from "./gacha-combined";
 import { esc, iconFallbackAttr, iconSrc } from "./gacha-view-utils";
 import { bindSelect, selectTrigger, type SelectOption } from "./select";
+import { isMobile } from "./platform";
 
 // ---------------------------------------------------------------------------
 // 模块状态与进度事件（单例监听，避免重复注册）
@@ -166,7 +167,7 @@ function render(content: HTMLElement): void {
         <button class="primary" id="gacha-refresh-btn"><svg aria-hidden="true"><use href="#i-refresh"/></svg>刷新 ▾</button>
         <div id="gacha-refresh-menu" class="commandbar-menu align-right ${refreshMenuOpen ? "" : "hidden"}">
           <button data-refresh="stoken"><svg aria-hidden="true"><use href="#i-key"/></svg>SToken 刷新</button>
-          <button data-refresh="webcache"><svg aria-hidden="true"><use href="#i-browser"/></svg>网页缓存刷新</button>
+          ${isMobile() ? "" : '<button data-refresh="webcache"><svg aria-hidden="true"><use href="#i-browser"/></svg>网页缓存刷新</button>'}
           <button data-refresh="manual"><svg aria-hidden="true"><use href="#i-link"/></svg>手动输入 URL</button>
         </div>
       </div>
@@ -188,7 +189,7 @@ function render(content: HTMLElement): void {
       <div class="empty-users">
         <svg viewBox="0 0 16 16" width="52" height="52"><use href="#i-gacha"/></svg>
         <div class="title">尚未获取任何祈愿记录</div>
-        <div class="hint">点击「刷新」按钮，通过 SToken 或网页缓存方式获取</div>
+        <div class="hint">点击「刷新」按钮，通过 ${isMobile() ? "SToken 或祈愿记录链接" : "SToken 或网页缓存方式"}获取</div>
       </div>`;
     wireToolbar(content);
     return;
@@ -392,7 +393,11 @@ function openManualDialog(): void {
       <input id="gacha-aggressive" type="checkbox"/>
       全量刷新（忽略本地缓存，重新拉取全部记录）
     </label>
-    <p class="hint">URL 可在游戏内打开祈愿记录页面后，从网页缓存或浏览器历史中获取</p>`,
+    <p class="hint">${
+      isMobile()
+        ? "可在电脑上用胡桃工具箱或其他工具获取祈愿记录链接后粘贴到这里；更推荐登录米游社账号后使用「SToken 刷新」"
+        : "URL 可在游戏内打开祈愿记录页面后，从网页缓存或浏览器历史中获取"
+    }</p>`,
     "获取",
   );
   const input = document.getElementById("gacha-url") as HTMLTextAreaElement;

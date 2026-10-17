@@ -6,6 +6,7 @@ import "./gacha.css";
 import "./settings.css";
 import "./dailynote.css";
 import "./chronicle.css";
+import "./mobile.css";
 import { api, errText, type CaptchaRisk, type UserDto } from "./api";
 import { renderGachaPage } from "./gacha";
 import { geetestVerify } from "./geetest";
@@ -28,6 +29,7 @@ import { renderDailyNotePage } from "./dailynote";
 import { renderAbyssPage, renderHardChallengePage, renderTheaterPage } from "./chronicle";
 import { closeFlyout } from "./flyout";
 import { runGuideIfNeeded } from "./guide";
+import { initPlatform, isMobile, moveTaskToBack } from "./platform";
 import { initBackgroundTasks } from "./bg-tasks";
 import { img, installImageFallback } from "./img";
 
@@ -62,6 +64,10 @@ const SETTINGS_ITEM: NavItem = { id: "setting", label: "设置", icon: "i-settin
 let currentPage = "gachalog";
 let users: UserDto[] = [];
 let currentUserId: number | null = null;
+/** 本次启动已自动补拉过游戏内头像的角色（避免每次打开用户菜单都重复请求） */
+const avatarAutoTried = new Set<string>();
+/** 刚刷新完头像的角色：鼠标移出前不再显示悬停刷新层，免得新头像仍被遮住 */
+const avatarJustRefreshed = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // 工具函数
@@ -135,7 +141,59 @@ function renderNav(): void {
       currentPage = btn.dataset.page!;
       renderNav();
       renderPage();
+      closeDrawer();
     });
+  });
+  updateAppbarTitle();
+}
+
+// ---------------------------------------------------------------------------
+// 安卓：抽屉导航（侧边栏变为左侧滑出抽屉，顶栏显示当前页标题）
+// ---------------------------------------------------------------------------
+
+function updateAppbarTitle(): void {
+  const el = document.getElementById("appbar-title");
+  if (el) {
+    el.textContent = (NAV_ITEMS.find((n) => n.id === currentPage) ?? SETTINGS_ITEM).label;
+  }
+}
+
+function openDrawer(): void {
+  document.body.classList.add("drawer-open");
+}
+
+function closeDrawer(): void {
+  document.body.classList.remove("drawer-open");
+}
+
+/**
+ * 安卓返回键（系统手势 / 导航键）：依次关闭弹层 → 对话框 → 用户菜单 → 抽屉 → 回到首页，
+ * 已在首页时退到后台。注册监听后 Tauri 不再自行 goBack/退出，完全由这里决定。
+ */
+async function initMobileBack(): Promise<void> {
+  const { onBackButtonPress } = await import("@tauri-apps/api/app");
+  await onBackButtonPress(() => {
+    const dialog = document.getElementById("dialog-layer");
+    const flyout = document.getElementById("user-flyout");
+    if (document.querySelector(".flyout")) {
+      closeFlyout();
+    } else if (dialog && !dialog.classList.contains("hidden")) {
+      // 有取消按钮才允许返回键关闭（不可取消的进度对话框保持）
+      document.getElementById("dialog-cancel")?.click();
+    } else if (document.querySelector(".guide-layer")) {
+      // 首次启动引导期间不切页
+      moveTaskToBack();
+    } else if (flyout && !flyout.classList.contains("hidden")) {
+      hideFlyout();
+    } else if (document.body.classList.contains("drawer-open")) {
+      closeDrawer();
+    } else if (currentPage !== "gachalog") {
+      currentPage = "gachalog";
+      renderNav();
+      renderPage();
+    } else {
+      moveTaskToBack();
+    }
   });
 }
 
@@ -271,7 +329,7 @@ function renderUserFlyout(): void {
       .map(
         (r) => `
         <div class="role-row${r.game_uid === currentRoleOf(cur)?.game_uid ? " selected" : ""}" data-role="${esc(r.game_uid)}">
-          <div class="role-avatar">
+          <div class="role-avatar${avatarJustRefreshed.has(r.game_uid) ? " rested" : ""}">
             ${r.avatar ? `<img src="${esc(img(r.avatar))}" loading="lazy" onerror="this.remove()"/>` : ""}
             <button class="role-avatar-refresh" data-refresh-role="${esc(r.game_uid)}" title="刷新游戏内头像"><svg><use href="#i-refresh"/></svg></button>
           </div>
@@ -374,27 +432,51 @@ function renderUserFlyout(): void {
   });
 
   // 角色头像悬停刷新（对应 UserGameRole.RefreshProfilePictureCommand）
+  const refreshAvatar = (btn: HTMLButtonElement, silent: boolean): void => {
+    if (!cur) {
+      return;
+    }
+    btn.disabled = true;
+    btn.classList.add("spinning");
+    void api
+      .refreshRoleAvatar(cur.id, btn.dataset.refreshRole!)
+      .then((updated) => {
+        users = users.map((u) => (u.id === updated.id ? updated : u));
+        avatarJustRefreshed.add(btn.dataset.refreshRole!);
+        renderUserFlyout();
+      })
+      .catch((e: unknown) => {
+        if (!silent) {
+          toast(`头像刷新失败: ${errText(e)}`, "error");
+        }
+        btn.disabled = false;
+        btn.classList.remove("spinning");
+      });
+  };
   flyout.querySelectorAll<HTMLButtonElement>("[data-refresh-role]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      if (!cur) {
-        return;
-      }
-      btn.disabled = true;
-      btn.classList.add("spinning");
-      void api
-        .refreshRoleAvatar(cur.id, btn.dataset.refreshRole!)
-        .then((updated) => {
-          users = users.map((u) => (u.id === updated.id ? updated : u));
-          renderUserFlyout();
-        })
-        .catch((e: unknown) => {
-          toast(`头像刷新失败: ${errText(e)}`, "error");
-          btn.disabled = false;
-          btn.classList.remove("spinning");
-        });
+      refreshAvatar(btn, false);
     });
   });
+  flyout.querySelectorAll<HTMLElement>(".role-avatar.rested").forEach((el) => {
+    el.addEventListener("mouseleave", () => {
+      el.classList.remove("rested");
+      avatarJustRefreshed.delete(el.querySelector<HTMLElement>("[data-refresh-role]")?.dataset.refreshRole ?? "");
+    });
+  });
+  // 还没有游戏内头像的角色：打开菜单时自动补拉一次（每个角色每次启动只试一次，失败静默）
+  if (cur) {
+    for (const r of cur.game_roles) {
+      if (!r.avatar && !avatarAutoTried.has(r.game_uid)) {
+        avatarAutoTried.add(r.game_uid);
+        const btn = flyout.querySelector<HTMLButtonElement>(`[data-refresh-role="${CSS.escape(r.game_uid)}"]`);
+        if (btn) {
+          refreshAvatar(btn, true);
+        }
+      }
+    }
+  }
 
   // 角色行点击：切换选中角色（视觉态）
   flyout.querySelectorAll<HTMLElement>(".role-row").forEach((row) => {
@@ -632,6 +714,8 @@ async function reload(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  // 平台判定最先执行：决定后续用桌面还是手机布局
+  initPlatform();
   // 尽早恢复主题，避免首帧闪烁暗色
   initTheme();
   // 本地图像通道失败时自动直连官方地址（必须先于任何页面渲染）
@@ -655,27 +739,36 @@ async function main(): Promise<void> {
     console.error("页面错误:", ev.message);
   });
 
-  // 标题栏窗口控制
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const win = getCurrentWindow();
-  // 窗口初始隐藏（tauri.conf visible:false）以消除启动白屏；万一初始化异常，3 秒兜底强制显示
-  window.setTimeout(() => void win.show(), 3000);
   initUpdateBadge();
   void initBackgroundTasks();
-  document.getElementById("win-min")!.addEventListener("click", () => {
-    void win.minimize();
-  });
-  document.getElementById("win-max")!.addEventListener("click", () => {
-    void win.toggleMaximize();
-  });
-  document.getElementById("win-close")!.addEventListener("click", () => {
-    void win.close();
-  });
+  let showWindow = (): void => undefined;
+  if (isMobile()) {
+    // 安卓没有窗口控制：标题栏变为顶部应用栏（抽屉按钮 + 页面标题）
+    document.getElementById("nav-toggle")!.addEventListener("click", openDrawer);
+    document.getElementById("nav-scrim")!.addEventListener("click", closeDrawer);
+    void initMobileBack().catch((e: unknown) => console.warn(`[platform] 返回键监听注册失败: ${errText(e)}`));
+  } else {
+    // 标题栏窗口控制
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    showWindow = () => void win.show();
+    // 窗口初始隐藏（tauri.conf visible:false）以消除启动白屏；万一初始化异常，3 秒兜底强制显示
+    window.setTimeout(showWindow, 3000);
+    document.getElementById("win-min")!.addEventListener("click", () => {
+      void win.minimize();
+    });
+    document.getElementById("win-max")!.addEventListener("click", () => {
+      void win.toggleMaximize();
+    });
+    document.getElementById("win-close")!.addEventListener("click", () => {
+      void win.close();
+    });
+  }
 
   // 导航与用户菜单
   renderNav();
   // 导航骨架已渲染，显示窗口（消除启动白屏；visible:false 起）
-  void win.show();
+  showWindow();
 
   // 首次启动引导（数据文件夹 + 图像资源），完成前不加载主界面数据
   await runGuideIfNeeded();

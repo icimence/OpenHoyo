@@ -3,6 +3,7 @@ import type { Update } from "@tauri-apps/plugin-updater";
 import { api } from "./api";
 import { mdToHtml } from "./md";
 import { closeDialog, onDialogCancel, onDialogOk, openDialog, toast } from "./ui";
+import { isMobile } from "./platform";
 
 /** 待安装的更新：静默检查发现新版本时先挂起，由标题栏徽标触发安装 */
 let pendingUpdate: Update | null = null;
@@ -73,6 +74,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
  */
 export async function checkForUpdates(silent: boolean): Promise<void> {
   console.info("[updater] 检查更新…");
+  if (isMobile()) {
+    await checkForAndroidUpdate(silent);
+    return;
+  }
   try {
     const notice = await withTimeout(api.updateNotice(), 6000);
     const { getVersion } = await import("@tauri-apps/api/app");
@@ -104,6 +109,62 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
     console.info(`[updater] 发现新版本 v${update.version}`);
     pendingUpdate = update;
     await showUpdateDialog(update);
+  } catch (e) {
+    console.warn(`[updater] 检查更新失败: ${e instanceof Error ? e.message : String(e)}`);
+    if (!silent) {
+      toast(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
+    }
+  }
+}
+
+/**
+ * 安卓更新：Tauri updater 不支持安卓，改为读同一份 OSS 版本通告（同样受灰度门控），
+ * 发现新版本后展示更新说明并用浏览器打开 APK 下载地址，由系统安装器完成覆盖安装
+ * （签名一致时保留数据）。
+ */
+async function checkForAndroidUpdate(silent: boolean): Promise<void> {
+  try {
+    const notice = await withTimeout(api.updateNotice(), 8000);
+    const { getVersion } = await import("@tauri-apps/api/app");
+    const current = await getVersion();
+    if (!isNewerVersion(notice.version, current) || !notice.androidUrl) {
+      console.info("[updater] 已是最新版本");
+      if (!silent) {
+        toast("当前已是最新版本", "success");
+      }
+      return;
+    }
+    if (silent && !grayEligible(notice.gray)) {
+      console.info(`[updater] 新版本 v${notice.version} 灰度未命中（gray=${notice.gray}），本轮跳过`);
+      return;
+    }
+    console.info(`[updater] 发现新版本 v${notice.version}（安卓）`);
+    let notes = "";
+    try {
+      notes = await withTimeout(api.updateNotes(notice.version), 6000);
+    } catch {
+      notes = "";
+    }
+    const url = notice.androidUrl;
+    openDialog(
+      "发现新版本",
+      `
+      <p class="confirm-message">新版本 <b>v${notice.version}</b> 可用。点击「下载更新」后会在浏览器中下载安装包，下载完成后打开即可覆盖安装，原有数据会保留。</p>
+      ${notes ? `<div class="update-notes">${mdToHtml(notes)}</div>` : ""}`,
+      "下载更新",
+    );
+    onDialogCancel(closeDialog);
+    onDialogOk(() => {
+      closeDialog();
+      void (async () => {
+        try {
+          const { openUrl } = await import("@tauri-apps/plugin-opener");
+          await openUrl(url);
+        } catch (e) {
+          toast(`无法打开下载链接: ${e instanceof Error ? e.message : String(e)}`, "error");
+        }
+      })();
+    });
   } catch (e) {
     console.warn(`[updater] 检查更新失败: ${e instanceof Error ? e.message : String(e)}`);
     if (!silent) {

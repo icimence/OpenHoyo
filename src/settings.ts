@@ -3,6 +3,7 @@ import { checkForUpdates } from "./updater";
 import { api, errText, type GroupProgress, type StaticStatus } from "./api";
 import { changeDataFolder, downloadGroups, fmtBytes, progressCard } from "./static-res";
 import { confirmDialog, toast } from "./ui";
+import { isMobile } from "./platform";
 
 function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -104,7 +105,7 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-label">主题</div>
-              <div class="setting-desc">跟随系统时自动匹配 Windows 的深浅色设置</div>
+              <div class="setting-desc">跟随系统时自动匹配${isMobile() ? "手机" : " Windows "}的深浅色设置</div>
             </div>
             <div class="segmented" id="theme-seg">
               ${THEME_OPTIONS.map((o) => `<button data-mode="${o.mode}">${o.label}</button>`).join("")}
@@ -113,7 +114,11 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
         </div>
       </div>
       <div class="settings-section">
-        <div class="settings-section-head"><h3>版本与更新</h3><p>更新经 GitHub Releases 分发，安装包带有 minisign 签名校验</p></div>
+        <div class="settings-section-head"><h3>版本与更新</h3><p>${
+          isMobile()
+            ? "发现新版本时会提示下载安装包，覆盖安装后原有数据保留"
+            : "更新经 GitHub Releases 分发，安装包带有 minisign 签名校验"
+        }</p></div>
         <div class="setting-card">
           <div class="setting-row">
             <div class="setting-text">
@@ -135,17 +140,21 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
 
     <section class="settings-panel" data-panel="storage">
       <div class="settings-section">
-        <div class="settings-section-head"><h3>数据文件夹</h3><p>保存账号凭证、祈愿记录、挑战记录与本地图片；更改后会复制数据并重启应用</p></div>
+        <div class="settings-section-head"><h3>数据文件夹</h3><p>${
+          isMobile()
+            ? "保存账号凭证、祈愿记录、挑战记录与本地图片；位于应用私有存储，卸载应用时一并删除"
+            : "保存账号凭证、祈愿记录、挑战记录与本地图片；更改后会复制数据并重启应用"
+        }</p></div>
         <div class="setting-card">
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-label" id="sr-dir-kind">当前位置</div>
               <code class="setting-path" id="sr-dir">读取中…</code>
             </div>
-            <div class="setting-actions">
+            ${isMobile() ? "" : `<div class="setting-actions">
               <button class="nowrap" id="sr-open">打开</button>
               <button class="nowrap" id="sr-move">更改…</button>
-            </div>
+            </div>`}
           </div>
         </div>
       </div>
@@ -179,16 +188,25 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
 
     <section class="settings-panel" data-panel="feedback">
       <div class="settings-section">
-        <div class="settings-section-head"><h3>反馈中心</h3><p>提交时会自动附带应用元数据、最近 10 分钟运行日志与崩溃转储（如有），打包为 zip；反馈正文复制到剪贴板并打开 GitHub Issue 页面，粘贴后拖入附件即可提交</p></div>
+        <div class="settings-section-head"><h3>反馈中心</h3><p>${
+          isMobile()
+            ? "提交时会附带应用信息与最近 10 分钟运行日志；完整反馈正文复制到剪贴板，并在浏览器打开 GitHub Issue 页面，粘贴到正文框即可提交"
+            : "提交时会自动附带应用元数据、最近 10 分钟运行日志与崩溃转储（如有），打包为 zip；反馈正文复制到剪贴板并打开 GitHub Issue 页面，粘贴后拖入附件即可提交"
+        }</p></div>
         <div class="setting-card" id="fb-card">
           <div class="fb-form">
             <textarea id="fb-text" class="fb-textarea" placeholder="请描述遇到的问题：做了什么操作、期望的结果、实际的结果…（至少 5 个字）"></textarea>
-            <div class="fb-toolbar">
+            ${
+              // 安卓：选图返回 content:// URI、也没有崩溃转储，截图请直接在 Issue 页面上传
+              isMobile()
+                ? ""
+                : `<div class="fb-toolbar">
               <button id="fb-add-image"><svg><use href="#i-copy"/></svg>添加图片</button>
               <div class="fb-chips" id="fb-chips"></div>
-            </div>
+            </div>`
+            }
             <label class="fb-check"><input type="checkbox" id="fb-logs" checked />附带最近 10 分钟运行日志</label>
-            <label class="fb-check"><input type="checkbox" id="fb-dumps" checked />附带崩溃转储 .dmp（未发现时自动跳过）</label>
+            ${isMobile() ? "" : `<label class="fb-check"><input type="checkbox" id="fb-dumps" checked />附带崩溃转储 .dmp（未发现时自动跳过）</label>`}
             <div class="fb-actions">
               <button class="primary" id="fb-submit"><svg><use href="#i-launch"/></svg>提交反馈到 GitHub</button>
               <span class="fb-hint" id="fb-hint"></span>
@@ -228,8 +246,11 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
 
   // ---- 反馈中心 ----
   const fbImages: string[] = [];
-  const chipsEl = content.querySelector<HTMLElement>("#fb-chips")!;
+  const chipsEl = content.querySelector<HTMLElement>("#fb-chips");
   const renderChips = (): void => {
+    if (!chipsEl) {
+      return;
+    }
     chipsEl.innerHTML = fbImages
       .map((p, i) => {
         const name = p.split(/[\\/]/).pop() ?? p;
@@ -237,7 +258,7 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
       })
       .join("");
   };
-  chipsEl.addEventListener("click", (ev) => {
+  chipsEl?.addEventListener("click", (ev) => {
     const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>("button[data-i]");
     if (btn) {
       fbImages.splice(Number(btn.dataset.i), 1);
@@ -245,7 +266,7 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
     }
   });
 
-  content.querySelector<HTMLButtonElement>("#fb-add-image")!.addEventListener("click", () => {
+  content.querySelector<HTMLButtonElement>("#fb-add-image")?.addEventListener("click", () => {
     void (async () => {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const picked = await open({
@@ -266,13 +287,18 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
   fbSubmitBtn.addEventListener("click", () => {
     const text = (content.querySelector<HTMLTextAreaElement>("#fb-text")!.value ?? "").trim();
     const includeLogs = (content.querySelector<HTMLInputElement>("#fb-logs")!).checked;
-    const includeDumps = (content.querySelector<HTMLInputElement>("#fb-dumps")!).checked;
+    const includeDumps = content.querySelector<HTMLInputElement>("#fb-dumps")?.checked ?? false;
 
     void (async () => {
       // 提交前操作指引：让用户知道浏览器打开后要做什么
       const go = await confirmDialog(
         "反馈提交指引",
-        `点击「继续提交」后：<br/><br/>` +
+        isMobile()
+          ? `点击「继续提交」后：<br/><br/>` +
+              `1. 浏览器将打开 GitHub Issue 页面，<b>标题与问题描述已自动填好</b><br/>` +
+              `2. 含运行日志的完整正文已复制到剪贴板，可长按正文框粘贴替换；截图可在页面中直接上传<br/>` +
+              `3. 点击 <b>Submit new issue</b> 完成提交`
+          : `点击「继续提交」后：<br/><br/>` +
           `1. 浏览器将打开 GitHub Issue 页面，<b>标题与正文（问题描述 + 系统信息）已自动填好</b>，无需修改<br/>` +
           `2. 把资源管理器中已定位的 <b>反馈 zip 包</b>拖入 Issue 正文区上传${fbImages.length > 0 ? "（所选图片也一并拖入）" : ""}<br/>` +
           `3. 点击 <b>Submit new issue</b> 完成提交<br/><br/>` +
@@ -293,9 +319,11 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
         if (r.imageCount > 0) {
           parts.push(`图片 ${r.imageCount} 张`);
         }
-        fbHint.textContent = `Issue 页面已打开（标题正文已预填）：请把 ${parts.join("、")}拖入上传，点 Submit new issue 提交${
-          r.clipboardOk ? "；含日志全文已复制，可 Ctrl+V 内联" : ""
-        }`;
+        fbHint.textContent = isMobile()
+          ? `Issue 页面已打开（标题正文已预填）${r.clipboardOk ? "；含日志全文已复制，可粘贴到正文框" : ""}，点 Submit new issue 提交`
+          : `Issue 页面已打开（标题正文已预填）：请把 ${parts.join("、")}拖入上传，点 Submit new issue 提交${
+              r.clipboardOk ? "；含日志全文已复制，可 Ctrl+V 内联" : ""
+            }`;
         toast("反馈包已生成，Issue 页面已打开", "success");
       } catch (e: unknown) {
         fbHint.textContent = "";
@@ -328,7 +356,7 @@ function bindStaticResources(content: HTMLElement): void {
       .forEach((b) => b.classList.toggle("active", (b.dataset.on === "1") === status!.enabled));
     $("#sr-usage").textContent = `${status.cache_files} 个文件 · ${fmtBytes(status.cache_bytes)}`;
     $<HTMLButtonElement>("#sr-clear").disabled = busy || status.cache_files === 0;
-    $<HTMLButtonElement>("#sr-move").disabled = busy;
+    content.querySelector<HTMLButtonElement>("#sr-move")?.toggleAttribute("disabled", busy);
     // 资源组表格（对应 Langfuse 设置页的 Table：名称+说明 / 上次下载 / 操作 三列）
     const rows = status.groups
       .map((g) => {
@@ -387,8 +415,8 @@ function bindStaticResources(content: HTMLElement): void {
     }
   };
 
-  $("#sr-open").addEventListener("click", () => void api.dataFolderOpen().catch((e: unknown) => toast(errText(e), "error")));
-  $("#sr-move").addEventListener("click", () => void changeDataFolder());
+  content.querySelector("#sr-open")?.addEventListener("click", () => void api.dataFolderOpen().catch((e: unknown) => toast(errText(e), "error")));
+  content.querySelector("#sr-move")?.addEventListener("click", () => void changeDataFolder());
   $("#sr-enabled")
     .querySelectorAll<HTMLButtonElement>("button")
     .forEach((b) => {

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop",
+  "description": "桌面专用能力：自动更新与重启（安卓没有对应插件）",
+  "windows": ["main"],
+  "platforms": ["windows", "macOS", "linux"],
+  "permissions": ["updater:default", "process:allow-restart"]
+}

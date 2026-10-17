@@ -14,6 +14,7 @@ import {
 } from "./api";
 import { closeFlyout, openFlyout, openMenuFlyout } from "./flyout";
 import { img } from "./img";
+import { isMobile } from "./platform";
 import { currentRoleOf } from "./role";
 import { bindSelect, selectTrigger } from "./select";
 import { closeDialog, openDialog, toast } from "./ui";
@@ -972,9 +973,13 @@ function bindBody(body: HTMLElement): void {
         body.querySelectorAll(".ap-grid-item").forEach((c) => c.classList.toggle("active", c === btn));
       }
     });
-    // 右键菜单（对应原版 ContextFlyout；养成计划尚未实现，入口置灰）
+    // 右键菜单（对应原版 ContextFlyout；养成计划尚未实现，入口置灰）。安卓长按也会触发 contextmenu，
+    // 但菜单项全部置灰，长按只会遮挡选择，故移动端不弹
     btn.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
+      if (isMobile()) {
+        return;
+      }
       openMenuFlyout(
         btn,
         ["添加角色到养成计划", "添加武器到养成计划", "添加角色与武器到养成计划"].map((label) => ({ label, disabled: true, title: "养成计划开发中", onClick: () => undefined })),

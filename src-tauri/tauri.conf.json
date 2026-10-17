@@ -35,7 +35,10 @@
     "icon": [
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "android": {
+      "minSdkVersion": 35
+    }
   },
   "plugins": {
     "updater": {

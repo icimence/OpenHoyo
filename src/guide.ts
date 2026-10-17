@@ -6,6 +6,7 @@
 import { api, errText, GUIDE_COMPLETED, type GroupProgress, type StaticStatus } from "./api";
 import { downloadGroups, fmtBytes, migrateDataFolder, pickDataFolder, progressCard } from "./static-res";
 import { toast } from "./ui";
+import { isMobile } from "./platform";
 
 /** 引导的步骤数（后端 guide_step 0..2 为进行中，4 为完成，与旧版本存储值兼容） */
 const STEP_FOLDER = 0;
@@ -62,6 +63,10 @@ class Guide {
   ) {
     // 兼容旧版本写入的步骤值（旧版 0=欢迎 1=文件夹 2=图像资源 3=下载）；下载中途退出则回到设置步重新确认
     this.step = Math.min(Math.max(status.guide_step, 0), STEP_IMAGES);
+    // 安卓数据只能存放在应用沙盒，没有可选的数据文件夹：直接从图像资源步开始
+    if (isMobile() && this.step === STEP_FOLDER) {
+      this.step = STEP_IMAGES;
+    }
     this.consent = status.guide_step > STEP_FOLDER ? status.enabled : true;
     this.selected = new Set(status.groups.filter((g) => g.fulfilled_at === 0).map((g) => g.key));
     if (this.selected.size === 0) {
@@ -124,7 +129,7 @@ class Guide {
         <header class="guide-header">
           <div class="guide-eyebrow">初始设置 · 第 ${this.step + 1} / ${steps.length} 步</div>
           <h1>欢迎使用胡桃工具箱</h1>
-          <p>完成以下设置后即可开始使用。账号凭证与记录只保存在你的电脑上，游戏图片只来自米哈游官方服务器；这些设置之后都能在「设置」页修改。</p>
+          <p>完成以下设置后即可开始使用。账号凭证与记录只保存在你的${isMobile() ? "手机" : "电脑"}上，游戏图片只来自米哈游官方服务器；这些设置之后都能在「设置」页修改。</p>
           <nav class="guide-crumbs" aria-label="设置步骤">${crumbs}</nav>
         </header>
         <ol class="guide-stepper">
@@ -137,7 +142,8 @@ class Guide {
   private stepHtml(i: number, title: string): string {
     const state = i < this.step ? "complete" : i === this.step ? "current" : "upcoming";
     const marker = state === "complete" ? CHECK : String(i + 1);
-    const canEdit = state === "complete" && !this.downloading && !this.migrating;
+    // 安卓的数据文件夹步骤只是展示固定位置，不提供"修改"
+    const canEdit = state === "complete" && !this.downloading && !this.migrating && !(isMobile() && i === STEP_FOLDER);
     return `
       <li class="guide-item ${state}">
         <div class="guide-rail"><span class="guide-num">${marker}</span><span class="guide-line"></span></div>
@@ -157,6 +163,9 @@ class Guide {
 
   private summary(i: number): string {
     if (i === STEP_FOLDER) {
+      if (isMobile()) {
+        return "数据保存在本应用的私有存储中，卸载应用时一并删除";
+      }
       return `${this.status.is_default_dir ? "使用默认位置" : "使用自定义位置"}：<code>${esc(this.status.data_dir)}</code>`;
     }
     if (i === STEP_IMAGES) {
@@ -247,9 +256,9 @@ class Guide {
         <div class="guide-label">首次下载哪些图片${this.consent ? "" : "（需先选择「保存到本地」）"}</div>
         <div class="guide-groups">${groups}</div>
       </div>
-      <p class="guide-hint">图片保存在：<code>${esc(this.status.data_dir)}\\static</code></p>
+      ${isMobile() ? "" : `<p class="guide-hint">图片保存在：<code>${esc(this.status.data_dir)}\\static</code></p>`}
       <div class="guide-actions">
-        <button id="g-back">上一步</button>
+        ${isMobile() ? "" : `<button id="g-back">上一步</button>`}
         <button class="primary" id="g-next">${next}</button>
       </div>`;
   }
