@@ -593,7 +593,7 @@ body {
   opacity: 0;
 }
 
-.role-avatar-refresh:hover:not(:disabled),
+.role-avatar:not(.rested) .role-avatar-refresh:hover:not(:disabled),
 .role-avatar-refresh.spinning {
   opacity: 1;
   background: rgba(0, 0, 0, 0.45);

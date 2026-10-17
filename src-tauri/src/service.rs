@@ -146,6 +146,8 @@ pub async fn login_with_stoken(
     };
 
     initialize_user(state, &mut rec, true).await?;
+    // 新登录时角色还没有游戏内头像：立即补拉，不必等下次启动或手动刷新
+    fill_missing_role_avatars(state, &mut rec).await;
     save(state, &mut rec)?;
     emit_users_changed(handle);
     Ok(UserDto::from(&rec))
@@ -305,7 +307,7 @@ pub async fn refresh_role_avatar(state: &AppState, rec: &mut UserRecord, game_ui
     Ok(true)
 }
 
-/// 启动时为尚无头像的角色补拉一次游戏内头像（已有的不重复请求）
+/// 为尚无头像的角色补拉一次游戏内头像（启动恢复与新登录时调用；已有的不重复请求）
 async fn fill_missing_role_avatars(state: &AppState, rec: &mut UserRecord) {
     let missing: Vec<String> = rec
         .game_roles

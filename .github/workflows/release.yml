@@ -86,10 +86,91 @@ jobs:
           prerelease: false
           args: --target x86_64-pc-windows-msvc
 
-  # 分发：安装包上传 CNB（国内下载源）→ OSS 元数据（latest.json 指向 CNB）
-  # → notice.json（灰度 0）→ 更新说明 md。OSS 访问用 OIDC→STS，无长期密钥。
-  distribute:
+  # 安卓 APK（arm64，Android 15+）：与桌面同版本号，签名密钥来自 Secrets（覆盖安装要求签名一致）。
+  # 失败不阻塞桌面分发：distribute 只在拿到 APK 时才发布安卓下载地址。
+  android:
     needs: release
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.game_version && github.event.repository.default_branch || github.ref }}
+
+      # 与 release job 同样就地改版本号（不提交）：tauri 据此生成 versionName / versionCode
+      - name: Bump version files
+        run: node scripts/bump-version.mjs "${VERSION}"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;29.0.13846066"
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.13846066" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: android
+
+      - run: npm ci
+
+      - name: Restore signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD，无法签名 APK"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/hoyoauth.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/hoyoauth.jks"
+            echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+            echo "keyAlias=hoyoauth"
+            echo "keyPassword=$ANDROID_KEYSTORE_PASSWORD"
+          } > src-tauri/gen/android/keystore.properties
+
+      - name: Build APK
+        run: npx tauri android build --apk --target aarch64
+
+      - name: Upload APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
+            "dist/hoyo-auth_${VERSION}_android-arm64.apk"
+          gh release upload "v${VERSION}" "dist/hoyo-auth_${VERSION}_android-arm64.apk" \
+            --clobber --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-apk
+          path: dist/*.apk
+          retention-days: 7
+
+  # 分发：安装包上传 CNB（国内下载源）→ OSS 元数据（latest.json 指向 CNB）
+  # → notice.json（灰度 0，含安卓 APK 地址）→ 更新说明 md。OSS 访问用 OIDC→STS，无长期密钥。
+  distribute:
+    needs: [release, android]
+    # 安卓构建失败时桌面照常分发（notice.json 不带安卓地址，安卓端视为无更新）
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       id-token: write
@@ -135,14 +216,22 @@ jobs:
             --pattern "hoyo-auth_*_x64-setup.exe" --pattern "latest.json" --dir dist
           ls -la dist/
 
+      - uses: actions/download-artifact@v8
+        if: ${{ needs.android.result == 'success' }}
+        with:
+          name: android-apk
+          path: dist
+
       - name: Upload installer to CNB
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
         run: |
-          python scripts/cnb-release.py "v${VERSION}" "OpenHoyo v${VERSION}" dist/notes.md dist/hoyo-auth_*_x64-setup.exe \
+          python scripts/cnb-release.py "v${VERSION}" "OpenHoyo v${VERSION}" dist/notes.md \
+            dist/hoyo-auth_*_x64-setup.exe $(ls dist/*_android-arm64.apk 2>/dev/null) \
             | tee dist/cnb-urls.txt
-          grep -m1 "ASSET_URL=" dist/cnb-urls.txt | sed 's/^ASSET_URL=//' > dist/cnb-url.txt
-          cat dist/cnb-url.txt
+          grep "ASSET_URL=" dist/cnb-urls.txt | grep -m1 "_x64-setup.exe" | sed 's/^ASSET_URL=//' > dist/cnb-url.txt
+          grep "ASSET_URL=" dist/cnb-urls.txt | grep -m1 "_android-arm64.apk" | sed 's/^ASSET_URL=//' > dist/cnb-android-url.txt || true
+          cat dist/cnb-url.txt dist/cnb-android-url.txt
 
       - name: Build OSS latest.json (download URL → CNB, notes → 更新说明)
         run: |
@@ -167,7 +256,7 @@ jobs:
         run: |
           python scripts/oss-sts-publish.py latest dist/latest-oss.json
           python scripts/oss-sts-publish.py notes "${VERSION}" dist/notes.md
-          python scripts/oss-sts-publish.py notice "${VERSION}" 0
+          python scripts/oss-sts-publish.py notice "${VERSION}" 0 "$(cat dist/cnb-android-url.txt 2>/dev/null)"
           python scripts/oss-sts-publish.py verify updates/notice.json
           python scripts/oss-sts-publish.py verify updates/latest.json
           python scripts/oss-sts-publish.py verify "updates/releases/v${VERSION}.md"

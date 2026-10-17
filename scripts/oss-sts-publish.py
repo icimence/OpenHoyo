@@ -6,7 +6,9 @@
 只能在 GitHub Actions 里运行（依赖 ACTIONS_ID_TOKEN_* 环境变量）。
 
 用法（子命令）：
-  notice <version> <gray>   写 updates/notice.json（灰度控制）
+  notice <version> <gray> [android_url]
+                            写 updates/notice.json（灰度控制）；不给 android_url 时
+                            沿用线上同版本的安卓 APK 地址
   latest <file>             上传 updates/latest.json（updater 元数据）
   notes  <version> <file>   上传 updates/releases/v<version>.md（更新说明）
   verify <key>              校验对象存在且可匿名读取
@@ -101,6 +103,20 @@ def put(key: str, data: bytes, content_type: str) -> None:
     print(f"✓ 已上传 {key} ({len(data)}B) → {public_url}")
 
 
+def current_android_url(version: str) -> str:
+    """线上 notice.json 中同版本的安卓下载地址（读不到或版本不同返回空串）"""
+    url = f"https://{OSS_BUCKET}.oss-{OSS_REGION}.aliyuncs.com/updates/notice.json"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            current = json.load(resp)
+    except (urllib.error.URLError, ValueError) as e:
+        print(f"… 读取线上 notice.json 失败（{e}），不保留安卓地址")
+        return ""
+    if current.get("version") != version:
+        return ""
+    return (current.get("android") or {}).get("url", "")
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         die(f"用法: {sys.argv[0]} notice|latest|notes|verify ...")
@@ -108,8 +124,16 @@ def main() -> None:
     mode = sys.argv[1]
     if mode == "notice":
         version, gray = sys.argv[2], sys.argv[3]
-        body = json.dumps({"version": version, "gray": int(gray)}, ensure_ascii=False).encode()
-        put("updates/notice.json", body, "application/json")
+        notice = {"version": version, "gray": int(gray)}
+        if len(sys.argv) > 4:
+            # 发版：显式给出安卓 APK 地址（空串表示本版本没有安卓包）
+            android_url = sys.argv[4].strip()
+        else:
+            # 调灰度：沿用线上同版本的安卓地址，避免放量时把它抹掉
+            android_url = current_android_url(version)
+        if android_url:
+            notice["android"] = {"url": android_url}
+        put("updates/notice.json", json.dumps(notice, ensure_ascii=False).encode(), "application/json")
     elif mode == "latest":
         with open(sys.argv[2], "rb") as f:
             put("updates/latest.json", f.read(), "application/json")
