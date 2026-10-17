@@ -5,6 +5,9 @@ let mobile = false;
 interface AndroidBridge {
   insets(): string;
   moveToBack(): void;
+  canInstallPackages(): boolean;
+  openInstallSettings(): void;
+  installApk(path: string): boolean;
 }
 
 function bridge(): AndroidBridge | undefined {
@@ -44,4 +47,19 @@ export function isMobile(): boolean {
 /** 安卓：应用退到后台（首页按返回键） */
 export function moveTaskToBack(): void {
   bridge()?.moveToBack();
+}
+
+/** 安卓：是否已允许本应用安装更新包（「安装未知应用」） */
+export function canInstallPackages(): boolean {
+  return bridge()?.canInstallPackages() ?? false;
+}
+
+/** 安卓：打开「安装未知应用」设置页；返回应用时触发 window 的 hoyo-resume 事件 */
+export function openInstallSettings(): void {
+  bridge()?.openInstallSettings();
+}
+
+/** 安卓：拉起系统安装器安装已下载的更新包 */
+export function installApk(path: string): boolean {
+  return bridge()?.installApk(path) ?? false;
 }

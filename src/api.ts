@@ -281,6 +281,10 @@ export const api = {
   /** 指定版本的更新说明 markdown（OSS 主源，GitHub 兜底） */
   updateNotes: (version: string) => invoke<string>("update_notes", { version }),
 
+  /** 安卓：应用内下载 APK，进度经 update://android-progress 推送，返回本地路径 */
+  androidUpdateDownload: (url: string, version: string) =>
+    invoke<string>("android_update_download", { url, version }),
+
   // ---- 图像资源 / 数据文件夹 / 首次启动引导 ----
 
   staticStatus: () => invoke<StaticStatus>("static_res_status"),

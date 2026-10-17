@@ -56,6 +56,101 @@ pub async fn update_notice() -> ApiResult<UpdateNotice> {
     })
 }
 
+/// 安卓更新包下载进度（事件 update://android-progress）
+#[derive(Clone, Serialize)]
+struct AndroidProgress {
+    received: u64,
+    total: u64,
+}
+
+/// 安卓：应用内下载 APK 到缓存目录 updates/，返回本地路径（由原生桥拉起系统安装器）。
+/// 只接受 https；完整性由安卓的签名一致性校验保证（被篡改的包无法覆盖安装）。
+#[tauri::command]
+pub async fn android_update_download(app: tauri::AppHandle, url: String, version: String) -> ApiResult<String> {
+    use tauri::{Emitter, Manager};
+    use tokio::io::AsyncWriteExt;
+
+    let path_only = url.split('?').next().unwrap_or(&url).to_string();
+    log::info!("[updater] 开始下载安卓更新包 v{version}：{path_only}");
+    if !url.starts_with("https://") {
+        return Err(ApiError::retcode(-31, "下载地址无效"));
+    }
+    if version.is_empty() || !version.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
+        return Err(ApiError::retcode(-31, "版本号无效"));
+    }
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| ApiError::retcode(-32, format!("无法定位缓存目录: {e}")))?
+        .join("updates");
+    // 只保留本次的包：旧版本残留的 APK 一并清掉
+    let _ = tokio::fs::remove_dir_all(&dir).await;
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .map_err(|e| ApiError::retcode(-32, format!("创建下载目录失败: {e}")))?;
+    let target = dir.join(format!("OpenHoyo-{version}.apk"));
+    let partial = dir.join(format!("OpenHoyo-{version}.apk.part"));
+
+    let started = std::time::Instant::now();
+    let mut resp = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| ApiError::transport(e.to_string()))?
+        .get(&url)
+        .header("User-Agent", "OpenHoyo-Updater")
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| {
+            log::warn!("[updater] 安卓更新包请求失败: {e}");
+            ApiError::transport(format!("下载失败: {e}"))
+        })?;
+    let total = resp.content_length().unwrap_or(0);
+    let mut file = tokio::fs::File::create(&partial)
+        .await
+        .map_err(|e| ApiError::retcode(-32, format!("写入失败: {e}")))?;
+    let mut received: u64 = 0;
+    let mut last_emit = std::time::Instant::now();
+    loop {
+        let chunk = match tokio::time::timeout(Duration::from_secs(30), resp.chunk()).await {
+            Ok(Ok(Some(c))) => c,
+            Ok(Ok(None)) => break,
+            Ok(Err(e)) => {
+                log::warn!("[updater] 安卓更新包下载中断: {e}");
+                return Err(ApiError::transport(format!("下载中断: {e}")));
+            }
+            Err(_) => {
+                log::warn!("[updater] 安卓更新包下载超时（30 秒无数据）");
+                return Err(ApiError::transport("下载超时，请检查网络后重试"));
+            }
+        };
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| ApiError::retcode(-32, format!("写入失败: {e}")))?;
+        received += chunk.len() as u64;
+        if last_emit.elapsed() >= Duration::from_millis(200) {
+            last_emit = std::time::Instant::now();
+            let _ = app.emit("update://android-progress", AndroidProgress { received, total });
+        }
+    }
+    file.flush().await.map_err(|e| ApiError::retcode(-32, format!("写入失败: {e}")))?;
+    drop(file);
+    if total > 0 && received != total {
+        log::warn!("[updater] 安卓更新包不完整：{received}/{total} 字节");
+        return Err(ApiError::transport("下载不完整，请重试"));
+    }
+    tokio::fs::rename(&partial, &target)
+        .await
+        .map_err(|e| ApiError::retcode(-32, format!("保存失败: {e}")))?;
+    let _ = app.emit("update://android-progress", AndroidProgress { received, total: received });
+    log::info!(
+        "[updater] 安卓更新包下载完成（{:.1} MB，耗时 {} 秒）",
+        received as f64 / 1024.0 / 1024.0,
+        started.elapsed().as_secs()
+    );
+    Ok(target.to_string_lossy().to_string())
+}
+
 /// 拉取指定版本的更新说明（OSS 主源 → GitHub Release API 兜底）
 #[tauri::command]
 pub async fn update_notes(version: String) -> ApiResult<String> {

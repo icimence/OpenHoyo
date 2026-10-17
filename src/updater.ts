@@ -1,9 +1,9 @@
 // 应用更新检查（Tauri v2 updater：OSS/CNB 国内源 + GitHub 兜底，minisign 签名校验）
 import type { Update } from "@tauri-apps/plugin-updater";
-import { api } from "./api";
+import { api, isApiError } from "./api";
 import { mdToHtml } from "./md";
 import { closeDialog, onDialogCancel, onDialogOk, openDialog, toast } from "./ui";
-import { isMobile } from "./platform";
+import { canInstallPackages, installApk, isMobile, openInstallSettings } from "./platform";
 
 /** 待安装的更新：静默检查发现新版本时先挂起，由标题栏徽标触发安装 */
 let pendingUpdate: Update | null = null;
@@ -119,58 +119,212 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
 
 /**
  * 安卓更新：Tauri updater 不支持安卓，改为读同一份 OSS 版本通告（同样受灰度门控），
- * 发现新版本后展示更新说明并用浏览器打开 APK 下载地址，由系统安装器完成覆盖安装
- * （签名一致时保留数据）。
+ * 应用内下载 APK（弹窗进度条）后拉起系统安装器覆盖安装（签名一致才能安装，原有数据保留）。
+ * OSS 不可达时回退 GitHub Release 查找安卓资产。
  */
-async function checkForAndroidUpdate(silent: boolean): Promise<void> {
+interface AndroidUpdate {
+  version: string;
+  url: string;
+}
+
+let pendingAndroid: AndroidUpdate | null = null;
+/** 已下载完成、等待安装的 APK（本地路径） */
+let downloadedApk: { version: string; path: string } | null = null;
+let androidDownloading = false;
+
+async function findAndroidUpdate(silent: boolean): Promise<AndroidUpdate | null> {
+  const { getVersion } = await import("@tauri-apps/api/app");
+  const current = await getVersion();
   try {
     const notice = await withTimeout(api.updateNotice(), 8000);
-    const { getVersion } = await import("@tauri-apps/api/app");
-    const current = await getVersion();
     if (!isNewerVersion(notice.version, current) || !notice.androidUrl) {
+      return null;
+    }
+    if (silent && !grayEligible(notice.gray)) {
+      console.info(`[updater] 新版本 v${notice.version} 灰度未命中（gray=${notice.gray}），本轮跳过`);
+      return null;
+    }
+    return { version: notice.version, url: notice.androidUrl };
+  } catch (e) {
+    console.warn(`[updater] OSS 通告不可达，回退 GitHub 查找安卓包: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const resp = await withTimeout(
+    fetch("https://api.github.com/repos/icimence/OpenHoyo/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+    }),
+    10000,
+  );
+  if (!resp.ok) {
+    throw new Error(`GitHub 响应 ${resp.status}`);
+  }
+  const rel = (await resp.json()) as { tag_name: string; assets: { name: string; browser_download_url: string }[] };
+  const version = rel.tag_name.replace(/^v/, "");
+  const asset = rel.assets.find((a) => a.name.endsWith("_android-arm64.apk"));
+  if (!isNewerVersion(version, current) || !asset) {
+    return null;
+  }
+  return { version, url: asset.browser_download_url };
+}
+
+async function checkForAndroidUpdate(silent: boolean): Promise<void> {
+  try {
+    const update = await findAndroidUpdate(silent);
+    if (!update) {
       console.info("[updater] 已是最新版本");
       if (!silent) {
         toast("当前已是最新版本", "success");
       }
       return;
     }
-    if (silent && !grayEligible(notice.gray)) {
-      console.info(`[updater] 新版本 v${notice.version} 灰度未命中（gray=${notice.gray}），本轮跳过`);
-      return;
-    }
-    console.info(`[updater] 发现新版本 v${notice.version}（安卓）`);
-    let notes = "";
-    try {
-      notes = await withTimeout(api.updateNotes(notice.version), 6000);
-    } catch {
-      notes = "";
-    }
-    const url = notice.androidUrl;
-    openDialog(
-      "发现新版本",
-      `
-      <p class="confirm-message">新版本 <b>v${notice.version}</b> 可用。点击「下载更新」后会在浏览器中下载安装包，下载完成后打开即可覆盖安装，原有数据会保留。</p>
-      ${notes ? `<div class="update-notes">${mdToHtml(notes)}</div>` : ""}`,
-      "下载更新",
-    );
-    onDialogCancel(closeDialog);
-    onDialogOk(() => {
-      closeDialog();
-      void (async () => {
-        try {
-          const { openUrl } = await import("@tauri-apps/plugin-opener");
-          await openUrl(url);
-        } catch (e) {
-          toast(`无法打开下载链接: ${e instanceof Error ? e.message : String(e)}`, "error");
-        }
-      })();
-    });
+    console.info(`[updater] 发现新版本 v${update.version}（安卓）`);
+    pendingAndroid = update;
+    await showAndroidUpdateDialog(update);
   } catch (e) {
     console.warn(`[updater] 检查更新失败: ${e instanceof Error ? e.message : String(e)}`);
     if (!silent) {
       toast(`检查更新失败: ${e instanceof Error ? e.message : String(e)}`, "error");
     }
   }
+}
+
+async function showAndroidUpdateDialog(update: AndroidUpdate): Promise<void> {
+  if (downloadedApk?.version === update.version) {
+    showAndroidInstallDialog(downloadedApk.path, update.version);
+    return;
+  }
+  let notes = "";
+  try {
+    notes = await withTimeout(api.updateNotes(update.version), 6000);
+  } catch {
+    notes = "";
+  }
+  openDialog(
+    "发现新版本",
+    `
+    <p class="confirm-message">新版本 <b>v${update.version}</b> 可用，是否立即更新？更新会覆盖安装，原有数据保留。</p>
+    ${notes ? `<div class="update-notes">${mdToHtml(notes)}</div>` : ""}`,
+    "立即更新",
+  );
+  onDialogCancel(() => {
+    closeDialog();
+    // 暂不更新：点亮顶栏徽标作为持续提醒
+    showUpdateBadge(update.version);
+  });
+  onDialogOk(() => {
+    void startAndroidDownload(update);
+  });
+}
+
+/** 应用内下载：弹窗显示进度条，可转后台（进度改由顶栏徽标显示） */
+async function startAndroidDownload(update: AndroidUpdate): Promise<void> {
+  if (androidDownloading) {
+    return;
+  }
+  androidDownloading = true;
+  downloadPhase = "dialog";
+  badgePhase = "downloading";
+  downloadPct = 0;
+  openDialog(
+    "正在下载更新",
+    `
+    <p class="confirm-message">正在下载 <b>v${update.version}</b>，完成后会打开系统安装界面。</p>
+    <div class="dl-progress">
+      <div class="dl-bar"><div class="dl-fill" id="dl-fill"></div></div>
+      <div class="dl-meta"><span id="dl-pct">0%</span><span id="dl-size">准备中…</span></div>
+    </div>`,
+    "后台下载",
+    { cancelable: false },
+  );
+  onDialogOk(() => {
+    downloadPhase = "background";
+    setBadge(downloadPct > 0 ? `${downloadPct}%` : "下载中…", `正在后台下载 v${update.version}…`, "downloading");
+    closeDialog();
+    toast("已转为后台下载，完成后会提示安装");
+  });
+
+  const { listen } = await import("@tauri-apps/api/event");
+  let lastTick = performance.now();
+  let lastReceived = 0;
+  let speed = 0;
+  const unlisten = await listen<{ received: number; total: number }>("update://android-progress", (ev) => {
+    const { received, total } = ev.payload;
+    const now = performance.now();
+    if (now - lastTick > 600) {
+      speed = ((received - lastReceived) / (now - lastTick)) * 1000;
+      lastTick = now;
+      lastReceived = received;
+    }
+    const pct = total > 0 ? Math.min(100, Math.round((received / total) * 100)) : 0;
+    downloadPct = pct;
+    if (downloadPhase === "dialog") {
+      setDialogProgress(pct, received, total, speed);
+    } else {
+      setBadge(`${pct}%`, `正在后台下载 v${update.version}（${pct}%）…`, "downloading");
+    }
+  });
+  try {
+    const path = await api.androidUpdateDownload(update.url, update.version);
+    downloadedApk = { version: update.version, path };
+    badgePhase = "ready";
+    setBadge("安装更新", `v${update.version} 已下载完成，点击安装`, "ready");
+    showAndroidInstallDialog(path, update.version);
+  } catch (e) {
+    const msg = isApiError(e) ? e.message : e instanceof Error ? e.message : String(e);
+    console.warn(`[updater] 安卓更新包下载失败: ${msg}`);
+    toast(`更新下载失败: ${msg}`, "error");
+    if (downloadPhase === "dialog") {
+      closeDialog();
+    }
+    showUpdateBadge(update.version);
+  } finally {
+    unlisten();
+    androidDownloading = false;
+  }
+}
+
+/**
+ * 安装：需要「安装未知应用」权限（每个应用单独授权一次）。
+ * 未授权时先引导去系统设置，返回应用（hoyo-resume）后自动继续。
+ */
+function showAndroidInstallDialog(path: string, version: string): void {
+  const install = (): void => {
+    closeDialog();
+    if (!installApk(path)) {
+      toast("安装包已失效，请重新检查更新", "error");
+      downloadedApk = null;
+      showUpdateBadge(version);
+      return;
+    }
+    console.info(`[updater] 已拉起系统安装器（v${version}）`);
+  };
+  if (canInstallPackages()) {
+    openDialog(
+      "下载完成",
+      `<p class="confirm-message"><b>v${version}</b> 已下载完成，点击「安装」后在系统界面确认即可完成更新。</p>`,
+      "安装",
+    );
+    onDialogCancel(closeDialog);
+    onDialogOk(install);
+    return;
+  }
+  openDialog(
+    "需要安装权限",
+    `<p class="confirm-message">首次在应用内更新，需要允许本应用「安装未知应用」。点击「去设置」打开开关后返回，即可继续安装 <b>v${version}</b>。</p>`,
+    "去设置",
+  );
+  onDialogCancel(closeDialog);
+  onDialogOk(() => {
+    const onResume = (): void => {
+      window.removeEventListener("hoyo-resume", onResume);
+      if (canInstallPackages()) {
+        install();
+      } else {
+        toast("未开启安装权限，可稍后点击顶栏「安装更新」重试");
+      }
+    };
+    window.addEventListener("hoyo-resume", onResume);
+    openInstallSettings();
+  });
 }
 
 /** 设置标题栏更新徽标（位于最小化按钮左侧）的文案/提示/状态样式 */
@@ -199,6 +353,18 @@ export function showUpdateBadge(version: string): void {
 
 export function initUpdateBadge(): void {
   document.getElementById("win-update")?.addEventListener("click", () => {
+    if (isMobile()) {
+      if (badgePhase === "downloading") {
+        toast(`正在后台下载更新（${downloadPct > 0 ? `${downloadPct}%` : "进行中"}）`);
+      } else if (downloadedApk) {
+        showAndroidInstallDialog(downloadedApk.path, downloadedApk.version);
+      } else if (pendingAndroid) {
+        void showAndroidUpdateDialog(pendingAndroid);
+      } else {
+        void checkForUpdates(false);
+      }
+      return;
+    }
     if (badgePhase === "ready" && pendingUpdate) {
       void installPendingUpdate();
     } else if (badgePhase === "downloading") {

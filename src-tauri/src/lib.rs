@@ -152,6 +152,7 @@ pub fn run() {
             feedback::feedback_submit,
             update::update_notice,
             update::update_notes,
+            update::android_update_download,
             static_res::static_res_status,
             static_res::static_res_activity,
             static_res::static_res_set_enabled,

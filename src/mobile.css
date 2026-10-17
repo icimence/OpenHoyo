@@ -39,9 +39,14 @@ html[data-platform="android"] .titlebar {
 html[data-platform="android"] .titlebar-title,
 html[data-platform="android"] #win-min,
 html[data-platform="android"] #win-max,
-html[data-platform="android"] #win-close,
-html[data-platform="android"] #win-update {
+html[data-platform="android"] #win-close {
   display: none;
+}
+
+/* 更新徽标保留在顶栏右侧（取消更新后的持续提醒 / 后台下载进度 / 安装入口） */
+html[data-platform="android"] .titlebar-actions button.update-btn {
+  height: 32px;
+  margin: 0;
 }
 
 .nav-toggle,
@@ -85,6 +90,8 @@ html[data-platform="android"] .appbar-title {
 html[data-platform="android"] .titlebar-actions {
   margin-left: auto;
   padding-right: 8px;
+  height: var(--titlebar-height);
+  align-items: center;
 }
 
 /* 后台任务入口在手机上收为圆点（悬停面板改为点按展开，由 :focus-within 触发） */
