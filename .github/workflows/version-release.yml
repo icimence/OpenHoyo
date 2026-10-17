@@ -26,13 +26,13 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       app_version: ${{ steps.check.outputs.app_version }}
       game_version: ${{ steps.check.outputs.game_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check version day or half-switch day
         id: check
@@ -69,11 +69,11 @@ jobs:
   build-data:
     needs: check
     if: needs.check.outputs.should_run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -136,7 +136,7 @@ jobs:
   notify:
     needs: [check, build-data, release]
     if: failure()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
     steps:

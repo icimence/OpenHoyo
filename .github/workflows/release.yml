@@ -26,16 +26,16 @@ permissions:
 
 jobs:
   release:
-    runs-on: windows-latest
+    runs-on: windows-2025
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 自动版本流水线会先提交新卡池与图标；发布时必须取该提交后的分支最新状态。
           ref: ${{ inputs.game_version && github.event.repository.default_branch || github.ref }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -73,7 +73,7 @@ jobs:
           git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
           git diff --cached --quiet || (git commit -m "chore(release): v${{ env.VERSION }}" && git push)
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -90,7 +90,7 @@ jobs:
   # → notice.json（灰度 0）→ 更新说明 md。OSS 访问用 OIDC→STS，无长期密钥。
   distribute:
     needs: release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
       contents: write
@@ -99,9 +99,9 @@ jobs:
       OIDC_PROVIDER_ARN: acs:ram::1203685464265895:oidc-provider/GitHub-action
       VERSION: ${{ needs.release.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 

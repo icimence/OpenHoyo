@@ -19,15 +19,15 @@ permissions:
 
 jobs:
   publish-notes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       ROLE_ARN: acs:ram::1203685464265895:role/openhoyo-github-ci
       OIDC_PROVIDER_ARN: acs:ram::1203685464265895:oidc-provider/GitHub-action
       VERSION: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.x"
 
