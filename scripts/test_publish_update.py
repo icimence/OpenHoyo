@@ -52,6 +52,24 @@ class PublishUpdateTests(unittest.TestCase):
             self.assertEqual(source["platforms"]["windows-x86_64"]["signature"], "signed-installer")
         self.assertTrue(publisher.github_notice(notice)["android"]["url"].endswith(f"/FrostDance_{self.version}_android-arm64.apk"))
 
+    def test_tauri_v1_api_asset_urls_resolve_the_real_installer_name_once(self):
+        manifest = self.manifest()
+        url = f"https://api.github.com/repos/{publisher.GITHUB_REPO}/releases/assets/12345"
+        manifest["platforms"]["windows-x86_64"]["url"] = url
+        manifest["platforms"]["windows-x86_64-nsis"] = copy.deepcopy(manifest["platforms"]["windows-x86_64"])
+        expected = f"FrostDance_{self.version}_x64-setup.exe"
+        with patch.object(publisher.subprocess, "check_output", return_value=json.dumps({"name": expected})) as query:
+            self.assertEqual(publisher.installer_name(manifest), expected)
+        query.assert_called_once_with(["gh", "api", f"repos/{publisher.GITHUB_REPO}/releases/assets/12345"], text=True)
+
+    def test_unrelated_api_urls_do_not_receive_a_credentialed_lookup(self):
+        manifest = self.manifest()
+        manifest["platforms"]["windows-x86_64"]["url"] = "https://api.example.com/releases/assets/12345"
+        with patch.object(publisher.subprocess, "check_output") as query:
+            with self.assertRaises(ValueError):
+                publisher.installer_name(manifest)
+        query.assert_not_called()
+
     def test_rebranded_release_uploads_the_manifest_named_installer(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)

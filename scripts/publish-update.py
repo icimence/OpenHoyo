@@ -81,8 +81,17 @@ def github_notice(notice):
 
 def installer_name(manifest):
     # productName 改名后安装包名称也会变；使用签名清单中的真实附件名，兼容历史品牌。
-    names = {urllib.parse.unquote(urllib.parse.urlsplit(platform.get("url", "")).path.rsplit("/", 1)[-1])
-             for platform in manifest.get("platforms", {}).values()}
+    names = set()
+    for url in {platform.get("url", "") for platform in manifest.get("platforms", {}).values()}:
+        # tauri-action v1 可能写入 GitHub API 附件编号，而非公开文件名地址。
+        # 只向当前仓库的官方 GitHub API 查询，获取实际附件名后再构建国内/备用下载地址。
+        prefix = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/"
+        if url.startswith(prefix) and url[len(prefix):].isdigit():
+            asset = json.loads(subprocess.check_output(["gh", "api", url[len("https://api.github.com/"):]], text=True))
+            name = asset.get("name", "")
+        else:
+            name = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
+        names.add(name)
     if len(names) != 1:
         raise ValueError("Windows 平台安装包名称不一致")
     name = names.pop()

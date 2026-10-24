@@ -112,6 +112,7 @@ jobs:
         with:
           tagName: v${{ env.VERSION }}
           releaseName: "霜舞工具箱 FrostDance v${{ env.VERSION }}"
+          releaseAssetNamePattern: "FrostDance_[version]_[arch][setup][ext]"
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
