@@ -31,6 +31,7 @@ jobs:
       should_run: ${{ steps.check.outputs.should_run }}
       app_version: ${{ steps.check.outputs.app_version }}
       game_version: ${{ steps.check.outputs.game_version }}
+      game_phase: ${{ steps.check.outputs.game_phase }}
     steps:
       - uses: actions/checkout@v7
 
@@ -63,6 +64,7 @@ jobs:
               fs.appendFileSync(process.env.GITHUB_OUTPUT, 'should_run=true\n');
               fs.appendFileSync(process.env.GITHUB_OUTPUT, 'app_version=' + bump + '\n');
               fs.appendFileSync(process.env.GITHUB_OUTPUT, 'game_version=' + ver.version + '\n');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'game_phase=' + (today >= halfSwitch ? 'second' : 'first') + '\n');
             });
           "
 
@@ -108,10 +110,16 @@ jobs:
           node scripts/validate-gacha-icons.mjs
 
       - name: Commit data
+        env:
+          APP_VERSION: ${{ needs.check.outputs.app_version }}
+          GAME_VERSION: ${{ needs.check.outputs.game_version }}
+          GAME_PHASE: ${{ needs.check.outputs.game_phase }}
         run: |
+          node scripts/compose-release-notes.mjs --version "$APP_VERSION" \
+            --game-version "$GAME_VERSION" --phase "$GAME_PHASE" --record
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src-tauri/src/data/gacha_events.json src-tauri/src/data/item_names.json src-tauri/src/data/item_meta.json public/gacha-icons
+          git add CHANGELOG.md src-tauri/src/data/gacha_events.json src-tauri/src/data/item_names.json src-tauri/src/data/item_meta.json public/gacha-icons
           git diff --cached --quiet && echo "数据无变化" && exit 0
           git commit -m "chore(data): gacha events + icons for ${{ needs.check.outputs.game_version }}"
           git push
@@ -129,6 +137,7 @@ jobs:
     with:
       version: ${{ needs.check.outputs.app_version }}
       game_version: ${{ needs.check.outputs.game_version }}
+      game_phase: ${{ needs.check.outputs.game_phase }}
 
   # 失败告警：任一环节失败（含 gen 脚本双 UP 自检、发版）即微信推送。
   # 定时任务无人值守（凌晨 04:30），邮件不够显眼。密钥未配置时静默跳过。

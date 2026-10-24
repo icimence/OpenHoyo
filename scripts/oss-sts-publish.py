@@ -117,6 +117,28 @@ def current_android_url(version: str) -> str:
     return (current.get("android") or {}).get("url", "")
 
 
+def verify(key: str) -> None:
+    """公开读取校验；写入后可能有秒级传播延迟，退避重试。"""
+    import time
+
+    url = f"https://{OSS_BUCKET}.oss-{OSS_REGION}.aliyuncs.com/{urllib.parse.quote(key)}"
+    waits = [2, 3, 5, 8, 10, 15, 15, 15, 15, 15]
+    last_code = "unknown"
+    for attempt, wait in enumerate(waits, start=1):
+        try:
+            with urllib.request.urlopen(url, timeout=15) as resp:
+                data = resp.read()
+            print(f"✓ {key} 可匿名读取 ({len(data)}B)")
+            return
+        except urllib.error.HTTPError as e:
+            last_code = str(e.code)
+        except urllib.error.URLError as e:
+            last_code = str(e.reason)
+        print(f"… {key} 暂不可读（{last_code}），{wait}s 后重试（第 {attempt}/{len(waits)} 次）")
+        time.sleep(wait)
+    die(f"verify {key} 在 {sum(waits)}s 重试窗口后仍失败（最后状态: {last_code}）")
+
+
 def main() -> None:
     if len(sys.argv) < 2:
         die(f"用法: {sys.argv[0]} notice|latest|notes|verify ...")
@@ -142,30 +164,7 @@ def main() -> None:
         with open(sys.argv[3], "rb") as f:
             put(f"updates/releases/v{version}.md", f.read(), "text/markdown")
     elif mode == "verify":
-        key = sys.argv[2]
-        url = f"https://{OSS_BUCKET}.oss-{OSS_REGION}.aliyuncs.com/{urllib.parse.quote(key)}"
-        # OSS 写入后经公网匿名读取可能出现秒级~分钟级的传播延迟（跨前端节点），
-        # 指数退避重试，总窗口约 2 分钟；每次失败打日志避免 CI 里"莫名"红叉
-        import time
-
-        waits = [2, 3, 5, 8, 10, 15, 15, 15, 15, 15]
-        last_code = "unknown"
-        for attempt, wait in enumerate(waits, start=1):
-            try:
-                req = urllib.request.Request(url)
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    data = resp.read()
-                print(f"✓ {key} 可匿名读取 ({len(data)}B)")
-                return
-            except urllib.error.HTTPError as e:
-                last_code = str(e.code)
-                print(f"… {key} 暂不可读（HTTP {e.code}），{wait}s 后重试（第 {attempt}/{len(waits)} 次）")
-                time.sleep(wait)
-            except urllib.error.URLError as e:
-                last_code = str(e.reason)
-                print(f"… {key} 读取异常（{e.reason}），{wait}s 后重试（第 {attempt}/{len(waits)} 次）")
-                time.sleep(wait)
-        die(f"verify {key} 在 {sum(waits)}s 重试窗口后仍失败（最后状态: HTTP {last_code}）")
+        verify(sys.argv[2])
     else:
         die(f"未知子命令: {mode}")
 

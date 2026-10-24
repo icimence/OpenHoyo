@@ -11,6 +11,8 @@ use std::time::Duration;
 /// 请求头伪装档位
 #[derive(Debug, Clone, Copy)]
 pub enum Profile {
+    /// 公开更新资源：不附带米游社身份、设备或签名请求头。
+    Public,
     /// 米游社登录客户端（XRpc2，client_type=2）
     XRpc2,
     /// 米游社 App 通用（XRpc：client_type=5，takumi 接口如 genAuthKey）
@@ -75,6 +77,15 @@ pub struct RequestSpec {
     pub device_id_override: Option<String>,
     /// 额外请求头（如风控会话 x-rpc-aigis）
     pub extra_headers: Vec<(String, String)>,
+    pub response_format: ResponseFormat,
+    pub timeout: Duration,
+}
+
+#[derive(Clone, Copy)]
+pub enum ResponseFormat {
+    Envelope,
+    Json,
+    Text,
 }
 
 impl RequestSpec {
@@ -90,6 +101,8 @@ impl RequestSpec {
             ds: None,
             device_id_override: None,
             extra_headers: Vec::new(),
+            response_format: ResponseFormat::Envelope,
+            timeout: Duration::from_secs(20),
         }
     }
 
@@ -105,7 +118,16 @@ impl RequestSpec {
             ds: None,
             device_id_override: None,
             extra_headers: Vec::new(),
+            response_format: ResponseFormat::Envelope,
+            timeout: Duration::from_secs(20),
         }
+    }
+
+    pub fn public_get(url: impl Into<String>, format: ResponseFormat) -> Self {
+        let mut spec = Self::get(url, Profile::Public);
+        spec.response_format = format;
+        spec.timeout = Duration::from_secs(4);
+        spec
     }
 
     pub fn with_cookie(mut self, cookie: &crate::cookie::Cookie) -> Self {
@@ -170,7 +192,7 @@ pub async fn request<T: DeserializeOwned>(
 
     let mut req = client
         .request(spec.method.clone(), &spec.url)
-        .timeout(Duration::from_secs(20));
+        .timeout(spec.timeout);
 
     req = apply_profile(req, spec.profile, salts, devices);
 
@@ -224,6 +246,7 @@ pub async fn request<T: DeserializeOwned>(
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
+            let e = e.without_url();
             log::warn!("[http] {} {} → 网络错误: {e}", spec.method, url_path);
             return Err(ApiError::transport(e.to_string()));
         }
@@ -237,6 +260,7 @@ pub async fn request<T: DeserializeOwned>(
     let bytes = match resp.bytes().await {
         Ok(b) => b,
         Err(e) => {
+            let e = e.without_url();
             log::warn!(
                 "[http] {} {} → 读取响应失败: HTTP {status}, {e}",
                 spec.method,
@@ -245,7 +269,7 @@ pub async fn request<T: DeserializeOwned>(
             return Err(ApiError::transport(format!("HTTP {status}, {e}")));
         }
     };
-    let envelope: Envelope<T> = match serde_json::from_slice(&bytes) {
+    let envelope: Envelope<T> = match decode_response(spec.response_format, status, &bytes) {
         Ok(e) => e,
         Err(e) => {
             log::warn!(
@@ -280,6 +304,34 @@ pub async fn request<T: DeserializeOwned>(
     Ok(HoyoResponse { envelope, aigis })
 }
 
+fn decode_response<T: DeserializeOwned>(
+    format: ResponseFormat,
+    status: reqwest::StatusCode,
+    bytes: &[u8],
+) -> Result<Envelope<T>, String> {
+    match format {
+        ResponseFormat::Envelope => serde_json::from_slice(bytes).map_err(|e| e.to_string()),
+        ResponseFormat::Json | ResponseFormat::Text => {
+            if !status.is_success() {
+                return Err(format!("公开资源 HTTP {status}"));
+            }
+            let data = match format {
+                ResponseFormat::Text => {
+                    let text = std::str::from_utf8(bytes).map_err(|e| e.to_string())?;
+                    serde_json::from_value(Value::String(text.to_string()))
+                }
+                _ => serde_json::from_slice(bytes),
+            }
+            .map_err(|e| e.to_string())?;
+            Ok(Envelope {
+                retcode: 0,
+                message: String::new(),
+                data: Some(data),
+            })
+        }
+    }
+}
+
 fn apply_profile(
     req: reqwest::RequestBuilder,
     profile: Profile,
@@ -288,6 +340,11 @@ fn apply_profile(
 ) -> reqwest::RequestBuilder {
     let mut req = req.header(reqwest::header::ACCEPT, "application/json");
     match profile {
+        Profile::Public => {
+            req = req
+                .header(reqwest::header::USER_AGENT, "OpenHoyo-Updater")
+                .header(reqwest::header::CACHE_CONTROL, "no-cache");
+        }
         Profile::XRpc2 => {
             req = req
                 .header(reqwest::header::USER_AGENT, salts.cn_user_agent())
@@ -333,4 +390,43 @@ fn apply_profile(
         }
     }
     req
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn public_markdown_uses_the_same_tracked_transport() {
+        let result: Envelope<String> = decode_response(
+            ResponseFormat::Text,
+            reqwest::StatusCode::OK,
+            "- 更新卡池\n".as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(result.data.as_deref(), Some("- 更新卡池\n"));
+    }
+
+    #[test]
+    fn public_json_rejects_http_error_even_with_valid_body() {
+        let result = decode_response::<Value>(
+            ResponseFormat::Json,
+            reqwest::StatusCode::NOT_FOUND,
+            br#"{"version":"0.1.15","gray":10}"#,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn existing_hoyo_envelope_keeps_retcode_and_message() {
+        let result: Envelope<Value> = decode_response(
+            ResponseFormat::Envelope,
+            reqwest::StatusCode::OK,
+            br#"{"retcode":10001,"message":"expired","data":null}"#,
+        )
+        .unwrap();
+        assert_eq!(result.retcode, 10001);
+        assert_eq!(result.message, "expired");
+        assert!(result.data.is_none());
+    }
 }

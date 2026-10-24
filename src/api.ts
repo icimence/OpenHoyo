@@ -354,7 +354,7 @@ export interface FeedbackResult {
   clipboardOk: boolean;
 }
 
-/** OSS notice.json（update_notice 命令返回） */
+/** 多源 notice.json（CNB → GitHub → OSS，update_notice 命令返回） */
 export interface UpdateNotice {
   version: string;
   gray: number;

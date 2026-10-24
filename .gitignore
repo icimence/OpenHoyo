@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-ssr
+__pycache__/
 
 src-tauri/target
 src-tauri/gen/schemas

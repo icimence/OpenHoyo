@@ -1,5 +1,5 @@
 // 新版本首次启动时展示更新说明（对应 BetterGI CheckUpdateWindow 的日志展示）
-// localStorage 记录已读版本；当前版本更新时拉取 OSS 更新说明弹窗展示。
+// localStorage 记录已读版本；当前版本更新时从发布源拉取说明。
 import { api } from "./api";
 import { mdToHtml } from "./md";
 import { isNewerVersion } from "./updater";
@@ -21,13 +21,15 @@ export async function initChangelog(): Promise<void> {
     if (!isNewerVersion(current, stored)) {
       return;
     }
-    localStorage.setItem(KEY, current);
-
     let md = "";
     try {
       md = await api.updateNotes(current);
     } catch {
       console.warn("[changelog] 更新说明拉取失败，跳过展示");
+      return;
+    }
+    if (!md.trim()) {
+      console.warn(`[changelog] v${current} 更新说明为空，保留未读状态以便下次启动重试`);
       return;
     }
     console.info(`[changelog] 展示 v${current} 更新说明`);
@@ -37,7 +39,10 @@ export async function initChangelog(): Promise<void> {
       "知道了",
       { cancelable: false },
     );
-    onDialogOk(() => closeDialog());
+    onDialogOk(() => {
+      localStorage.setItem(KEY, current);
+      closeDialog();
+    });
   } catch (e) {
     console.warn(`[changelog] 初始化失败（不影响启动）: ${e instanceof Error ? e.message : String(e)}`);
   }

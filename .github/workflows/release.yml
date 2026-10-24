@@ -2,7 +2,7 @@
 # 触发方式:
 #   1. push v* 标签（手动兜底）
 #   2. Actions 页面手动运行（输入版本号）
-#   3. auto-release.yml 检测到米哈游新版本时自动调用（workflow_call）
+#   3. version-release.yml 检测到版本日或半池切换日时自动调用
 on:
   push:
     tags: ["v*"]
@@ -20,6 +20,14 @@ on:
         required: false
         type: string
         description: "对应的米哈游游戏版本（写入发布说明）"
+      game_phase:
+        required: false
+        type: string
+        description: "first 上半 / second 下半"
+
+concurrency:
+  group: update-distribution
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -29,6 +37,7 @@ jobs:
     runs-on: windows-2025
     outputs:
       version: ${{ steps.ver.outputs.version }}
+      source_ref: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -54,6 +63,23 @@ jobs:
       - name: Bump version files
         run: node scripts/bump-version.mjs ${{ env.VERSION }}
 
+      - name: Compose and validate release notes before publishing
+        id: notes
+        env:
+          GAME_VERSION: ${{ inputs.game_version }}
+          GAME_PHASE: ${{ inputs.game_phase }}
+        shell: bash
+        run: |
+          node scripts/compose-release-notes.mjs --version "$VERSION" \
+            --game-version "$GAME_VERSION" --phase "$GAME_PHASE" \
+            --output "$RUNNER_TEMP/release-notes/notes.md" --github-output
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes/notes.md
+          if-no-files-found: error
+
       - run: npm ci
 
       - name: Verify featured item icons before release
@@ -66,12 +92,17 @@ jobs:
           workspaces: src-tauri
 
       - name: Commit version bump
+        id: commit
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
-          git diff --cached --quiet || (git commit -m "chore(release): v${{ env.VERSION }}" && git push)
+          # 标签触发处于 detached HEAD：只就地改版本构建，不尝试向分支推送提交。
+          if [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            git diff --cached --quiet || (git commit -m "chore(release): v${{ env.VERSION }}" && git push)
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: tauri-apps/tauri-action@v1
         env:
@@ -81,7 +112,7 @@ jobs:
         with:
           tagName: v${{ env.VERSION }}
           releaseName: "OpenHoyo v${{ env.VERSION }}"
-          releaseBody: ${{ inputs.game_version && format('随原神 {0} 版本发布。下载 hoyo-auth_{1}_x64-setup.exe 安装，已安装用户启动应用即可收到更新。', inputs.game_version, env.VERSION) || '下载 Assets 中的 hoyo-auth_*_x64-setup.exe 安装。已安装用户启动应用即可收到更新提示。' }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: --target x86_64-pc-windows-msvc
@@ -96,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.game_version && github.event.repository.default_branch || github.ref }}
+          ref: ${{ needs.release.outputs.source_ref }}
 
       # 与 release job 同样就地改版本号（不提交）：tauri 据此生成 versionName / versionCode
       - name: Bump version files
@@ -165,8 +196,7 @@ jobs:
           path: dist/*.apk
           retention-days: 7
 
-  # 分发：安装包上传 CNB（国内下载源）→ OSS 元数据（latest.json 指向 CNB）
-  # → notice.json（灰度 0，含安卓 APK 地址）→ 更新说明 md。OSS 访问用 OIDC→STS，无长期密钥。
+  # CNB 主源 + GitHub 备用 + OSS 旧客户端兼容；全部元数据就绪后才切 CNB latest。
   distribute:
     needs: [release, android]
     # 安卓构建失败时桌面照常分发（notice.json 不带安卓地址，安卓端视为无更新）
@@ -181,6 +211,8 @@ jobs:
       VERSION: ${{ needs.release.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.source_ref }}
 
       - uses: actions/setup-python@v7
         with:
@@ -188,25 +220,10 @@ jobs:
 
       - run: pip install oss2
 
-      - name: Compose release notes
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p dist
-          # ① CHANGELOG.md 的 vX 段落（发版前人工编写，客户端首启弹窗展示）
-          node scripts/extract-changelog.mjs "${VERSION}" > dist/notes.md || true
-          if [ ! -s dist/notes.md ]; then
-            # ② 未编写段落时的用户侧兜底文案（git log 是开发者视角，不对用户透出）：
-            #    自动发版（带 game_version）明确说明是同步新版本卡池，手动发版用通用文案
-            if [ -n "${{ inputs.game_version }}" ]; then
-              echo "随原神 ${{ inputs.game_version }} 版本发布：同步新版本卡池信息与物品图标。" > dist/notes.md
-            else
-              echo "更新到 v${VERSION}，修复了一些问题并优化了使用体验。" > dist/notes.md
-            fi
-          fi
-          head -3 dist/notes.md
-          # 同步 GitHub Release 正文（tauri-action 建的是占位模板）
-          gh release edit "v${VERSION}" --notes-file dist/notes.md --repo "$GITHUB_REPOSITORY"
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: dist
 
       - name: Download release assets
         env:
@@ -222,41 +239,8 @@ jobs:
           name: android-apk
           path: dist
 
-      - name: Upload installer to CNB
+      - name: Publish update assets and metadata to all channels
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-        run: |
-          python scripts/cnb-release.py "v${VERSION}" "OpenHoyo v${VERSION}" dist/notes.md \
-            dist/hoyo-auth_*_x64-setup.exe $(ls dist/*_android-arm64.apk 2>/dev/null) \
-            | tee dist/cnb-urls.txt
-          grep "ASSET_URL=" dist/cnb-urls.txt | grep -m1 "_x64-setup.exe" | sed 's/^ASSET_URL=//' > dist/cnb-url.txt
-          grep "ASSET_URL=" dist/cnb-urls.txt | grep -m1 "_android-arm64.apk" | sed 's/^ASSET_URL=//' > dist/cnb-android-url.txt || true
-          cat dist/cnb-url.txt dist/cnb-android-url.txt
-
-      - name: Build OSS latest.json (download URL → CNB, notes → 更新说明)
-        run: |
-          python - <<'EOF'
-          import glob, json
-          with open("dist/latest.json", encoding="utf-8") as f:
-              manifest = json.load(f)
-          with open("dist/cnb-url.txt", encoding="utf-8") as f:
-              cnb_url = f.read().strip()
-          for platform in manifest.get("platforms", {}).values():
-              platform["url"] = cnb_url
-          # 更新提示弹窗读的是 latest.json 的 notes 字段：
-          # 注入正式更新说明，覆盖 tauri-action 建 Release 时写入的下载指引占位文案
-          with open("dist/notes.md", encoding="utf-8") as f:
-              manifest["notes"] = f.read().strip()
-          with open("dist/latest-oss.json", "w", encoding="utf-8") as f:
-              json.dump(manifest, f, ensure_ascii=False, indent=2)
-          print(json.dumps(manifest, ensure_ascii=False)[:400])
-          EOF
-
-      - name: Publish to OSS (STS via OIDC)
-        run: |
-          python scripts/oss-sts-publish.py latest dist/latest-oss.json
-          python scripts/oss-sts-publish.py notes "${VERSION}" dist/notes.md
-          python scripts/oss-sts-publish.py notice "${VERSION}" 0 "$(cat dist/cnb-android-url.txt 2>/dev/null)"
-          python scripts/oss-sts-publish.py verify updates/notice.json
-          python scripts/oss-sts-publish.py verify updates/latest.json
-          python scripts/oss-sts-publish.py verify "updates/releases/v${VERSION}.md"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/publish-update.py release "$VERSION" dist

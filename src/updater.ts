@@ -1,4 +1,4 @@
-// 应用更新检查（Tauri v2 updater：OSS/CNB 国内源 + GitHub 兜底，minisign 签名校验）
+// 应用更新检查（CNB 主源、GitHub 备用、OSS 迁移兼容，minisign 签名校验）
 import type { Update } from "@tauri-apps/plugin-updater";
 import { api, isApiError } from "./api";
 import { mdToHtml } from "./md";
@@ -66,10 +66,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * 检查更新。国内主源为 OSS notice.json（含灰度）：
- *   - OSS 无新版本 → 已是最新（OSS 优先于 GitHub 判断）
+ * 检查更新。后端按 CNB → GitHub → OSS 读取 notice.json（含灰度）：
+ *   - 通告无新版本 → 已是最新
  *   - 自动检查未命中灰度 → 静默跳过；手动检查为逃生门，不受灰度限制
- *   - OSS 不可达 → 回退 tauri updater 的 GitHub 直查（endpoints 第二顺位）
+ *   - 所有通告源不可达 → 尝试 Tauri updater 的清单源
  * 发现新版本一律弹窗明确告知；用户取消（或更新失败）后点亮标题栏徽标作为持续提醒。
  */
 export async function checkForUpdates(silent: boolean): Promise<void> {
@@ -79,7 +79,7 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
     return;
   }
   try {
-    const notice = await withTimeout(api.updateNotice(), 6000);
+    const notice = await withTimeout(api.updateNotice(), 16000);
     const { getVersion } = await import("@tauri-apps/api/app");
     const current = await getVersion();
     if (!isNewerVersion(notice.version, current)) {
@@ -94,7 +94,7 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
       return;
     }
   } catch (e) {
-    console.warn(`[updater] OSS 通告不可达，回退 GitHub 直查: ${e instanceof Error ? e.message : String(e)}`);
+    console.warn(`[updater] 更新通告源不可达，尝试更新清单: ${e instanceof Error ? e.message : String(e)}`);
   }
   try {
     const { check } = await import("@tauri-apps/plugin-updater");
@@ -118,9 +118,9 @@ export async function checkForUpdates(silent: boolean): Promise<void> {
 }
 
 /**
- * 安卓更新：Tauri updater 不支持安卓，改为读同一份 OSS 版本通告（同样受灰度门控），
+ * 安卓更新：Tauri updater 不支持安卓，改为读同一份版本通告（同样受灰度门控），
  * 应用内下载 APK（弹窗进度条）后拉起系统安装器覆盖安装（签名一致才能安装，原有数据保留）。
- * OSS 不可达时回退 GitHub Release 查找安卓资产。
+ * 所有通告源不可达时回退 GitHub Release 查找安卓资产。
  */
 interface AndroidUpdate {
   version: string;
@@ -136,7 +136,7 @@ async function findAndroidUpdate(silent: boolean): Promise<AndroidUpdate | null>
   const { getVersion } = await import("@tauri-apps/api/app");
   const current = await getVersion();
   try {
-    const notice = await withTimeout(api.updateNotice(), 8000);
+    const notice = await withTimeout(api.updateNotice(), 16000);
     if (!isNewerVersion(notice.version, current) || !notice.androidUrl) {
       return null;
     }
@@ -146,7 +146,7 @@ async function findAndroidUpdate(silent: boolean): Promise<AndroidUpdate | null>
     }
     return { version: notice.version, url: notice.androidUrl };
   } catch (e) {
-    console.warn(`[updater] OSS 通告不可达，回退 GitHub 查找安卓包: ${e instanceof Error ? e.message : String(e)}`);
+    console.warn(`[updater] 更新通告源不可达，回退 GitHub 查找安卓包: ${e instanceof Error ? e.message : String(e)}`);
   }
   const resp = await withTimeout(
     fetch("https://api.github.com/repos/icimence/OpenHoyo/releases/latest", {
@@ -194,7 +194,7 @@ async function showAndroidUpdateDialog(update: AndroidUpdate): Promise<void> {
   }
   let notes = "";
   try {
-    notes = await withTimeout(api.updateNotes(update.version), 6000);
+    notes = await withTimeout(api.updateNotes(update.version), 20000);
   } catch {
     notes = "";
   }

@@ -13,10 +13,11 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 BASE = "https://api.cnb.cool"
-TOKEN = os.environ["CNB_TOKEN"]
+TOKEN = os.environ.get("CNB_TOKEN", "")
 REPO = os.environ.get("CNB_REPO", "openhoyo/openhoyo-release")
 
 
@@ -32,6 +33,8 @@ class CnbApiError(Exception):
 
 
 def api(method: str, path: str, data=None, raw=None, content_type="application/json"):
+    if not TOKEN:
+        raise ValueError("缺少 CNB_TOKEN（只在发布工作流中使用）")
     body = raw if raw is not None else (json.dumps(data).encode() if data is not None else None)
     req = urllib.request.Request(BASE + path, data=body, method=method)
     req.add_header("Authorization", f"Bearer {TOKEN}")
@@ -58,8 +61,11 @@ def find_release_id(tag: str) -> str:
 
 
 def create_or_get_release(tag: str, title: str, body: str) -> str:
+    if not body.strip():
+        raise ValueError("更新说明不能为空")
     existing = find_release_id(tag)
     if existing:
+        api("PATCH", f"/{REPO}/-/releases/{existing}", {"name": title, "body": body})
         print(f"release {tag} 已存在，复用 {existing}")
         return existing
     release = api(
@@ -69,14 +75,19 @@ def create_or_get_release(tag: str, title: str, body: str) -> str:
             "tag_name": tag,
             "name": title,
             "body": body,
-            "draft": False,
+            # 完整上传并验证后再公开、切换 latest，避免客户端读到半成品。
+            "draft": True,
             "prerelease": False,
             "target_commitish": "main",
-            "make_latest": "true",
+            "make_latest": "false",
         },
     )
     print(f"✓ 创建 release {tag}（{release['id']}）")
     return release["id"]
+
+
+def asset_url(tag: str, name: str) -> str:
+    return f"https://cnb.cool/{REPO}/-/releases/download/{urllib.parse.quote(tag, safe='')}/{urllib.parse.quote(name, safe='')}"
 
 
 def upload_asset(release_id: str, tag: str, path: str) -> str:
@@ -85,12 +96,12 @@ def upload_asset(release_id: str, tag: str, path: str) -> str:
     info = api(
         "POST",
         f"/{REPO}/-/releases/{release_id}/asset-upload-url",
-        {"asset_name": name, "overwrite": True, "size": size},
+        {"asset_name": name, "overwrite": True, "size": size, "ttl": 0},
     )
     upload_url = info.get("upload_url")
     verify_url = info.get("verify_url")
     if not upload_url or not verify_url:
-        die(f"未取得 {name} 的上传/确认地址: {json.dumps(info)[:200]}")
+        die(f"未取得 {name} 的上传/确认地址")
     with open(path, "rb") as f:
         raw = f.read()
     req = urllib.request.Request(upload_url, data=raw, method="PUT")
@@ -108,7 +119,7 @@ def upload_asset(release_id: str, tag: str, path: str) -> str:
             resp.read()
     else:
         api("POST", verify_url)
-    url = f"https://cnb.cool/{REPO}/-/releases/download/{tag}/{name}"
+    url = asset_url(tag, name)
     print(f"✓ 上传 {name}（{len(raw)}B）→ {url}")
     return url
 
@@ -125,6 +136,7 @@ def main() -> None:
     try:
         release_id = create_or_get_release(tag, title, body)
         urls = [upload_asset(release_id, tag, asset) for asset in assets]
+        api("PATCH", f"/{REPO}/-/releases/{release_id}", {"draft": False, "make_latest": "true"})
     except CnbApiError as e:
         die(str(e))
     for url in urls:

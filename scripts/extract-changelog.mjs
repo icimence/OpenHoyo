@@ -1,32 +1,19 @@
-// 提取 CHANGELOG.md 中指定版本的段落（## vX.Y.Z 到下一个 ## 之间）
-// 用法: node scripts/extract-changelog.mjs 0.1.6
-// 无对应段落时输出空串（退出码 0），由调用方决定回退策略。
+// 提取指定版本的用户更新说明；找不到时输出零字节，便于调用方判断缺失。
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
-const version = process.argv[2];
-if (!version) {
-  console.error("用法: extract-changelog.mjs <version>");
-  process.exit(1);
+export function extractChangelog(text, version) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `## v${version}`);
+  if (start < 0) return "";
+  const next = lines.findIndex((line, i) => i > start && /^## /.test(line));
+  return lines.slice(start + 1, next < 0 ? undefined : next).join("\n").trim();
 }
 
-const text = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
-const lines = text.split(/\r?\n/);
-const header = `## v${version}`;
-
-let started = false;
-const out = [];
-for (const line of lines) {
-  if (started) {
-    if (/^## /.test(line)) {
-      break;
-    }
-    out.push(line);
-  } else if (line.trim() === header) {
-    started = true;
-  }
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const version = process.argv[2];
+  if (!version) throw new Error("用法: extract-changelog.mjs <version>");
+  const text = readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8");
+  const notes = extractChangelog(text, version);
+  if (notes) process.stdout.write(`${notes}\n`);
 }
-
-// 去掉首尾空行
-while (out.length && out[0].trim() === "") out.shift();
-while (out.length && out[out.length - 1].trim() === "") out.pop();
-console.log(out.join("\n"));

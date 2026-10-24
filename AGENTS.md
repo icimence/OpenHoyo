@@ -47,18 +47,25 @@ authkey、设备指纹原文。
 ## 其他强制约定
 
 - **更新分发体系**（对齐 BetterGI 的多渠道模型）：
-  - 版本检查主源 = 阿里云 OSS `openhoyo-updates/updates/notice.json`（version + gray 灰度），
-    前端按 deviceId 哈希 %10 < gray 门控；OSS 不可达回退 GitHub（endpoints 第二顺位）
+  - 版本检查主源 = CNB `openhoyo/openhoyo-release` 最新 Release 的 `notice.json` 附件，
+    GitHub 同名附件为备用，OSS 为迁移兼容源；前端按 deviceId 哈希 %10 < gray 门控
   - 安装包国内下载源 = CNB（`openhoyo/openhoyo-release` 仓库 release 资产，免费）；
-    OSS 上的 `latest.json` 的 download.url 指向 CNB——**改 OSS 这个 json 即可切换下载源，无需发版**
+    CNB 与 OSS 的 `latest.json` 下载地址指向 CNB，GitHub 备用清单指向 GitHub 安装包；
+    客户端更新清单顺序为 CNB → GitHub → OSS，均保留 minisign 签名
+  - **OSS 兼容链路暂时必须保留，只有用户明确要求彻底移除时才可删除**：发版、调灰度、
+    修订说明均由 `scripts/publish-update.py` 同步 CNB / GitHub / OSS；旧客户端的
+    `updates/notice.json`、`updates/latest.json`、`updates/releases/vX.md` 路径与格式不变
+  - CNB 版本先暂存附件，全部元数据校验通过后才切换 latest；灰度与说明工作流同发版串行，
+    更新历史版本说明不得覆盖当前最新版本的清单
   - CI 访问 OSS 用 GitHub OIDC → STS 临时凭证（`scripts/oss-sts-publish.py`），
     仓库不存任何阿里云长期密钥；发版后灰度恒为 0，由 `update-gray.yml`（workflow_dispatch）
     手动放量，出问题调回 0 熔断
   - 完整性由 minisign 签名保证（私钥仅在 GitHub Secrets），任一分发渠道被篡改均验签失败
   - **更新说明的唯一编写处是根目录 `CHANGELOG.md`**：发版前为本次版本
-    编写 `## vX.Y.Z` 段落并推送；CI distribute 环节提取该段落上传 OSS
-    （`releases/vX.md` 供首启弹窗 + `latest.json` 的 `notes` 字段供更新提示弹窗）
-    并同步 GitHub Release 正文，段落缺失时用固定兜底文案（git log 是开发者视角，
+    编写 `## vX.Y.Z` 段落并推送；自动卡池发布由 `compose-release-notes.mjs --record`
+    把当期角色信息写入该文件并随数据提交。发版前统一生成并校验非空说明，分发到三源
+    （CNB/GitHub 的 `notes.md`、OSS 的 `releases/vX.md`、各清单的 `notes`）
+    并同步 CNB/GitHub Release 正文，段落缺失时用固定兜底文案（git log 是开发者视角，
     **不得**透出给用户）。发版后发现文案要改：改完段落直接跑
     `publish-release-notes.yml`（workflow_dispatch 输入版本号），无需重新发版
   - **更新说明是用户文案，不是开发日志**：写给不懂技术的玩家看——每条以
