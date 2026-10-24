@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "hoyo-auth",
+  "productName": "霜舞工具箱",
+  "mainBinaryName": "hoyo-auth",
   "version": "0.1.14",
   "identifier": "com.learnrepo.hoyoauth",
   "build": {
@@ -12,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "胡桃工具箱 · 学习复刻版",
+        "title": "霜舞工具箱 · FrostDance",
         "width": 1200,
         "height": 800,
         "minWidth": 980,
@@ -38,6 +39,13 @@
     "createUpdaterArtifacts": true,
     "android": {
       "minSdkVersion": 35
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
     }
   },
   "plugins": {

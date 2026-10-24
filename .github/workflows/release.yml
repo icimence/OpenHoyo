@@ -111,7 +111,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v${{ env.VERSION }}
-          releaseName: "OpenHoyo v${{ env.VERSION }}"
+          releaseName: "霜舞工具箱 FrostDance v${{ env.VERSION }}"
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
@@ -186,8 +186,8 @@ jobs:
         run: |
           mkdir -p dist
           cp src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
-            "dist/hoyo-auth_${VERSION}_android-arm64.apk"
-          gh release upload "v${VERSION}" "dist/hoyo-auth_${VERSION}_android-arm64.apk" \
+            "dist/FrostDance_${VERSION}_android-arm64.apk"
+          gh release upload "v${VERSION}" "dist/FrostDance_${VERSION}_android-arm64.apk" \
             --clobber --repo "$GITHUB_REPOSITORY"
 
       - uses: actions/upload-artifact@v7
@@ -230,7 +230,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release download "v${VERSION}" --repo "$GITHUB_REPOSITORY" \
-            --pattern "hoyo-auth_*_x64-setup.exe" --pattern "latest.json" --dir dist
+            --pattern "*_x64-setup.exe" --pattern "latest.json" --dir dist
           ls -la dist/
 
       - uses: actions/download-artifact@v8

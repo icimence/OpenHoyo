@@ -1,7 +1,7 @@
 [package]
 name = "hoyo-auth"
 version = "0.1.14"
-description = "米哈游账号登录示例（Tauri 重制）"
+description = "霜舞工具箱 FrostDance — 原神账号、祈愿与角色助手"
 edition = "2021"
 
 [lib]

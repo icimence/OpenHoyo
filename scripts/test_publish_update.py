@@ -19,7 +19,7 @@ class PublishUpdateTests(unittest.TestCase):
 
     def manifest(self, version=None):
         return {"version": version or self.version, "notes": "", "platforms": {
-            "windows-x86_64": {"url": "https://old.example/setup.exe", "signature": "signed-installer"},
+            "windows-x86_64": {"url": f"https://old.example/hoyo-auth_{version or self.version}_x64-setup.exe", "signature": "signed-installer"},
         }}
 
     def fixture(self, directory, *, android=True, notes=None):
@@ -41,6 +41,34 @@ class PublishUpdateTests(unittest.TestCase):
         self.assertIn("cnb.cool", notice["android"]["url"])
         self.assertIn("github.com", publisher.github_notice(notice)["android"]["url"])
         self.assertNotIn("android", publisher.metadata(self.version, original, self.notes)[2])
+
+    def test_rebranded_installers_keep_their_names_and_signatures_across_channels(self):
+        manifest = self.manifest()
+        name = f"霜舞工具箱_{self.version}_x64-setup.exe"
+        manifest["platforms"]["windows-x86_64"]["url"] = "https://example.com/" + publisher.urllib.parse.quote(name)
+        domestic, backup, notice = publisher.metadata(self.version, manifest, self.notes, f"FrostDance_{self.version}_android-arm64.apk")
+        for source in [domestic, backup]:
+            self.assertEqual(publisher.installer_name(source), name)
+            self.assertEqual(source["platforms"]["windows-x86_64"]["signature"], "signed-installer")
+        self.assertTrue(publisher.github_notice(notice)["android"]["url"].endswith(f"/FrostDance_{self.version}_android-arm64.apk"))
+
+    def test_rebranded_release_uploads_the_manifest_named_installer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            self.fixture(directory, android=False)
+            branded = f"霜舞工具箱_{self.version}_x64-setup.exe"
+            (directory / f"hoyo-auth_{self.version}_x64-setup.exe").rename(directory / branded)
+            manifest = self.manifest()
+            manifest["platforms"]["windows-x86_64"]["url"] = "https://example.com/" + publisher.urllib.parse.quote(branded)
+            (directory / "latest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            apk = directory / f"FrostDance_{self.version}_android-arm64.apk"
+            apk.write_bytes(b"apk")
+            with patch.object(publisher, "check_target"), patch.object(publisher.cnb, "create_or_get_release", return_value="id"), \
+                 patch.object(publisher.cnb, "upload_asset") as upload, patch.object(publisher, "github"), \
+                 patch.object(publisher, "mirror_oss"), patch.object(publisher, "verify_assets"), patch.object(publisher.cnb, "api"):
+                publisher.publish_release(self.version, directory)
+                self.assertEqual(Path(upload.call_args_list[0].args[2]).name, branded)
+                self.assertEqual(Path(upload.call_args_list[1].args[2]).name, apk.name)
 
     def test_empty_notes_bad_version_and_unsigned_manifest_are_rejected(self):
         unsigned = self.manifest()

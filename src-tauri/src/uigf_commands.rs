@@ -74,7 +74,7 @@ async fn export_file(handle: &AppHandle, uid: &str) -> ApiResult<String> {
         handle,
         "UIGF 祈愿记录",
         &["json"],
-        format!("OpenHoyo UIGF v4.2 ({uid}).json"),
+        format!("FrostDance UIGF v4.2 ({uid}).json"),
     )
     .await?;
     let Some(fp) = file_path else {

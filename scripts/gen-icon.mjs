@@ -1,106 +1,51 @@
-// 纯 Node 生成图标：手写 PNG 编码（zlib + CRC32）→ to-ico 打包规范 ICO
-// 运行：node scripts/gen-icon.mjs
-import { writeFileSync } from "node:fs";
-import { deflateSync } from "node:zlib";
-import { join, dirname } from "node:path";
+// 从已选定的奥黛塔「芭蕾 V2」原图生成应用图标；保留构图与透明通道，不重新绘制。
+// 运行：npm run icons（原图：src-tauri/icons/source.png）
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
 import toIco from "to-ico";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const iconsDir = join(root, "src-tauri", "icons");
+const icons = join(root, "src-tauri", "icons");
+const source = join(icons, "source.png");
+const android = join(root, "src-tauri", "gen", "android", "app", "src", "main", "res");
+const clear = { r: 0, g: 0, b: 0, alpha: 0 };
+const ice = "#e8f4ff";
+const metadata = await sharp(source).metadata();
+if (!metadata.hasAlpha || metadata.width !== metadata.height) throw new Error("图标原图必须是带透明通道的正方形 PNG");
 
-// ---------------------------------------------------------------------------
-// 1. 绘制 256x256 RGBA 位图：蓝色渐变圆角底 + 白色 "H"
-// ---------------------------------------------------------------------------
-
-const S = 256;
-const px = new Uint8Array(S * S * 4);
-
-const inRoundedRect = (x, y, r) => {
-  const dx = Math.max(r - x, x - (S - 1 - r), 0);
-  const dy = Math.max(r - y, y - (S - 1 - r), 0);
-  return dx * dx + dy * dy <= r * r;
-};
-
-for (let y = 0; y < S; y++) {
-  for (let x = 0; x < S; x++) {
-    const i = (y * S + x) * 4;
-    if (!inRoundedRect(x, y, 48)) {
-      px[i + 3] = 0; // 透明
-      continue;
-    }
-    const t = y / S;
-    px[i] = Math.round(76 + (47 - 76) * t); // R
-    px[i + 1] = Math.round(194 + (111 - 194) * t); // G
-    px[i + 2] = Math.round(255 + (216 - 255) * t); // B
-    px[i + 3] = 255;
-
-    // 白色 H
-    const stemL = x >= 72 && x < 106;
-    const stemR = x >= 150 && x < 184;
-    const bar = y >= 111 && y < 145 && x >= 72 && x < 184;
-    if (stemL || stemR || bar) {
-      px[i] = 255;
-      px[i + 1] = 255;
-      px[i + 2] = 255;
-    }
-  }
+async function save(path, data) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, data);
 }
-
-// ---------------------------------------------------------------------------
-// 2. PNG 编码
-// ---------------------------------------------------------------------------
-
-const crcTable = new Uint32Array(256).map((_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) {
-    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  }
-  return c >>> 0;
-});
-
-const crc32 = (buf) => {
-  let c = 0xffffffff;
-  for (const b of buf) {
-    c = crcTable[(c ^ b) & 0xff] ^ (c >>> 8);
-  }
-  return (c ^ 0xffffffff) >>> 0;
-};
-
-const chunk = (type, data) => {
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length, 0);
-  const typeBuf = Buffer.from(type, "ascii");
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
-  return Buffer.concat([len, typeBuf, data, crc]);
-};
-
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(S, 0); // width
-ihdr.writeUInt32BE(S, 4); // height
-ihdr[8] = 8; // bit depth
-ihdr[9] = 6; // color type RGBA
-// 每行前置 filter 字节 0
-const raw = Buffer.alloc(S * (S * 4 + 1));
-for (let y = 0; y < S; y++) {
-  raw[y * (S * 4 + 1)] = 0;
-  Buffer.from(px.buffer, y * S * 4, S * 4).copy(raw, y * (S * 4 + 1) + 1);
+async function png(size) {
+  return sharp(source).resize(size, size, { fit: "contain", background: clear }).png().toBuffer();
 }
+await save(join(icons, "icon.png"), await png(512));
+await save(join(icons, "icon.ico"), await toIco(await Promise.all([16, 24, 32, 48, 64, 128, 256].map(png))));
+await save(join(root, "public", "app-icon.png"), await png(256));
+await save(join(root, "public", "favicon.png"), await png(64));
 
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  chunk("IHDR", ihdr),
-  chunk("IDAT", deflateSync(raw, { level: 9 })),
-  chunk("IEND", Buffer.alloc(0)),
-]);
-writeFileSync(join(iconsDir, "icon.png"), png);
-console.log(`icon.png written (${png.length} bytes)`);
-
-// ---------------------------------------------------------------------------
-// 3. ICO 打包
-// ---------------------------------------------------------------------------
-
-const ico = await toIco([png], { resize: true, sizes: [16, 24, 32, 48, 64, 128, 256] });
-writeFileSync(join(iconsDir, "icon.ico"), ico);
-console.log(`icon.ico written (${ico.length} bytes)`);
+for (const [density, size, foregroundSize] of [
+  ["mdpi", 48, 108], ["hdpi", 72, 162], ["xhdpi", 96, 216],
+  ["xxhdpi", 144, 324], ["xxxhdpi", 192, 432],
+]) {
+  const dir = join(android, `mipmap-${density}`);
+  await save(join(dir, "ic_launcher.png"), await png(size));
+  // 圆形图标保留伸出的手与羽饰；自适应图标在 108dp 画布内预留安全边距。
+  const roundArtwork = await png(Math.round(size * 0.78));
+  const circle = Buffer.from(`<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="white"/></svg>`);
+  const round = await sharp({ create: { width: size, height: size, channels: 4, background: ice } })
+    .composite([{ input: roundArtwork, gravity: "centre" }, { input: circle, blend: "dest-in" }]).png().toBuffer();
+  await save(join(dir, "ic_launcher_round.png"), round);
+  const foreground = await sharp({ create: { width: foregroundSize, height: foregroundSize, channels: 4, background: clear } })
+    .composite([{ input: await png(Math.round(foregroundSize * 0.52)), gravity: "centre" }]).png().toBuffer();
+  await save(join(dir, "ic_launcher_foreground.png"), foreground);
+}
+const adaptive = `<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@color/ic_launcher_background" />\n    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n</adaptive-icon>\n`;
+for (const name of ["ic_launcher.xml", "ic_launcher_round.xml"]) {
+  await save(join(android, "mipmap-anydpi-v26", name), adaptive);
+}
+await save(join(android, "values", "ic_launcher_background.xml"), `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">${ice}</color>\n</resources>\n`);
+console.info("[brand] 已生成霜舞工具箱桌面、网页和 Android 图标");

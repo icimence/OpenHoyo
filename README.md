@@ -1,4 +1,6 @@
-# OpenHoyo
+# 霜舞工具箱 · FrostDance
+
+<img src="public/app-icon.png" alt="霜舞工具箱应用图标" width="128" />
 
 基于 Tauri 2 的原神工具箱，参考 [Snap Hutao Remastered](https://github.com/SnapHutaoRemasteringProject/Snap.Hutao.Remastered) 的本地功能与交互。项目供学习与交流。
 
@@ -50,3 +52,12 @@ cargo test --manifest-path src-tauri/Cargo.toml --lib uigf_roundtrip_real_file -
 SQLite 数据位于应用数据目录。日志由 `tauri-plugin-log` 写入本地并供反馈中心采集；日志格式和敏感字段处理须遵守 [AGENTS.md](AGENTS.md)。
 
 活动期和物品元数据由 `scripts/` 维护。更新说明只在 [CHANGELOG.md](CHANGELOG.md) 编写。发版、分发和日志约定以 [AGENTS.md](AGENTS.md) 为准；仅在明确要求发版时触发发布流程。
+
+## 应用图标与名称
+
+应用图标采用奥黛塔「芭蕾 V2」定稿，原图保存在 `src-tauri/icons/source.png`。
+运行 `npm run icons` 可重新生成 Windows ICO、PNG、网页图标，以及 Android 普通、圆形和自适应启动图标。
+
+「霜舞工具箱」是本项目的应用名称，英文名为 FrostDance。仓库地址仍为 `icimence/OpenHoyo`。
+为兼容已有安装，应用标识、数据目录、Windows 主程序名和 Android 包名沿用原值；
+Windows 安装器会识别旧安装目录并迁移应用快捷方式，原有账号、记录与日志路径保持兼容。

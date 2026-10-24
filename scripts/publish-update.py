@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -73,8 +74,21 @@ def github_notice(notice):
     backup = copy.deepcopy(notice)
     if backup.get("android"):
         version = backup["version"]
-        backup["android"]["url"] = f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/hoyo-auth_{version}_android-arm64.apk"
+        name = urllib.parse.unquote(urllib.parse.urlsplit(backup["android"]["url"]).path.rsplit("/", 1)[-1])
+        backup["android"]["url"] = f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/{urllib.parse.quote(name, safe='')}"
     return backup
+
+
+def installer_name(manifest):
+    # productName 改名后安装包名称也会变；使用签名清单中的真实附件名，兼容历史品牌。
+    names = {urllib.parse.unquote(urllib.parse.urlsplit(platform.get("url", "")).path.rsplit("/", 1)[-1])
+             for platform in manifest.get("platforms", {}).values()}
+    if len(names) != 1:
+        raise ValueError("Windows 平台安装包名称不一致")
+    name = names.pop()
+    if not name.endswith("_x64-setup.exe") or "/" in name or "\\" in name:
+        raise ValueError("更新清单中的 Windows 安装包名称无效")
+    return name
 
 
 def metadata(version, manifest, notes, android=False):
@@ -86,16 +100,17 @@ def metadata(version, manifest, notes, android=False):
         raise ValueError("更新清单版本不匹配或缺少平台")
     domestic, backup = copy.deepcopy(manifest), copy.deepcopy(manifest)
     domestic["notes"] = backup["notes"] = notes
-    installer = f"hoyo-auth_{version}_x64-setup.exe"
+    installer = installer_name(manifest)
     for source, url in [(domestic, cnb.asset_url(f"v{version}", installer)),
-                        (backup, f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/{installer}")]:
+                        (backup, f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/{urllib.parse.quote(installer, safe='')}")]:
         for platform in source["platforms"].values():
             if not platform.get("signature"):
                 raise ValueError("更新清单缺少安装包签名")
             platform["url"] = url
     notice = {"version": version, "gray": 0}
     if android:
-        notice["android"] = {"url": cnb.asset_url(f"v{version}", f"hoyo-auth_{version}_android-arm64.apk")}
+        apk_name = android if isinstance(android, str) else f"hoyo-auth_{version}_android-arm64.apk"
+        notice["android"] = {"url": cnb.asset_url(f"v{version}", apk_name)}
     return domestic, backup, notice
 
 
@@ -151,14 +166,17 @@ def publish_release(version, directory):
     tag = f"v{version}"
     notes = (directory / "notes.md").read_text(encoding="utf-8").strip()
     manifest = json.loads((directory / "latest.json").read_text(encoding="utf-8"))
-    installer = directory / f"hoyo-auth_{version}_x64-setup.exe"
+    installer = directory / installer_name(manifest)
     if not installer.is_file():
         raise ValueError("缺少 Windows 安装包")
-    apk = directory / f"hoyo-auth_{version}_android-arm64.apk"
-    domestic, backup, notice = metadata(version, manifest, notes, apk.is_file())
+    apks = list(directory.glob("*_android-arm64.apk"))
+    if len(apks) > 1:
+        raise ValueError("目录中存在多个安卓安装包，无法确定目标")
+    apk = apks[0] if apks else None
+    domestic, backup, notice = metadata(version, manifest, notes, apk.name if apk else False)
     check_target(version)
-    release_id = cnb.create_or_get_release(tag, f"OpenHoyo {tag}", notes)
-    for file in [installer, *([apk] if apk.is_file() else [])]:
+    release_id = cnb.create_or_get_release(tag, f"霜舞工具箱 FrostDance {tag}", notes)
+    for file in [installer, *([apk] if apk else [])]:
         cnb.upload_asset(release_id, tag, str(file))
     with tempfile.TemporaryDirectory() as temp:
         work = Path(temp)

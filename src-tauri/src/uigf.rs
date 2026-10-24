@@ -8,7 +8,7 @@ use crate::response::{ApiError, ApiResult};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 
-const EXPORT_APP: &str = "OpenHoyo";
+const EXPORT_APP: &str = "FrostDance";
 
 #[derive(Deserialize)]
 struct UigfFile {

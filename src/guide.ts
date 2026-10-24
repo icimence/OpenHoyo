@@ -127,8 +127,9 @@ class Guide {
     this.root.innerHTML = `
       <div class="guide-page">
         <header class="guide-header">
+          <img class="guide-logo" src="/app-icon.png" width="64" height="64" alt="" draggable="false" />
           <div class="guide-eyebrow">初始设置 · 第 ${this.step + 1} / ${steps.length} 步</div>
-          <h1>欢迎使用胡桃工具箱</h1>
+          <h1>欢迎使用霜舞工具箱</h1>
           <p>完成以下设置后即可开始使用。账号凭证与记录只保存在你的${isMobile() ? "手机" : "电脑"}上，游戏图片只来自米哈游官方服务器；这些设置之后都能在「设置」页修改。</p>
           <nav class="guide-crumbs" aria-label="设置步骤">${crumbs}</nav>
         </header>
@@ -211,7 +212,7 @@ class Guide {
             <li>应用自动重启，从新位置读取数据，并回到这一步</li>
             <li>确认新位置可用后，才会删除旧位置的数据</li>
           </ol>
-          <p>迁移期间请勿关闭应用；如果同时开着另一个胡桃工具箱（例如已安装的版本），请先把它关掉。</p>
+          <p>迁移期间请勿关闭应用；如果同时开着另一个霜舞工具箱（例如已安装的版本），请先把它关掉。</p>
         </div>`
       : "";
     const actions = pending

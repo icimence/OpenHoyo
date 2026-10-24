@@ -160,5 +160,5 @@ jobs:
 
           > 凌晨自动发布流水线失败，请尽快检查。"
           curl -sS -X POST "https://sctapi.ftqq.com/${SENDKEY}.send" \
-            --data-urlencode "title=❌ OpenHoyo CI 失败：Version Release" \
+            --data-urlencode "title=❌ 霜舞工具箱 CI 失败：Version Release" \
             --data-urlencode "desp=${DESP}"

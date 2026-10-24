@@ -1,11 +1,12 @@
 {
-  "name": "hoyo-auth",
+  "name": "frostdance",
   "private": true,
   "version": "0.1.14",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "icons": "node scripts/gen-icon.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
