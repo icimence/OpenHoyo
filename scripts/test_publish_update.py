@@ -109,6 +109,22 @@ class PublishUpdateTests(unittest.TestCase):
         self.assertEqual(mirror.call_args.kwargs["notice"]["android"], old["android"])
         self.assertEqual(mirror.call_args.kwargs["notice"]["gray"], 0)
 
+    def test_gray_only_overwrites_notice_in_existing_release_without_touching_latest(self):
+        notice = {"version": self.version, "gray": 3, "android": {"url": "https://cnb.cool/app.apk"}}
+        with patch.object(publisher, "check_target", return_value={"id": "existing-release-id"}) as target, \
+             patch.object(publisher, "read_json", return_value=notice), \
+             patch.object(publisher.cnb, "create_or_get_release") as create, \
+             patch.object(publisher.cnb, "api") as api, \
+             patch.object(publisher.cnb, "upload_asset") as upload, \
+             patch.object(publisher, "github"), patch.object(publisher, "verify_assets"), patch.object(publisher, "mirror_oss"):
+            publisher.update_gray(self.version, 10)
+        target.assert_called_once_with(self.version, exact=True)
+        create.assert_not_called()
+        api.assert_not_called()  # 无 PATCH make_latest / POST 创建 Release。
+        upload.assert_called_once()
+        self.assertEqual(upload.call_args.args[:2], ("existing-release-id", f"v{self.version}"))
+        self.assertEqual(Path(upload.call_args.args[2]).name, "notice.json")
+
     def test_historical_notes_do_not_replace_live_latest(self):
         def github(*args):
             if args[:2] == ("release", "download"):
