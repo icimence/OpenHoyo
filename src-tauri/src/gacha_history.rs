@@ -34,7 +34,7 @@ pub fn build_event_history(items: &[StoredItem]) -> Vec<EventHistory> {
     let mut unmatched: HashMap<i32, Vec<&StoredItem>> = HashMap::new();
 
     for item in items {
-        let local_time = event_local_time(&item.item_id, &item.time);
+        let local_time = event_local_time(item.timezone, &item.time);
         if let Some((index, _)) = windows.iter().enumerate().find(|(_, (event, from, to))| {
             event.gacha_type == item.gacha_type
                 && from.as_str() <= local_time.as_ref()

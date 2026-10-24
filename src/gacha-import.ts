@@ -51,8 +51,9 @@ export async function importUigf(onComplete: () => Promise<void>): Promise<void>
     await onComplete();
     const inserted = report.accounts.reduce((total, account) => total + account.inserted, 0);
     const skipped = report.accounts.reduce((total, account) => total + account.skipped, 0);
-    console.info(`[gacha] UIGF 导入完成：新增 ${inserted} 条，跳过 ${skipped} 条`);
-    toast(`导入完成：新增 ${inserted} 条，跳过 ${skipped} 条`, "success");
+    const repaired = report.accounts.reduce((total, account) => total + account.repaired, 0);
+    console.info(`[gacha] UIGF 导入完成：新增 ${inserted} 条，修复 ${repaired} 条，跳过 ${skipped} 条`);
+    toast(`导入完成：新增 ${inserted} 条，修复 ${repaired} 条，跳过 ${skipped} 条`, "success");
   } catch (error) {
     if (!(isApiError(error) && error.code === -100)) {
       console.warn(`[gacha] UIGF 导入失败: ${errText(error)}`);

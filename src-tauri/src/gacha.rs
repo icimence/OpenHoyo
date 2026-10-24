@@ -32,6 +32,8 @@ pub const PAGE_SIZE: usize = 20;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct GachaLogItem {
+    #[serde(default = "default_gacha_timezone")]
+    pub timezone: i8,
     #[serde(default)]
     pub uid: String,
     #[serde(
@@ -56,6 +58,10 @@ pub struct GachaLogItem {
     pub rank_type: i32,
     #[serde(default, deserialize_with = "crate::models::de_i64_flexible")]
     pub id: i64,
+}
+
+fn default_gacha_timezone() -> i8 {
+    8 // 当前国服 API 返回 UTC+8 当地时间；导入路径显式设置文件时区。
 }
 
 #[derive(Debug, Deserialize)]
@@ -583,7 +589,22 @@ pub fn init_tables(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
             UNIQUE(archive_id, id)
         );
         CREATE INDEX IF NOT EXISTS idx_gacha_items_archive ON gacha_items(archive_id, query_type, id);",
-    )
+    )?;
+    let has_timezone = conn
+        .prepare("PRAGMA table_info(gacha_items)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .iter()
+        .any(|name| name == "timezone");
+    if !has_timezone {
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch(
+            "ALTER TABLE gacha_items ADD COLUMN timezone INTEGER NOT NULL DEFAULT 8;
+            UPDATE gacha_items SET timezone = 0 WHERE item_id <> ''; ",
+        )?;
+        tx.commit()?;
+    }
+    Ok(())
 }
 
 fn db_err(e: rusqlite::Error) -> ApiError {
@@ -629,8 +650,15 @@ pub fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -
             item.gacha_type
         };
         transaction.execute(
-            "INSERT OR IGNORE INTO gacha_items (id, archive_id, gacha_type, query_type, item_id, name, item_type, rank_type, time)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO gacha_items (id, archive_id, gacha_type, query_type, item_id, name, item_type, rank_type, time, timezone)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(id) DO UPDATE SET
+               item_id = excluded.item_id, name = excluded.name, item_type = excluded.item_type,
+               rank_type = excluded.rank_type, time = excluded.time, timezone = excluded.timezone
+             WHERE gacha_items.archive_id = excluded.archive_id
+               AND excluded.name <> '' AND excluded.rank_type BETWEEN 3 AND 5
+               AND (gacha_items.name = '' OR gacha_items.rank_type NOT BETWEEN 3 AND 5
+                    OR (gacha_items.item_id = '' AND excluded.item_id <> ''))",
             rusqlite::params![
                 item.id,
                 archive_id,
@@ -641,6 +669,7 @@ pub fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -
                 item.item_type,
                 item.rank_type,
                 item.time,
+                item.timezone,
             ],
         )
         .map_err(db_err)?;
@@ -675,11 +704,11 @@ pub fn load_items(state: &AppState, archive_id: i64) -> ApiResult<Vec<StoredItem
     let conn = state.db.lock().unwrap();
     let mut stmt = conn
         .prepare(
-            "SELECT id, gacha_type, query_type, item_id, name, item_type, rank_type, time
+            "SELECT id, gacha_type, query_type, item_id, name, item_type, rank_type, time, timezone
              FROM gacha_items WHERE archive_id = ?1 ORDER BY id ASC",
         )
         .map_err(db_err)?;
-    let rows = stmt
+    let mut rows = stmt
         .query_map([archive_id], |r| {
             Ok(StoredItem {
                 id: r.get(0)?,
@@ -691,16 +720,26 @@ pub fn load_items(state: &AppState, archive_id: i64) -> ApiResult<Vec<StoredItem
                 rank_type: r.get(6)?,
                 time: r.get(7)?,
                 is_up: false,
+                timezone: r.get(8)?,
             })
         })
         .map_err(db_err)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(db_err)?;
+    let restored = rows
+        .iter_mut()
+        .map(crate::uigf::restore_item_metadata)
+        .filter(|restored| *restored)
+        .count();
+    if restored > 0 {
+        log::info!("[gacha] 读取存档时补全 {restored} 条物品元数据");
+    }
     Ok(rows)
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StoredItem {
+    pub timezone: i8,
     pub id: i64,
     pub gacha_type: i32,
     pub query_type: i32,

@@ -792,3 +792,13 @@
   .event-detail { max-height: none; }
   .countdown-grid { grid-template-columns: 1fr; }
 }
+
+.orange-section { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 12px; border-top: 1px solid var(--divider); }
+.orange-section .orange-scroll { margin-top: 0; padding-top: 8px; border-top: 0; }
+.orange-list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-top: 12px; }
+.orange-list-heading h3 { font-size: 13px; font-weight: 600; }
+.orange-list-heading h3 span { margin-left: 7px; font-size: 11px; color: var(--text-secondary); font-weight: 400; }
+.orange-list-heading small, .orange-list-note { font-size: 11px; color: var(--text-secondary); }
+.orange-list-note { margin-top: 5px; }
+.orange-item-name, .orange-item-date, .orange-item-unit, .stats-total-label, .stats-five-count { display: none; }
+.stats-data-warning { margin-top: 10px; padding: 9px; border: 1px solid var(--stroke-strong); border-radius: 6px; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
