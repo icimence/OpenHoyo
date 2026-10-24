@@ -548,3 +548,59 @@ html[data-platform="android"] .ap-empty-card {
   min-width: 0;
   width: calc(100vw - 32px);
 }
+
+/* 手机祈愿总览：先选池，再看保底与完整记录；跟随页面滚动。 */
+html[data-platform="android"] .gacha-commandbar {
+  padding: 0 0 8px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  margin-bottom: 12px;
+}
+html[data-platform="android"] .gacha-commandbar .gacha-select { min-width: 0; flex: 1 1 0; }
+html[data-platform="android"] .gacha-commandbar .gacha-select .sc-select-value { overflow: hidden; text-overflow: ellipsis; }
+html[data-platform="android"] .gacha-commandbar .gacha-tabs { gap: 0; justify-content: space-between; border-bottom: 1px solid var(--divider); }
+html[data-platform="android"] .gacha-tab { padding: 9px 12px; min-height: 44px; font-size: 14px; }
+html[data-platform="android"] .gacha-pool-switch { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; }
+html[data-platform="android"] .gacha-pool-switch button { flex: 1 0 auto; min-height: 44px; padding: 8px 12px; background: var(--hover-faint); border: 1px solid var(--stroke); border-radius: 8px; color: var(--text-secondary); font-size: 13px; }
+html[data-platform="android"] .gacha-pool-switch button.active { color: var(--accent-light); border-color: var(--accent-light); background: var(--update-tint); }
+html[data-platform="android"] .stats-card { height: auto; overflow: visible; padding: 16px; border-radius: 12px; box-shadow: none; }
+html[data-platform="android"] .stats-title { font-size: 16px; }
+html[data-platform="android"] .combine-toggle { width: 44px; height: 44px; flex-basis: 44px; }
+html[data-platform="android"] .mobile-pity-hero { padding: 16px 0; }
+html[data-platform="android"] .mobile-pity-label { color: var(--text-secondary); font-size: 13px; }
+html[data-platform="android"] .mobile-pity-value { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; color: #edb86c; }
+html[data-platform="android"] .mobile-pity-value strong { font-size: 54px; line-height: 1.12; font-variant-numeric: tabular-nums; }
+html[data-platform="android"] .mobile-pity-value strong.pity-unavailable { font-size: 25px; padding: 8px 0; }
+html[data-platform="android"] .mobile-pity-hero p { font-size: 13px; color: var(--text-secondary); }
+html[data-platform="android"] .mobile-pity-hero p b { color: var(--text); }
+html[data-platform="android"] .stats-total { display: flex; gap: 5px; align-items: baseline; margin: 0; padding: 12px 0; border-top: 1px solid var(--divider); font-size: 12px; color: var(--text-secondary); }
+html[data-platform="android"] .stats-total-label, html[data-platform="android"] .stats-five-count { display: inline; }
+html[data-platform="android"] .stats-total .big { font-size: 23px; font-weight: 600; color: var(--text); }
+html[data-platform="android"] .stats-five-count { margin-left: auto; }
+html[data-platform="android"] .stats-five-count b { font-size: 18px; color: #edb86c; }
+html[data-platform="android"] .pity-grid { display: block; }
+html[data-platform="android"] .pity-grid .orange { display: none; }
+html[data-platform="android"] .pity-meter { font-size: 12px; padding: 9px 10px; }
+html[data-platform="android"] .stats-time { font-size: 11px; color: var(--text-secondary); margin: 10px 0 14px; }
+html[data-platform="android"] .stats-avg { gap: 8px; }
+html[data-platform="android"] .stats-avg > div { min-height: 57px; padding: 9px 10px; gap: 5px; }
+html[data-platform="android"] .stats-avg span { color: var(--text-secondary); font-size: 12px; }
+html[data-platform="android"] .stats-avg b { font-size: 15px; }
+html[data-platform="android"] .orange-section { flex: none; min-height: auto; margin-top: 18px; overflow: visible; }
+html[data-platform="android"] .orange-list-heading { padding-top: 16px; }
+html[data-platform="android"] .orange-list-heading h3 { font-size: 15px; }
+html[data-platform="android"] .orange-section .orange-scroll { flex: none; overflow: visible; padding-top: 14px; }
+html[data-platform="android"] .orange-flat { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 8px; }
+html[data-platform="android"] .orange-flat .tile-face { border-radius: 8px; }
+html[data-platform="android"] .orange-flat .up-badge { font-size: 10px; padding: 3px; }
+html[data-platform="android"] .orange-item-name { display: block; margin-top: 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-platform="android"] .orange-flat .flat-count { margin-top: 3px; font-size: 14px; font-weight: 600; }
+html[data-platform="android"] .orange-item-unit { display: inline; font-size: 10px; font-weight: 400; }
+html[data-platform="android"] .orange-item-date { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 9px; white-space: nowrap; }
+html[data-platform="android"] .stats-incomplete .mobile-pity-hero { padding-bottom: 8px; }
+html[data-platform="android"] .stats-incomplete .stats-data-warning { margin: 0 0 12px; }
+html[data-platform="android"][data-theme="light"] .mobile-pity-value,
+html[data-platform="android"][data-theme="light"] .stats-five-count b { color: #8c5d19; }
+html[data-platform="android"] .stats-avg > div:last-child:nth-child(odd) { grid-column: 1 / -1; }

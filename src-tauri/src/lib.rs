@@ -24,6 +24,7 @@ mod feedback;
 mod gacha;
 mod gacha_events;
 mod gacha_history;
+mod gacha_item;
 mod gacha_stats;
 mod game_record;
 mod http;

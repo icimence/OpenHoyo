@@ -231,7 +231,7 @@ export const api = {
 
   gachaCountdown: () => invoke<GachaCountdown[]>("gacha_countdown"),
 
-  uigfImport: () => invoke<{ accounts: { uid: string; inserted: number; skipped: number }[] }>("uigf_import"),
+  uigfImport: () => invoke<{ accounts: { uid: string; inserted: number; skipped: number; repaired: number }[] }>("uigf_import"),
 
   uigfExport: (uid: string) => invoke<string>("uigf_export", { uid }),
 
@@ -388,6 +388,7 @@ export interface WishSummary {
   total_orange: number;
   total_purple: number;
   total_blue: number;
+  total_unknown: number;
   orange_percent: number;
   purple_percent: number;
   blue_percent: number;
@@ -409,6 +410,7 @@ export interface WishSummary {
 }
 
 export interface StoredItem {
+  timezone: number;
   id: number;
   gacha_type: number;
   query_type: number;

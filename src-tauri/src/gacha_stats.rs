@@ -8,7 +8,7 @@
 //!
 //! 新手祈愿(100)不计入统计卡。
 //!
-//! 统计算法与原版逐行对应：按 id 升序遍历，橙色(5星)记录抽数区间并重置计数器，
+//! 按统一时区的时间升序、同秒 ID 升序遍历，橙色(5星)记录抽数区间并重置计数器，
 //! 紫色(4星)重置紫计数，累计时间范围与三档品质数量。
 
 use crate::gacha::{guarantee_thresholds, StoredItem};
@@ -34,6 +34,8 @@ pub struct WishSummary {
     pub total_orange: i32,
     pub total_purple: i32,
     pub total_blue: i32,
+    /// 元数据仍无法识别的记录，不能作为三星计算。
+    pub total_unknown: i32,
     pub orange_percent: f64,
     pub purple_percent: f64,
     pub blue_percent: f64,
@@ -137,16 +139,17 @@ fn build_wish_summary(name: &str, pool: i32, items: &[&StoredItem]) -> WishSumma
     let mut last_up_pull: i32 = 0;
 
     for item in items {
+        let local_time = crate::gacha_events::event_local_time(item.timezone, &item.time);
         summary.total_count += 1;
         summary.last_orange_pull += 1;
         summary.last_purple_pull += 1;
         last_up_pull += 1;
 
-        if summary.from_time.is_empty() || item.time < summary.from_time {
-            summary.from_time = item.time.clone();
+        if summary.from_time.is_empty() || local_time.as_ref() < summary.from_time.as_str() {
+            summary.from_time = local_time.to_string();
         }
-        if item.time > summary.to_time {
-            summary.to_time = item.time.clone();
+        if local_time.as_ref() > summary.to_time.as_str() {
+            summary.to_time = local_time.to_string();
         }
 
         match item.rank_type {
@@ -173,7 +176,7 @@ fn build_wish_summary(name: &str, pool: i32, items: &[&StoredItem]) -> WishSumma
                     name: item.name.clone(),
                     item_type: item.item_type.clone(),
                     pull,
-                    time: item.time.clone(),
+                    time: local_time.to_string(),
                     is_up,
                 });
                 summary.last_orange_pull = 0;
@@ -183,9 +186,10 @@ fn build_wish_summary(name: &str, pool: i32, items: &[&StoredItem]) -> WishSumma
                 summary.last_purple_pull = 0;
                 summary.total_purple += 1;
             }
-            _ => {
+            3 => {
                 summary.total_blue += 1;
             }
+            _ => summary.total_unknown += 1,
         }
     }
 
@@ -220,15 +224,23 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
 
     // 为每条五星记录判定 UP（历史分组等处使用；按名称匹配，CN 接口无 item_id）
     let mut owned: Vec<StoredItem> = items.to_vec();
+    // 不同来源/批次的记录 ID 不能保证跨批次单调递增。
+    // 在统计入口统一排序，同时修正保底区间、五星列表和历史分组；同秒保留 ID 顺序。
+    owned.sort_by_cached_key(|item| {
+        (
+            crate::gacha_events::event_local_time(item.timezone, &item.time).into_owned(),
+            item.id,
+        )
+    });
     for item in owned.iter_mut() {
         if item.rank_type == 5 {
-            let local_time = crate::gacha_events::event_local_time(&item.item_id, &item.time);
+            let local_time = crate::gacha_events::event_local_time(item.timezone, &item.time);
             item.is_up = crate::gacha_events::is_up(item.gacha_type, &item.name, &local_time);
         }
     }
     dto.event_history = crate::gacha_history::build_event_history(&owned);
 
-    // 各池统计（按 id 升序 = 从旧到新）
+    // 各池统计（按时间从旧到新）
     let avatar: Vec<&StoredItem> = owned
         .iter()
         .filter(|i| matches_pool(i.query_type, 301))
@@ -339,6 +351,59 @@ pub fn build_statistics(uid: &str, items: &[StoredItem]) -> GachaStatisticsDto {
 mod tests {
     use super::*;
 
+    #[test]
+    fn mixed_id_batches_use_chronological_pity_for_character_and_standard_pools() {
+        for pool in [301, 200] {
+            // 旧批次 ID 更大，且有 1500 抽；新批次包含新五星和当前 42 抽。
+            let mut items: Vec<_> = (1..=1500)
+                .map(|id| wish(10_000 + id, pool, "", "冷刃", 3, "2024-05-01 12:00:00"))
+                .collect();
+            items.push(wish(1, pool, "", "琴", 5, "2025-01-01 12:00:00"));
+            items.extend((2..=43).map(|id| wish(id, pool, "", "冷刃", 3, "2025-01-02 12:00:00")));
+            // 模拟从 SQLite 按 ID 返回的顺序。
+            items.sort_by_key(|item| item.id);
+            let stats = build_statistics("test", &items);
+            let summary = if pool == 301 {
+                stats.avatar_wish
+            } else {
+                stats.standard_wish
+            };
+            assert_eq!(summary.last_orange_pull, 42);
+            assert_eq!(summary.orange_list.len(), 1);
+            assert_eq!(stats.history[0].groups[0].count, 42);
+            assert_eq!(items[0].time, "2025-01-01 12:00:00", "不修改原始记录");
+        }
+    }
+
+    #[test]
+    fn mixed_sources_sort_in_one_timezone_and_break_same_second_ties_by_id() {
+        let items = vec![
+            wish(30, 301, "", "冷刃", 3, "2025-01-01 08:00:01"),
+            wish(20, 301, "10000003", "琴", 5, "2025-01-01 00:00:00"),
+            wish(10, 301, "", "迪卢克", 5, "2025-01-01 08:00:00"),
+        ];
+        let stats = build_statistics("test", &items);
+        let summary = stats.avatar_wish;
+        assert_eq!(summary.last_orange_pull, 1);
+        assert_eq!(
+            summary
+                .orange_list
+                .iter()
+                .map(|o| o.name.as_str())
+                .collect::<Vec<_>>(),
+            ["迪卢克", "琴"]
+        );
+        assert_eq!(summary.orange_list[1].time, "2025-01-01 08:00:00");
+    }
+
+    #[test]
+    fn unidentified_rank_is_not_counted_as_three_star() {
+        let stats = build_statistics("test", &[wish(1, 200, "", "", 0, "2025-01-01 00:00:00")]);
+        assert_eq!(stats.standard_wish.total_unknown, 1);
+        assert_eq!(stats.standard_wish.total_blue, 0);
+        assert_eq!(stats.standard_wish.total_count, 1);
+    }
+
     fn wish(
         id: i64,
         gacha_type: i32,
@@ -348,6 +413,7 @@ mod tests {
         time: &str,
     ) -> StoredItem {
         StoredItem {
+            timezone: if item_id.is_empty() { 8 } else { 0 },
             id,
             gacha_type,
             query_type: gacha_type,
@@ -378,7 +444,7 @@ mod tests {
         let stats = build_statistics("100000001", &items);
         assert!(stats.avatar_wish.orange_list.iter().all(|item| item.is_up));
         assert!(stats.weapon_wish.orange_list[0].is_up);
-        assert_eq!(stats.avatar_wish.orange_list[0].time, "2024-04-24 03:53:35");
+        assert_eq!(stats.avatar_wish.orange_list[0].time, "2024-04-24 11:53:35");
         assert_eq!(
             stats.avatar_wish.orange_list.last().unwrap().time,
             "2025-01-05 15:50:50"

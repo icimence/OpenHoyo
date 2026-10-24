@@ -47,7 +47,7 @@ async fn import_file(handle: &AppHandle) -> ApiResult<crate::uigf::UigfImportDto
     .map_err(|e| ApiError::transport(format!("导入任务失败: {e}")))?
 }
 
-/// 导出指定 UID 为 UIGF v4.0 文件（弹出保存对话框）。
+/// 导出指定 UID 为 UIGF v4.2 文件（弹出保存对话框）。
 #[tauri::command]
 pub async fn uigf_export(handle: AppHandle, uid: String) -> ApiResult<String> {
     log::info!("[uigf] 开始导出 uid={uid}");
@@ -74,7 +74,7 @@ async fn export_file(handle: &AppHandle, uid: &str) -> ApiResult<String> {
         handle,
         "UIGF 祈愿记录",
         &["json"],
-        format!("OpenHoyo UIGF v4.0 ({uid}).json"),
+        format!("OpenHoyo UIGF v4.2 ({uid}).json"),
     )
     .await?;
     let Some(fp) = file_path else {

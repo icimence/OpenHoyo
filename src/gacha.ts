@@ -33,6 +33,7 @@ let moreMenuOpen = false;
 let listenerReady = false;
 let outsideClickReady = false;
 let combineAvatarOrange = false;
+let overviewPool = 0;
 
 const POOL_NAMES: Record<number, string> = {
   100: "新手祈愿",
@@ -426,7 +427,19 @@ function renderOverview(body: HTMLElement): void {
   const s = stats!;
   const cards: WishSummary[] = [s.avatar_wish, s.weapon_wish, s.standard_wish];
   if (s.chronicled_wish.total_count > 0) cards.push(s.chronicled_wish);
-  body.innerHTML = `<div class="stats-cards">${cards.map((w, index) => statsCard(w, index === 0)).join("")}</div>`;
+  const mobile = isMobile();
+  if (overviewPool >= cards.length) overviewPool = 0;
+  const poolLabels = ["角色活动", "武器活动", "常驻", "集录"];
+  body.innerHTML = `${mobile ? `<div class="gacha-pool-switch" role="group" aria-label="选择祈愿卡池">${cards.map((_, index) => `<button type="button" data-overview-pool="${index}" aria-pressed="${index === overviewPool}" class="${index === overviewPool ? "active" : ""}">${poolLabels[index]}</button>`).join("")}</div>` : ""}
+    <div class="stats-cards">${cards.map((w, index) => !mobile || index === overviewPool ? statsCard(w, index === 0) : "").join("")}</div>`;
+  body.querySelectorAll<HTMLButtonElement>("[data-overview-pool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      overviewPool = Number(button.dataset.overviewPool);
+      console.info(`[gacha] 切换总览卡池 → ${poolLabels[overviewPool]}`);
+      renderOverview(body);
+      body.querySelector<HTMLButtonElement>(`[data-overview-pool="${overviewPool}"]`)?.focus({ preventScroll: true });
+    });
+  });
   body.querySelectorAll<HTMLButtonElement>("[data-stats-mode]").forEach((button) => {
     button.addEventListener("click", () => {
       statsViewMode.set(button.dataset.card!, button.dataset.statsMode as "stats" | "ratio");
@@ -447,14 +460,19 @@ function orangeListHtml(w: WishSummary, combined: boolean): string {
   if (entries.length === 0) {
     return `<div class="orange-scroll"><div class="orange-empty">暂无五星记录</div></div>`;
   }
-  return `<div class="orange-scroll" role="region" aria-label="${esc(w.name)}五星记录" tabindex="0"><div class="orange-flat">${entries
+  return `<section class="orange-section" aria-label="${esc(w.name)}五星记录">
+    <div class="orange-list-heading"><h3>${w.total_unknown > 0 ? "已识别五星记录" : combined ? "限定五星记录" : "五星获取记录"}<span>${entries.length} 条</span></h3><small>最新在前</small></div>
+    ${combined ? '<p class="orange-list-note">限定金抽数包含此前歪出的抽数</p>' : ""}
+    <div class="orange-scroll" ${isMobile() ? "" : 'tabindex="0"'}><div class="orange-flat">${entries
     .map(
       (o) => `<div class="flat-tile" title="${esc(o.name)} · ${o.pull} 抽${combined && o.is_up ? "（含此前歪出的抽数）" : ""} · ${esc(o.time.slice(0, 10))}${w.has_up ? (o.is_up ? " · 命中UP" : " · 歪了") : ""}">
         <div class="tile-face orange">${esc(o.name.slice(0, 1))}<img src="${iconSrc(o.name)}" ${iconFallbackAttr(o.name)} loading="lazy"/>${w.has_up ? `<span class="up-badge ${o.is_up ? "hit" : "lost"}">${o.is_up ? "UP" : "歪"}</span>` : ""}</div>
-        <span class="flat-count orange">${o.pull}</span>
+        <span class="orange-item-name">${esc(o.name)}</span>
+        <span class="flat-count orange">${o.pull}<small class="orange-item-unit"> 抽</small></span>
+        <time class="orange-item-date">${esc(o.time.slice(0, 10))}</time>
       </div>`,
     )
-    .join("")}</div></div>`;
+    .join("")}</div></div></section>`;
 }
 
 function statsCard(w: WishSummary, isAvatar: boolean): string {
@@ -464,18 +482,28 @@ function statsCard(w: WishSummary, isAvatar: boolean): string {
   const orangeBar = Math.min(100, (w.last_orange_pull / w.guarantee_orange_threshold) * 100);
   const purpleBar = Math.min(100, (w.last_purple_pull / w.guarantee_purple_threshold) * 100);
   const mode = statsViewMode.get(w.name) ?? "stats";
+  const uncertain = w.total_unknown > 0 || w.last_orange_pull > w.guarantee_orange_threshold;
+  const warning = w.total_unknown > 0
+    ? `有 ${w.total_unknown} 条记录尚未识别星级，统计可能不完整`
+    : "记录存在缺失或顺序异常，请核对存档后再参考保底统计";
 
   return `
-  <div class="stats-card">
+  <div class="stats-card${uncertain ? " stats-incomplete" : ""}">
     <div class="stats-title-row">
       <div class="stats-title">${esc(w.name)}</div>
-      ${isAvatar ? `<button class="combine-toggle ${combineAvatarOrange ? "active" : ""}" type="button" title="${combineAvatarOrange ? "显示每个五星的抽数" : "合并显示限定金总抽数"}" aria-label="${combineAvatarOrange ? "显示每个五星的抽数" : "合并显示限定金总抽数"}" aria-pressed="${combineAvatarOrange}">★</button>` : ""}
-      ${w.has_up ? `<span class="pity-state ${w.guaranteed ? "lost" : ""}" title="${w.guaranteed ? "最近一个五星是歪的，下一个五星必为 UP" : "下一个五星有 50% 概率为 UP"}">${w.guaranteed ? "大保底" : "小保底"}</span>` : ""}
+      ${isAvatar ? `<button class="combine-toggle ${combineAvatarOrange && !uncertain ? "active" : ""}" type="button" ${uncertain ? "disabled" : ""} title="${uncertain ? "记录不完整，暂不能合并" : combineAvatarOrange ? "显示每个五星的抽数" : "合并显示限定金总抽数"}" aria-label="${combineAvatarOrange ? "显示每个五星的抽数" : "合并显示限定金总抽数"}" aria-pressed="${combineAvatarOrange && !uncertain}">★</button>` : ""}
+      ${w.has_up ? `<span class="pity-state ${w.guaranteed && !uncertain ? "lost" : ""}" title="${uncertain ? "记录不完整，保底状态暂不可确认" : w.guaranteed ? "最近一个五星是歪的，下一个五星必为 UP" : "下一个五星可能为 UP"}">${uncertain ? "待核对" : w.guaranteed ? "大保底" : "小保底"}</span>` : ""}
     </div>
-    <div class="stats-total"><span class="big">${w.total_count}</span> 抽</div>
+    ${isMobile() ? `<div class="mobile-pity-hero">
+      <span class="mobile-pity-label">距上个五星 · 已垫</span>
+      <div class="mobile-pity-value">${uncertain ? '<strong class="pity-unavailable">记录待核对</strong>' : `<strong>${w.last_orange_pull}</strong><span>抽</span>`}</div>
+      <p>${uncertain ? "保底进度暂不可确认" : `最多再 <b>${Math.max(0, w.guarantee_orange_threshold - w.last_orange_pull)}</b> 抽必出五星`}</p>
+    </div>` : ""}
+    ${uncertain ? `<p class="stats-data-warning" role="status">${warning}</p>` : ""}
+    <div class="stats-total"><span class="stats-total-label">总计</span> <span class="big">${w.total_count}</span> 抽 <span class="stats-five-count">${uncertain ? "已识别五星" : "五星"} <b>${w.total_orange}</b> 个</span></div>
     <div class="pity-grid">
-      <div class="pity-meter orange"><span>距上个五星</span><b>${w.last_orange_pull}</b><div class="gauge"><div class="gauge-fill orange" style="width:${orangeBar}%"></div></div></div>
-      <div class="pity-meter purple"><span>距上个四星</span><b>${w.last_purple_pull}</b><div class="gauge"><div class="gauge-fill purple" style="width:${purpleBar}%"></div></div></div>
+      <div class="pity-meter orange"><span>距上个五星</span><b>${uncertain ? "待核对" : w.last_orange_pull}</b><div class="gauge"><div class="gauge-fill orange" style="width:${uncertain ? 0 : orangeBar}%"></div></div></div>
+      <div class="pity-meter purple"><span>距上个四星</span><b>${w.total_unknown > 0 ? "待核对" : w.last_purple_pull}</b><div class="gauge"><div class="gauge-fill purple" style="width:${w.total_unknown > 0 ? 0 : purpleBar}%"></div></div></div>
     </div>
     <div class="stats-time">${esc(w.from_time.slice(0, 10))} — ${esc(w.to_time.slice(0, 10))}</div>
     <div class="stats-mode-switch" aria-label="统计显示方式">
@@ -492,10 +520,11 @@ function statsCard(w: WishSummary, isAvatar: boolean): string {
       <div class="q orange"><span class="q-name">五星</span><span class="q-count">${w.total_orange}</span><span class="q-pct">${orangePct}%</span></div>
       <div class="q purple"><span class="q-name">四星</span><span class="q-count">${w.total_purple}</span><span class="q-pct">${purplePct}%</span></div>
       <div class="q blue"><span class="q-name">三星</span><span class="q-count">${w.total_blue}</span><span class="q-pct">${bluePct}%</span></div>
+      ${w.total_unknown > 0 ? `<div class="q"><span class="q-name">未识别</span><span class="q-count">${w.total_unknown}</span><span class="q-pct">待补全</span></div>` : ""}
       ${w.has_up ? `<div class="q"><span class="q-name">UP / 歪</span><span class="q-count">${w.total_up_orange} / ${w.total_lost_orange}</span><span class="q-pct">五星结果</span></div>` : ""}
     </div>`}
 
-    ${orangeListHtml(w, isAvatar && combineAvatarOrange)}
+    ${orangeListHtml(w, isAvatar && combineAvatarOrange && !uncertain)}
   </div>`;
 }
 

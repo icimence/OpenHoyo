@@ -94,15 +94,14 @@ pub(crate) fn iso_to_local(iso: &str) -> String {
         .to_string()
 }
 
-/// 活动期比较专用：UIGF v4 的 timezone=0 为 UTC，国服 API 的时间已是 UTC+8。
-/// 国服 API 不返回 item_id，旧版导入条目据非空 item_id 区分；原始时间保持不变。
-pub(crate) fn event_local_time<'a>(item_id: &str, time: &'a str) -> Cow<'a, str> {
-    if item_id.is_empty() {
+/// 活动期比较统一到 UTC+8，使用显式时区，不再把物品 ID 当作时区标记。
+pub(crate) fn event_local_time(timezone: i8, time: &str) -> Cow<'_, str> {
+    if timezone == 8 {
         return Cow::Borrowed(time);
     }
     match chrono::NaiveDateTime::parse_from_str(time, "%Y-%m-%d %H:%M:%S") {
         Ok(utc) => Cow::Owned(
-            (utc + chrono::Duration::hours(8))
+            (utc + chrono::Duration::hours(8 - i64::from(timezone)))
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
         ),
