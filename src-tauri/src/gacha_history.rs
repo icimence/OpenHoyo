@@ -67,19 +67,19 @@ pub fn build_event_history(items: &[StoredItem]) -> Vec<EventHistory> {
     for (query_type, entries) in unmatched {
         let from = entries
             .iter()
-            .map(|item| item.time.as_str())
+            .map(|item| event_local_time(item.timezone, &item.time))
             .min()
-            .unwrap_or("");
+            .unwrap_or_default();
         let to = entries
             .iter()
-            .map(|item| item.time.as_str())
+            .map(|item| event_local_time(item.timezone, &item.time))
             .max()
-            .unwrap_or("");
+            .unwrap_or_default();
         result.push(EventHistory {
             name: "未匹配活动期".into(),
             version: String::new(),
-            from: from.into(),
-            to: to.into(),
+            from: from.into_owned(),
+            to: to.into_owned(),
             query_type,
             total_count: entries.len(),
             items: count_items(&entries),
@@ -130,4 +130,41 @@ fn count_items(items: &[&StoredItem]) -> Vec<EventItemCount> {
             .then(a.name.cmp(&b.name))
     });
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: i64, pool: i32, time: &str, timezone: i8) -> StoredItem {
+        StoredItem {
+            id,
+            gacha_type: pool,
+            query_type: pool,
+            item_id: "15301".into(),
+            name: "弹弓".into(),
+            item_type: "武器".into(),
+            rank_type: 3,
+            time: time.into(),
+            timezone,
+            is_up: false,
+        }
+    }
+
+    #[test]
+    fn unmatched_history_uses_normalized_time_before_finding_date_range() {
+        for pool in [100, 200] {
+            let entries = [
+                item(1, pool, "2025-01-01 22:00:00", -5),
+                item(2, pool, "2025-01-02 01:00:00", 8),
+                item(3, pool, "2025-01-02 15:00:00", 14),
+            ];
+            let history = build_event_history(&entries);
+            assert_eq!(history.len(), 1);
+            assert_eq!(history[0].query_type, pool);
+            assert_eq!(history[0].from, "2025-01-02 01:00:00");
+            assert_eq!(history[0].to, "2025-01-02 11:00:00");
+            assert_eq!(history[0].total_count, 3);
+        }
+    }
 }

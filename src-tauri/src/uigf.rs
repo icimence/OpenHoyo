@@ -3,10 +3,10 @@
 //! 存储复用 gacha_archives/gacha_items 表；重复导入幂等，完整记录可补全旧记录缺失信息。
 
 use crate::gacha::{self, GachaLogItem};
+use crate::gacha_item;
 use crate::response::{ApiError, ApiResult};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 const EXPORT_APP: &str = "OpenHoyo";
 
@@ -119,13 +119,6 @@ pub struct UigfImportReport {
     pub repaired: usize,
 }
 
-fn incomplete_count(state: &AppState, archive_id: i64) -> ApiResult<i64> {
-    state.db.lock().unwrap().query_row(
-        "SELECT COUNT(*) FROM gacha_items WHERE archive_id = ?1 AND (item_id = '' OR name = '' OR rank_type NOT BETWEEN 3 AND 5)",
-        [archive_id], |row| row.get(0),
-    ).map_err(|error| ApiError::retcode(-4, format!("数据库错误: {error}")))
-}
-
 /// 导入结果摘要（多 UID 时逐个汇报）
 #[derive(Serialize)]
 pub struct UigfImportDto {
@@ -139,66 +132,10 @@ pub struct UigfImportProgress {
     pub total: usize,
 }
 
-fn item_meta() -> &'static HashMap<String, (String, String, i32)> {
-    static META: std::sync::OnceLock<HashMap<String, (String, String, i32)>> =
-        std::sync::OnceLock::new();
-    META.get_or_init(|| {
-        // item_meta.json：id → [名称, 类型, 星级]（Snap.Hutao.Remastered 官方元数据生成）
-        let raw: HashMap<String, [serde_json::Value; 3]> =
-            serde_json::from_str(include_str!("data/item_meta.json")).unwrap_or_default();
-        raw.into_iter()
-            .map(|(id, arr)| {
-                let name = arr[0].as_str().unwrap_or("").to_string();
-                let ty = arr[1].as_str().unwrap_or("").to_string();
-                let rank = arr[2].as_i64().unwrap_or(0) as i32;
-                (id, (name, ty, rank))
-            })
-            .collect()
-    })
-}
-
-/// 国服 API 不返回 item_id，导出前按名称、类型、星级反查，不能写出空 ID。
-fn resolve_item_id(item_id: &str, name: &str, kind: &str, rank: i32) -> Option<String> {
-    if !item_id.is_empty() {
-        return Some(item_id.to_string());
+impl UigfItem {
+    fn resolved(&self) -> gacha_item::ResolvedItem {
+        gacha_item::resolve(&self.item_id, &self.name, &self.item_type, self.rank_type)
     }
-    let mut candidates = item_meta().iter().filter(|(_, (n, k, r))| {
-        n == name && (kind.is_empty() || k == kind) && (rank == 0 || *r == rank)
-    });
-    let id = candidates.next()?.0;
-    candidates.next().is_none().then(|| id.clone())
-}
-
-fn import_metadata(item: &UigfItem) -> Option<(String, String, String, i32)> {
-    let id = resolve_item_id(&item.item_id, &item.name, &item.item_type, item.rank_type)?;
-    let (name, kind, rank) = item_meta()
-        .get(&id)
-        .cloned()
-        .unwrap_or_else(|| (item.name.clone(), item.item_type.clone(), item.rank_type));
-    (!name.is_empty() && !kind.is_empty() && (3..=5).contains(&rank))
-        .then_some((id, name, kind, rank))
-}
-
-/// 旧版本导入时未知的物品可能已以空名称、零星级入库；读取时按当前元数据补全，
-/// 无需删除存档或重新导入。保留原始 ID、时间及时区，不改写存档。
-pub(crate) fn restore_item_metadata(item: &mut gacha::StoredItem) -> bool {
-    let Some((name, kind, rank)) = item_meta().get(&item.item_id) else {
-        return false;
-    };
-    let mut restored = false;
-    if item.name.is_empty() {
-        item.name.clone_from(name);
-        restored = true;
-    }
-    if item.item_type.is_empty() {
-        item.item_type.clone_from(kind);
-        restored = true;
-    }
-    if !(3..=5).contains(&item.rank_type) && (3..=5).contains(rank) {
-        item.rank_type = *rank;
-        restored = true;
-    }
-    restored
 }
 
 /// 导入 UIGF v4.x；完整重复记录跳过，缺损记录由完整输入补全。
@@ -239,7 +176,7 @@ pub fn import_uigf_with_progress(
         let invalid = acc
             .list
             .iter()
-            .filter(|item| import_metadata(item).is_none())
+            .filter(|item| !item.resolved().is_complete())
             .count();
         if invalid > 0 {
             return Err(ApiError::retcode(-8, format!("文件中有 {invalid} 条记录缺少可识别的物品 ID、名称或星级。旧版导出可能已丢失物品信息，请在保留完整记录的电脑端更新后重新导出；不会导入不完整数据。")));
@@ -280,23 +217,26 @@ pub fn import_uigf_with_progress(
             } else {
                 it.uigf_gacha_type
             };
-            let (item_id, name, item_type, rank) = import_metadata(it).expect("validated above");
             items.push(GachaLogItem {
                 uid: acc.uid.clone(),
                 gacha_type,
-                item_id,
+                item_id: it.item_id.clone(),
                 time: it.time.clone(),
                 timezone: acc.timezone,
-                name,
-                item_type,
-                rank_type: rank,
+                name: it.name.clone(),
+                item_type: it.item_type.clone(),
+                rank_type: it.rank_type,
                 id: it.id,
             });
         }
-        let before = gacha::count_items(state, archive_id)?;
-        let incomplete_before = incomplete_count(state, archive_id)?;
+        let mut inserted = 0;
+        let mut repaired = 0;
+        let mut skipped = 0;
         for chunk in items.chunks(500) {
-            gacha::insert_items(state, archive_id, chunk)?;
+            let saved = gacha::insert_items(state, archive_id, chunk)?;
+            inserted += saved.inserted;
+            repaired += saved.repaired;
+            skipped += saved.skipped;
             processed += chunk.len();
             report(&UigfImportProgress {
                 uid: acc.uid.clone(),
@@ -304,20 +244,17 @@ pub fn import_uigf_with_progress(
                 total,
             });
         }
-        let after = gacha::count_items(state, archive_id)?;
-        let inserted = (after - before) as usize;
-        let repaired = (incomplete_before - incomplete_count(state, archive_id)?).max(0) as usize;
         accounts.push(UigfImportReport {
             uid: acc.uid.clone(),
             inserted,
-            skipped: acc.list.len().saturating_sub(inserted + repaired),
+            skipped,
             repaired,
         });
         log::info!(
             "[uigf] 导入 uid={}：文件 {} 条，新入库 {} 条，修复 {repaired} 条",
             acc.uid,
             acc.list.len(),
-            after - before
+            inserted
         );
     }
     if accounts.is_empty() {
@@ -335,23 +272,17 @@ pub fn export_uigf(state: &AppState, uid: &str, app_version: &str) -> ApiResult<
     let list = items
         .iter()
         .map(|it| {
-            let item_id = resolve_item_id(&it.item_id, &it.name, &it.item_type, it.rank_type)
-                .ok_or_else(|| {
-                    ApiError::retcode(
-                        -8,
-                        "存档中存在无法识别的物品，无法完整导出。请从完整存档重新导入或刷新记录。",
-                    )
-                })?;
-            if it.name.is_empty() || !(3..=5).contains(&it.rank_type) {
+            // 存档入口已解析身份；此处只序列化统一读取结果，不维护另一套反查规则。
+            if !gacha_item::complete_fields(&it.item_id, &it.name, &it.item_type, it.rank_type) {
                 return Err(ApiError::retcode(
                     -8,
-                    "存档中存在缺失名称或星级的物品，无法完整导出",
+                    "存档中存在待识别或缺少物品信息的记录，无法完整导出。请更新物品数据或从完整存档重新导入。",
                 ));
             }
             Ok(UigfExportItem {
                 gacha_type: it.gacha_type.to_string(),
                 uigf_gacha_type: it.query_type.to_string(),
-                item_id,
+                item_id: it.item_id.clone(),
                 time: convert_time(&it.time, it.timezone, 8)?,
                 id: it.id.to_string(),
                 name: it.name.clone(),
@@ -579,20 +510,21 @@ mod live_tests {
             diff.first()
         );
 
-        // 元数据覆盖率：所有条目都应查到名称与星级
-        let conn = state.db.lock().unwrap();
-        let (blank_name, blank_rank): (i64, i64) = conn
-            .query_row(
-                "SELECT COALESCE(SUM(name=''),0), COALESCE(SUM(rank_type=0),0) FROM gacha_items",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .unwrap();
+        // 检查统一读取结果；ID-only 来源快照可以没有名称/星级，不能直接以原始列判断。
+        let items: Vec<_> = gacha::list_archives(&state)
+            .unwrap()
+            .into_iter()
+            .flat_map(|(archive, _)| gacha::load_items(&state, archive).unwrap())
+            .collect();
+        let blank_name = items.iter().filter(|item| item.name.is_empty()).count();
+        let blank_rank = items
+            .iter()
+            .filter(|item| !(3..=5).contains(&item.rank_type))
+            .count();
         println!("元数据缺失：名称 {blank_name} 条，星级 {blank_rank} 条");
         assert_eq!(blank_name, 0, "存在未命中 item_meta 的条目");
         assert_eq!(blank_rank, 0);
 
-        drop(conn);
         let _ = std::fs::remove_file(&tmp);
         println!("往返一致性验证通过：{origin_count} 条无损");
     }
@@ -625,6 +557,13 @@ mod compatibility_tests {
                 let content = content(version, timezone);
                 let first = import_uigf(&state, &content).unwrap();
                 assert_eq!(first.accounts[0].inserted, 1);
+                let source_name: String = state
+                    .db
+                    .lock()
+                    .unwrap()
+                    .query_row("SELECT name FROM gacha_items LIMIT 1", [], |row| row.get(0))
+                    .unwrap();
+                assert!(source_name.is_empty(), "ID-only 文件的来源快照保持原文");
                 let exported: serde_json::Value =
                     serde_json::from_str(&export_uigf(&state, "123456789", "test").unwrap())
                         .unwrap();
@@ -649,7 +588,7 @@ mod compatibility_tests {
     }
 
     #[test]
-    fn cn_api_export_resolves_missing_item_id_and_preserves_local_time() {
+    fn cn_api_acquisition_resolves_identity_and_roundtrips_local_time() {
         let state = state();
         let archive = gacha::ensure_archive(&state, "123456789").unwrap();
         let item: GachaLogItem = serde_json::from_value(serde_json::json!({
@@ -668,6 +607,44 @@ mod compatibility_tests {
         assert_eq!(stats.avatar_wish.total_orange, 1);
         assert_eq!(stats.avatar_wish.total_unknown, 0);
         assert!(stats.avatar_wish.orange_list[0].is_up);
+    }
+
+    #[test]
+    fn unknown_item_metadata_roundtrips_as_literal_text() {
+        let state = state();
+        let name = "\" onpointerover=\"globalThis.__review_probe=1\" x=\"";
+        let content = serde_json::json!({
+            "info": {"version": "v4.2"},
+            "hk4e": [{"uid": "123456789", "timezone": -5, "list": [{
+                "uigf_gacha_type": "200", "gacha_type": "200",
+                "item_id": "19999999", "name": name, "item_type": "角色", "rank_type": "5",
+                "time": "2025-01-01 22:00:00", "id": "9007199254740993"
+            }]}]
+        })
+        .to_string();
+        let report = import_uigf(&state, &content).unwrap();
+        assert_eq!(report.accounts[0].inserted, 1);
+        let items = gacha::load_items(&state, 1).unwrap();
+        assert_eq!(items[0].name, name, "名称按原文存储，由显示层转义");
+        let statistics = crate::gacha_stats::build_statistics("123456789", &items);
+        assert_eq!(statistics.standard_wish.orange_list[0].name, name);
+        assert_eq!(
+            statistics.standard_wish.orange_list[0].time,
+            "2025-01-02 11:00:00"
+        );
+        assert_eq!(statistics.event_history[0].from, "2025-01-02 11:00:00");
+        let exported: serde_json::Value =
+            serde_json::from_str(&export_uigf(&state, "123456789", "test").unwrap()).unwrap();
+        let row = &exported["hk4e"][0]["list"][0];
+        assert_eq!(row["item_id"], "19999999");
+        assert_eq!(row["name"], name);
+        assert_eq!(row["rank_type"], "5");
+        assert_eq!(row["time"], "2025-01-02 11:00:00");
+        let roundtrip_state = self::state();
+        import_uigf(&roundtrip_state, &exported.to_string()).unwrap();
+        let roundtrip = gacha::load_items(&roundtrip_state, 1).unwrap();
+        assert_eq!(roundtrip[0].name, name);
+        assert_eq!(roundtrip[0].item_id, "19999999");
     }
 
     #[test]
@@ -717,6 +694,22 @@ mod compatibility_tests {
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap();
         assert_eq!(zones, [8, 0]);
+        let state = AppState::new(conn);
+        gacha::load_items(&state, 1).unwrap();
+        let conn = state.db.lock().unwrap();
+        gacha::init_tables(&conn).unwrap();
+        let first: (String, i8) = conn
+            .query_row(
+                "SELECT item_id, timezone FROM gacha_items WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            first,
+            ("10000003".into(), 8),
+            "补齐 ID 后再次启动也不能被误判为 UTC"
+        );
     }
 
     #[test]
@@ -729,7 +722,7 @@ mod compatibility_tests {
             .hk4e
             .iter()
             .flat_map(|a| &a.list)
-            .filter(|item| import_metadata(item).is_none())
+            .filter(|item| !item.resolved().is_complete())
             .count();
         assert!(invalid > 0);
         let error = import_uigf(&state, &content).err().unwrap();

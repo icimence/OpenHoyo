@@ -6,7 +6,7 @@
 //!    - WebCache：读游戏 webCaches 的 data_2，提取内嵌祈愿页 URL
 //!    - Manual：用户手动粘贴
 //! 2. 按 5 种 gacha_type 分页拉取（size=20，end_id 向前翻页，页间 1-2s 随机延迟）
-//! 3. 懒合并：item.Id <= 库中最新 Id 即停止当前类型；全量模式先清库
+//! 3. 懒合并：item.Id <= 库中最新 Id 即停止当前类型；全量模式获取全部可用记录后合并
 //! 4. 统计：TypedWishSummary 算法（保底进度/平均/最欧最非等）
 
 use crate::constants::Salts;
@@ -531,7 +531,7 @@ pub async fn refresh_gacha_log_with_progress(
             break;
         }
 
-        // 保存当前类型（INSERT OR IGNORE 兜底去重）
+        // 保存当前类型，补齐物品身份并按记录 ID 幂等合并。
         if let Some(archive_id) = target_archive_id {
             if !items_to_add.is_empty() {
                 log::info!(
@@ -639,32 +639,52 @@ fn newest_item_id(state: &AppState, archive_id: i64, query_type: i32) -> Option<
     .flatten()
 }
 
-pub fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -> ApiResult<()> {
+#[derive(Default)]
+pub struct InsertReport {
+    pub inserted: usize,
+    pub repaired: usize,
+    pub skipped: usize,
+}
+
+pub fn insert_items(
+    state: &AppState,
+    archive_id: i64,
+    items: &[GachaLogItem],
+) -> ApiResult<InsertReport> {
     let mut conn = state.db.lock().unwrap();
     let transaction = conn.transaction().map_err(db_err)?;
+    let mut report = InsertReport::default();
+    let mut resolved_ids = 0;
+    let mut pending = 0;
+    let mut conflicts = 0;
     for item in items {
+        let resolved =
+            crate::gacha_item::resolve(&item.item_id, &item.name, &item.item_type, item.rank_type);
+        resolved_ids += usize::from(item.item_id.is_empty() && !resolved.item_id.is_empty());
+        pending += usize::from(matches!(
+            resolved.status,
+            crate::gacha_item::ResolutionStatus::UnknownId
+                | crate::gacha_item::ResolutionStatus::MissingId
+                | crate::gacha_item::ResolutionStatus::Ambiguous
+                | crate::gacha_item::ResolutionStatus::InvalidId
+        ));
+        conflicts += usize::from(resolved.status == crate::gacha_item::ResolutionStatus::Conflict);
         // 400（角色活动祈愿-2）查询/存储归并到 301（对应 ToQueryType）
         let query_type = if item.gacha_type == 400 {
             301
         } else {
             item.gacha_type
         };
-        transaction.execute(
+        let inserted = transaction.execute(
             "INSERT INTO gacha_items (id, archive_id, gacha_type, query_type, item_id, name, item_type, rank_type, time, timezone)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-             ON CONFLICT(id) DO UPDATE SET
-               item_id = excluded.item_id, name = excluded.name, item_type = excluded.item_type,
-               rank_type = excluded.rank_type, time = excluded.time, timezone = excluded.timezone
-             WHERE gacha_items.archive_id = excluded.archive_id
-               AND excluded.name <> '' AND excluded.rank_type BETWEEN 3 AND 5
-               AND (gacha_items.name = '' OR gacha_items.rank_type NOT BETWEEN 3 AND 5
-                    OR (gacha_items.item_id = '' AND excluded.item_id <> ''))",
+             ON CONFLICT(id) DO NOTHING",
             rusqlite::params![
                 item.id,
                 archive_id,
                 item.gacha_type,
                 query_type,
-                item.item_id,
+                resolved.item_id,
                 item.name,
                 item.item_type,
                 item.rank_type,
@@ -673,8 +693,76 @@ pub fn insert_items(state: &AppState, archive_id: i64, items: &[GachaLogItem]) -
             ],
         )
         .map_err(db_err)?;
+        if inserted > 0 {
+            report.inserted += inserted;
+            continue;
+        }
+        let (existing_archive, existing_item_id, existing_name, existing_kind, existing_rank):
+            (i64, String, String, String, i32) = transaction.query_row(
+            "SELECT archive_id, item_id, name, item_type, rank_type FROM gacha_items WHERE id = ?1",
+            [item.id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        ).map_err(db_err)?;
+        let existing = crate::gacha_item::resolve(
+            &existing_item_id,
+            &existing_name,
+            &existing_kind,
+            existing_rank,
+        );
+        if existing_archive != archive_id
+            || (!existing.item_id.is_empty()
+                && !resolved.item_id.is_empty()
+                && existing.item_id != resolved.item_id)
+        {
+            conflicts += 1;
+            report.skipped += 1;
+            continue;
+        }
+        // 已能完整识别的记录保持幂等；ID-only 的有效导入不需要被导出的派生字段改写。
+        if existing.is_complete() {
+            if existing_item_id.is_empty() {
+                report.repaired += transaction.execute(
+                    "UPDATE gacha_items SET item_id = ?1 WHERE id = ?2 AND archive_id = ?3 AND item_id = ''",
+                    rusqlite::params![existing.item_id, item.id, archive_id],
+                ).map_err(db_err)?;
+            } else {
+                report.skipped += 1;
+            }
+            continue;
+        }
+        // 重导只补缺失字段，不覆盖已有来源快照。只有旧版缺损记录的完整重导
+        // 才同时修复时间解释；单纯补 ID 不能改变原始时间/时区。
+        let repaired = transaction.execute(
+            "UPDATE gacha_items SET
+               item_id = CASE WHEN item_id = '' THEN ?3 ELSE item_id END,
+               name = CASE WHEN name = '' THEN ?4 ELSE name END,
+               item_type = CASE WHEN item_type = '' THEN ?5 ELSE item_type END,
+               rank_type = CASE WHEN rank_type NOT BETWEEN 3 AND 5 AND ?6 BETWEEN 3 AND 5 THEN ?6 ELSE rank_type END,
+               time = CASE WHEN (name = '' OR rank_type NOT BETWEEN 3 AND 5) AND ?9 THEN ?7 ELSE time END,
+               timezone = CASE WHEN (name = '' OR rank_type NOT BETWEEN 3 AND 5) AND ?9 THEN ?8 ELSE timezone END
+             WHERE id = ?1 AND archive_id = ?2
+               AND (item_id = '' OR ?3 = '' OR item_id = ?3)
+               AND ((item_id = '' AND ?3 <> '') OR (name = '' AND ?4 <> '')
+                    OR (item_type = '' AND ?5 <> '')
+                    OR (rank_type NOT BETWEEN 3 AND 5 AND ?6 BETWEEN 3 AND 5))",
+            rusqlite::params![item.id, archive_id, resolved.item_id, item.name, item.item_type,
+                item.rank_type, item.time, item.timezone, resolved.is_complete()],
+        ).map_err(db_err)?;
+        report.repaired += repaired;
+        report.skipped += usize::from(repaired == 0);
     }
-    transaction.commit().map_err(db_err)
+    transaction.commit().map_err(db_err)?;
+    log::info!(
+        "[gacha-item] 入库：新增={} 补缺={} 跳过={} 补全ID={resolved_ids}",
+        report.inserted,
+        report.repaired,
+        report.skipped
+    );
+    if pending > 0 || conflicts > 0 {
+        log::warn!(
+            "[gacha-item] 物品解析：待识别={pending} 来源字段冲突={conflicts}，已保留来源快照"
+        );
+    }
+    Ok(report)
 }
 
 pub fn list_archives(state: &AppState) -> ApiResult<Vec<(i64, String)>> {
@@ -699,7 +787,8 @@ pub fn remove_archive(state: &AppState, id: i64) -> ApiResult<()> {
     Ok(())
 }
 
-/// 取档内全部条目（按 id 升序 = 从旧到新）
+/// 取档内全部条目（按 ID 升序；统计另按时间排序）。
+/// 为旧存档补齐可唯一识别的空 ID；返回规范展示字段，数据库保留来源快照。
 pub fn load_items(state: &AppState, archive_id: i64) -> ApiResult<Vec<StoredItem>> {
     let conn = state.db.lock().unwrap();
     let mut stmt = conn
@@ -726,13 +815,43 @@ pub fn load_items(state: &AppState, archive_id: i64) -> ApiResult<Vec<StoredItem
         .map_err(db_err)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(db_err)?;
-    let restored = rows
-        .iter_mut()
-        .map(crate::uigf::restore_item_metadata)
-        .filter(|restored| *restored)
-        .count();
-    if restored > 0 {
-        log::info!("[gacha] 读取存档时补全 {restored} 条物品元数据");
+    drop(stmt);
+    let mut backfilled = Vec::new();
+    let mut conflicts = 0;
+    let mut pending = 0;
+    for item in &mut rows {
+        let resolved =
+            crate::gacha_item::resolve(&item.item_id, &item.name, &item.item_type, item.rank_type);
+        if item.item_id.is_empty() && !resolved.item_id.is_empty() {
+            backfilled.push((item.id, resolved.item_id.clone()));
+        }
+        conflicts += usize::from(resolved.status == crate::gacha_item::ResolutionStatus::Conflict);
+        pending += usize::from(!matches!(
+            resolved.status,
+            crate::gacha_item::ResolutionStatus::Known
+                | crate::gacha_item::ResolutionStatus::Conflict
+        ));
+        item.item_id = resolved.item_id;
+        item.name = resolved.name;
+        item.item_type = resolved.item_type;
+        item.rank_type = resolved.rank_type;
+    }
+    if !backfilled.is_empty() {
+        let transaction = conn.unchecked_transaction().map_err(db_err)?;
+        for (id, item_id) in &backfilled {
+            transaction.execute(
+                "UPDATE gacha_items SET item_id = ?1 WHERE id = ?2 AND archive_id = ?3 AND item_id = ''",
+                rusqlite::params![item_id, id, archive_id],
+            ).map_err(db_err)?;
+        }
+        transaction.commit().map_err(db_err)?;
+        log::info!(
+            "[gacha-item] 旧存档补全 {} 条物品 ID，保留来源字段和时区",
+            backfilled.len()
+        );
+    }
+    if pending > 0 || conflicts > 0 {
+        log::warn!("[gacha-item] 读取存档：待识别={pending} 来源字段冲突={conflicts}");
     }
     Ok(rows)
 }
@@ -778,16 +897,9 @@ pub fn pool_display_name(gacha_type: i32) -> &'static str {
 #[path = "gacha_tests.rs"]
 mod gacha_tests;
 
-/// 档内条目总数（导入摘要用）
-pub fn count_items(state: &AppState, archive_id: i64) -> ApiResult<i64> {
-    let conn = state.db.lock().unwrap();
-    conn.query_row(
-        "SELECT COUNT(*) FROM gacha_items WHERE archive_id = ?1",
-        [archive_id],
-        |r| r.get(0),
-    )
-    .map_err(db_err)
-}
+#[cfg(test)]
+#[path = "gacha_storage_tests.rs"]
+mod gacha_storage_tests;
 
 /// 按 UID 查存档 ID（导出用；不存在返回 None）
 pub fn archive_id_by_uid(state: &AppState, uid: &str) -> ApiResult<Option<i64>> {
