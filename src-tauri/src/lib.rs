@@ -27,6 +27,7 @@ mod gacha_history;
 mod gacha_item;
 mod gacha_stats;
 mod game_record;
+mod home;
 mod http;
 mod models;
 mod passport;
@@ -137,6 +138,8 @@ pub fn run() {
             commands::gacha_archives,
             commands::gacha_statistics,
             gacha_events::gacha_countdown,
+            home::home_feed,
+            home::home_announcement,
             commands::gacha_remove_archive,
             uigf_commands::uigf_import,
             uigf_commands::uigf_export,

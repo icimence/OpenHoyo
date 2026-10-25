@@ -16,6 +16,8 @@ import { isMobile } from "./platform";
 interface GachaPageContext {
   /** 供 SToken 刷新使用的当前用户与角色 */
   currentUser: { id: number; isOversea: boolean; gameUid: string | null } | null;
+  initialAction?: "import" | "refresh";
+  archiveUid?: string;
 }
 
 let ctx: GachaPageContext = { currentUser: null };
@@ -34,6 +36,7 @@ let listenerReady = false;
 let outsideClickReady = false;
 let combineAvatarOrange = false;
 let overviewPool = 0;
+let loadVersion = 0;
 
 const POOL_NAMES: Record<number, string> = {
   100: "新手祈愿",
@@ -62,6 +65,8 @@ interface GachaProgressEvent {
 
 export function renderGachaPage(content: HTMLElement, context: GachaPageContext): void {
   ctx = context;
+  const requestedUid = context.archiveUid ?? context.currentUser?.gameUid ?? undefined;
+  let initialAction = context.initialAction;
   if (!listenerReady) {
     listenerReady = true;
     void (async () => {
@@ -74,17 +79,29 @@ export function renderGachaPage(content: HTMLElement, context: GachaPageContext)
       });
     })();
   }
-  void load().catch((e: unknown) => toast(errText(e), "error"));
+  void (async () => {
+    await load(requestedUid);
+    if (!content.querySelector(".gacha-page, .gacha-commandbar")) return;
+    const action = initialAction;
+    initialAction = undefined;
+    if (action === "import") await importUigf(load);
+    else if (action === "refresh") content.querySelector<HTMLButtonElement>("#gacha-refresh-btn")?.click();
+  })().catch((e: unknown) => toast(errText(e), "error"));
   content.innerHTML = `<div class="page-header"><h2>祈愿记录</h2><p>正在加载…</p></div>`;
 }
 
-async function load(): Promise<void> {
-  archives = await api.gachaArchives();
-  if (selectedArchive === null || !archives.some((a) => a.id === selectedArchive)) {
-    selectedArchive = archives[0]?.id ?? null;
-  }
-  stats = selectedArchive !== null ? await api.gachaStatistics(selectedArchive) : null;
+async function load(preferredUid?: string): Promise<void> {
+  const version = ++loadVersion;
   const content = document.getElementById("content")!;
+  const available = await api.gachaArchives();
+  if (version !== loadVersion || content.dataset.page !== "gachalog") return;
+  const id = preferredUid !== undefined ? available.find(a => a.uid === preferredUid)?.id ?? null
+    : available.some(a => a.id === selectedArchive) ? selectedArchive : available[0]?.id ?? null;
+  const data = id !== null ? await api.gachaStatistics(id) : null;
+  if (version !== loadVersion || content.dataset.page !== "gachalog") return;
+  archives = available;
+  selectedArchive = id;
+  stats = data;
   render(content);
 }
 

@@ -191,6 +191,8 @@ const invoke = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T
 };
 
 export const api = {
+  homeFeed: (isOversea: boolean) => invoke<HomeFeed>("home_feed", { isOversea }),
+  homeAnnouncement: (isOversea: boolean, announcementId: string) => invoke<string>("home_announcement", { isOversea, announcementId }),
   listUsers: () => invoke<UserDto[]>("list_users"),
 
   qrCreate: () => invoke<QrCreateDto>("qr_login_create"),
@@ -369,6 +371,12 @@ export interface UpdateNotice {
 export interface GachaArchiveDto {
   id: number;
   uid: string;
+}
+
+export interface HomeFeed {
+  pools: { name: string; version: string; end_time: number; names: string[] }[];
+  announcements: { id: string; title: string; category: string; date: string }[];
+  announcement_error: ApiErrorShape | null;
 }
 
 export interface OrangeEntry {

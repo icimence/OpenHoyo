@@ -116,6 +116,8 @@ body {
   pointer-events: none;
 }
 
+.titlebar-spacer { flex:1; align-self:stretch; }
+
 .titlebar-title small {
   color: var(--text-tertiary);
   font-size: 11px;

@@ -6,6 +6,7 @@ import "./gacha.css";
 import "./settings.css";
 import "./dailynote.css";
 import "./chronicle.css";
+import "./home.css";
 import "./mobile.css";
 import { api, errText, type CaptchaRisk, type UserDto } from "./api";
 import { renderGachaPage } from "./gacha";
@@ -32,6 +33,7 @@ import { runGuideIfNeeded } from "./guide";
 import { initPlatform, isMobile, moveTaskToBack } from "./platform";
 import { initBackgroundTasks } from "./bg-tasks";
 import { img, installImageFallback } from "./img";
+import { renderHomePage, type HomeNavigation } from "./home";
 
 // ---------------------------------------------------------------------------
 // 导航定义（对应原版 MainView.xaml 的 NavigationView 项与分组）
@@ -61,7 +63,9 @@ const NAV_ITEMS: NavItem[] = [
 /** 设置项不在菜单列表里：对应 NavigationView.SettingsItem，固定在 PaneFooter（用户区）下方 */
 const SETTINGS_ITEM: NavItem = { id: "setting", label: "设置", icon: "i-setting" };
 
-let currentPage = "gachalog";
+let currentPage = "announcement";
+let disposePage: (() => void) | undefined;
+let gachaIntent: HomeNavigation | undefined;
 let users: UserDto[] = [];
 let currentUserId: number | null = null;
 /** 本次启动已自动补拉过游戏内头像的角色（避免每次打开用户菜单都重复请求） */
@@ -125,7 +129,7 @@ function renderNav(): void {
   const holder = document.getElementById("nav-items")!;
   const html: string[] = [];
   let lastGroup: string | undefined;
-  const implemented = new Set(["gachalog", "setting", "dailynote", "avatarproperty", "spiralabyss", "rolecombat", "hardchallenge"]);
+  const implemented = new Set(["announcement", "gachalog", "setting", "dailynote", "avatarproperty", "spiralabyss", "rolecombat", "hardchallenge"]);
   for (const item of NAV_ITEMS) {
     if (item.group && item.group !== lastGroup) {
       html.push(`<div class="nav-group-header">${esc(item.group)}</div>`);
@@ -187,8 +191,8 @@ async function initMobileBack(): Promise<void> {
       hideFlyout();
     } else if (document.body.classList.contains("drawer-open")) {
       closeDrawer();
-    } else if (currentPage !== "gachalog") {
-      currentPage = "gachalog";
+    } else if (currentPage !== "announcement") {
+      currentPage = "announcement";
       renderNav();
       renderPage();
     } else {
@@ -198,22 +202,40 @@ async function initMobileBack(): Promise<void> {
 }
 
 function renderPage(): void {
+  disposePage?.();
+  disposePage = undefined;
   const content = document.getElementById("content")!;
   console.info(`[nav] 进入页面: ${currentPage}`);
   // 页面级布局修饰（如我的角色的全幅布局）只对所属页面生效
   content.className = "content";
+  content.dataset.page = currentPage;
+  content.scrollTop = 0;
   closeFlyout();
-  if (currentPage === "gachalog") {
+  if (currentPage === "announcement") {
+    disposePage = renderHomePage(content, {
+      user: currentUser(),
+      navigate: target => {
+        currentPage = target.page;
+        gachaIntent = target.page === "gachalog" ? target : undefined;
+        renderNav(); renderPage(); closeDrawer();
+      },
+      login: () => { hideFlyout(); openQrDialog(); },
+      roleChanged: () => { renderFooterUser(); renderPage(); },
+    });
+  } else if (currentPage === "gachalog") {
     const cur = currentUser();
     renderGachaPage(content, {
       currentUser: cur
         ? {
             id: cur.id,
             isOversea: cur.is_oversea,
-            gameUid: cur.is_oversea ? null : (cur.game_roles.find((r) => r.game_biz.includes("hk4e_cn")) ?? cur.game_roles[0])?.game_uid ?? null,
+            gameUid: currentRoleOf(cur)?.game_uid ?? null,
           }
         : null,
+      initialAction: gachaIntent?.action,
+      archiveUid: gachaIntent?.archiveUid,
     });
+    gachaIntent = undefined;
   } else if (currentPage === "setting") {
     void renderSettingsPage(content);
   } else if (currentPage === "dailynote") {
