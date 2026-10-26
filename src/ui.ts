@@ -12,6 +12,7 @@ export function openDialog(
   options?: { cancelable?: boolean },
 ): void {
   const cancelable = options?.cancelable ?? true;
+  box().classList.remove("home-announcement-dialog");
   box().innerHTML = `
     <div class="dialog-title">${title}</div>
     <div class="dialog-body">${bodyHtml}</div>
@@ -33,6 +34,7 @@ export function openDialog(
 
 export function closeDialog(): void {
   layer().classList.add("hidden");
+  box().classList.remove("home-announcement-dialog");
   box().innerHTML = "";
 }
 

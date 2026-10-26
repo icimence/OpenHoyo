@@ -10,6 +10,8 @@ import { isRiskError } from "./verify";
 import { iconFallbackAttr, iconSrc } from "./gacha-view-utils";
 import { mdToHtml } from "./md";
 import changelog from "../CHANGELOG.md?raw";
+import { announcementFragment } from "./announcement";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 export interface HomeNavigation { page: string; action?: "import" | "refresh"; archiveUid?: string }
 interface Context { user: UserDto | undefined; navigate: (target: HomeNavigation) => void; login: () => void; roleChanged: () => void }
@@ -153,7 +155,11 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
   function renderFeed(): void {
     const pools = feed?.pools ?? [];
     el("home-pool-countdown").textContent = pools[0] ? remaining(pools[0].end_time) : "";
-    el("home-pools").innerHTML = pools.length ? pools.map(pool => `<div class="home-pool-row"><div class="home-pool-portraits">${pool.names.map(name => `<div class="home-pool-portrait"><img src="${iconSrc(name)}" ${iconFallbackAttr(name)} alt="${esc(name)}" loading="lazy"/></div>`).join("")}</div><div><strong>${esc(pool.names.join(" · "))}</strong><span>${esc(pool.name)} · ${esc(pool.version)}</span></div></div>`).join("") : `<div class="home-content-empty">${user?.is_oversea ? "国际服活动请以游戏内公告为准" : feed ? "当前暂无可用卡池信息" : feedError ? "卡池信息暂时不可用" : "正在加载当期祈愿…"}</div>`;
+    const poolColumn = (weapon: boolean) => {
+      const items = pools.filter(pool => (pool.gacha_type === 302) === weapon);
+      return `<section class="home-pool-column" aria-label="${weapon ? "当期武器祈愿" : "当期角色祈愿"}"><h4>${weapon ? "武器活动 · 神铸赋形" : "角色活动祈愿"}</h4>${items.map(pool => pool.names.map(name => `<div class="home-pool-row"><div class="home-pool-portrait"><img src="${iconSrc(name)}" ${iconFallbackAttr(name)} alt="${esc(name)}" loading="lazy"/></div><div><strong>${esc(name)}</strong><span>${esc(pool.name)} · ${esc(pool.version)}</span></div></div>`).join("")).join("") || '<div class="home-content-empty">暂无当期信息</div>'}</section>`;
+    };
+    el("home-pools").innerHTML = pools.length ? `<div class="home-pool-columns">${poolColumn(false)}${poolColumn(true)}</div>` : `<div class="home-content-empty">${user?.is_oversea ? "国际服活动请以游戏内公告为准" : feed ? "当前暂无可用卡池信息" : feedError ? "卡池信息暂时不可用" : "正在加载当期祈愿…"}</div>`;
     renderNews();
   }
   function renderNews(): void {
@@ -204,10 +210,22 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
       btn.disabled = true;
       void api.homeAnnouncement(user?.is_oversea ?? false,announcement.id).then(html => {
         if (!active()) return;
-        // 公告正文来自外部，作为纯文本展示，绝不把远程 HTML 注入应用。
-        const parsed = new DOMParser().parseFromString(html.replace(/<br\s*\/?\s*>|<\/p>/gi,"\n"),"text/html");
-        parsed.querySelectorAll("script,style,iframe,object").forEach(node => node.remove());
-        openDialog(esc(announcement.title),`<div class="home-announcement-body">${esc(parsed.body.textContent ?? "暂无正文")}</div>`,null); onDialogCancel(closeDialog);
+        const fragment = announcementFragment(html);
+        openDialog(esc(announcement.title),'<article class="home-announcement-body" aria-label="公告正文"></article>',null);
+        const article = document.querySelector<HTMLElement>(".home-announcement-body")!;
+        article.replaceChildren(fragment);
+        document.getElementById("dialog")!.classList.add("home-announcement-dialog");
+        if (!article.textContent?.trim() && !article.querySelector("img")) article.textContent = "暂无正文";
+        article.addEventListener("click", event => {
+          const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
+          if (!anchor) return;
+          event.preventDefault();
+          console.info("[home] 打开公告外部链接");
+          void openUrl(anchor.href).catch(error => { console.warn(`[home] 公告链接打开失败: ${errText(error)}`); toast("无法打开公告链接，请稍后重试","error"); });
+        });
+        console.info(`[home] 公告图文已显示（图片=${article.querySelectorAll("img").length}）`);
+        document.getElementById("dialog-cancel")!.textContent = "关闭";
+        onDialogCancel(closeDialog);
       }).catch(error => { console.warn(`[home] 打开公告失败: ${errText(error)}`); toast(errText(error),"error"); }).finally(() => { btn.disabled = false; });
     }
   });

@@ -374,7 +374,7 @@ export interface GachaArchiveDto {
 }
 
 export interface HomeFeed {
-  pools: { name: string; version: string; end_time: number; names: string[] }[];
+  pools: { gacha_type: number; name: string; version: string; end_time: number; names: string[] }[];
   announcements: { id: string; title: string; category: string; date: string }[];
   announcement_error: ApiErrorShape | null;
 }

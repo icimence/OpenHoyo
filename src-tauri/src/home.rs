@@ -8,6 +8,7 @@ use tauri::State;
 
 #[derive(Debug, Serialize)]
 pub struct HomePool {
+    gacha_type: i32,
     name: String,
     version: String,
     end_time: i64,
@@ -17,7 +18,7 @@ pub struct HomePool {
 fn active_pools(now: i64) -> Vec<HomePool> {
     crate::gacha_events::events()
         .iter()
-        .filter(|e| matches!(e.gacha_type, 301 | 400))
+        .filter(|e| matches!(e.gacha_type, 301 | 400 | 302))
         .filter_map(|e| {
             let from = chrono::DateTime::parse_from_rfc3339(&e.from)
                 .ok()?
@@ -26,6 +27,7 @@ fn active_pools(now: i64) -> Vec<HomePool> {
                 .ok()?
                 .timestamp();
             (from <= now && now <= to).then(|| HomePool {
+                gacha_type: e.gacha_type,
                 name: e.name.clone(),
                 version: e.version.clone(),
                 end_time: to,
@@ -199,6 +201,11 @@ mod tests {
             .timestamp();
         let pools = active_pools(start);
         assert!(pools.iter().any(|p| p.name == event.name));
+        let weapon = pools
+            .iter()
+            .find(|p| p.gacha_type == 302)
+            .expect("当期武器池必须与角色池一起返回");
+        assert_eq!(weapon.names.len(), 2, "武器池应展示双 UP 五星");
         assert!(pools
             .iter()
             .all(|p| p.end_time >= start && !p.names.is_empty()));
