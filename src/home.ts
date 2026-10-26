@@ -204,14 +204,14 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
     else if (btn.hasAttribute("data-feed-retry")) { btn.disabled = true; void loadFeed(true); }
     else if (btn.dataset.release !== undefined) {
       const release = releaseNotes[Number(btn.dataset.release)];
-      if (release) { openDialog(esc(release.title),`<div class="changelog-body">${mdToHtml(release.body)}</div>`,null); onDialogCancel(closeDialog); }
+      if (release) { openDialog(esc(release.title),`<div class="changelog-body">${mdToHtml(release.body)}</div>`,null,{lightDismiss:true}); onDialogCancel(closeDialog); }
     } else if (btn.dataset.announcement) {
       const announcement = feed?.announcements.find(a => a.id === btn.dataset.announcement); if (!announcement) return;
       btn.disabled = true;
       void api.homeAnnouncement(user?.is_oversea ?? false,announcement.id).then(html => {
         if (!active()) return;
         const fragment = announcementFragment(html);
-        openDialog(esc(announcement.title),'<article class="home-announcement-body" aria-label="公告正文"></article>',null);
+        openDialog(esc(announcement.title),'<article class="home-announcement-body" aria-label="公告正文"></article>',null,{lightDismiss:true});
         const article = document.querySelector<HTMLElement>(".home-announcement-body")!;
         article.replaceChildren(fragment);
         document.getElementById("dialog")!.classList.add("home-announcement-dialog");
