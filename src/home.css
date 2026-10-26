@@ -72,6 +72,9 @@ html[data-theme='light'] .home-pity-meter.rank-4 { color:#8951b6; }
 .home-pool-row > div:last-child { min-width:0; }
 .home-pool-row span { color:var(--text-secondary); font-size:11px; display:block; margin-top:3px; }
 .home-news { padding:12px 16px 5px; }
+.home-news-scroll { max-height:280px; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.home-news-more { display:flex; align-items:center; justify-content:center; min-height:36px; color:var(--text-secondary); font-size:11px; }
+html[data-platform='android'] .home-news-more { min-height:44px; }
 .home-news-tabs { display:flex; gap:18px; border-bottom:1px solid var(--divider); }
 .home-news-tabs button { position:relative; border:0; background:transparent; padding:0 0 9px; font-size:12px; border-radius:0; color:var(--text-secondary); }
 .home-news-tabs button[aria-selected='true'] { color:var(--text); }

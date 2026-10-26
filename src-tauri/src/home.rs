@@ -98,7 +98,6 @@ fn parse_announcements(data: &Value) -> Vec<HomeAnnouncement> {
         }
     }
     result.sort_by(|a, b| b.date.cmp(&a.date));
-    result.truncate(20);
     result
 }
 
@@ -217,5 +216,15 @@ mod tests {
         let anns = parse_announcements(&value);
         assert_eq!(anns.len(), 2);
         assert_eq!(anns[0].id, "1");
+    }
+
+    #[test]
+    fn announcements_keep_the_full_feed_beyond_twenty_items() {
+        let list: Vec<_> = (1..=35)
+            .map(|id| serde_json::json!({"ann_id":id,"title":format!("公告{id}")}))
+            .collect();
+        let announcements = parse_announcements(&serde_json::json!({"list":[{"list":list}]}));
+        assert_eq!(announcements.len(), 35);
+        assert!(announcements.iter().any(|a| a.id == "35"));
     }
 }

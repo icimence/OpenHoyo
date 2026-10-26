@@ -21,6 +21,7 @@ const cycleKinds = ["abyss","theater","hard"] as const;
 const cyclePages = ["spiralabyss","rolecombat","hardchallenge"];
 const cycleNames = ["深境螺旋","幻想真境剧诗","幽境危战"];
 const cycleIcons = ["SpiralAbyss","RoleCombat","HardChallenge"];
+const ANNOUNCEMENT_BATCH_SIZE = 6;
 const link = (page: string, text = "详情") => `<button class="home-link" data-home-page="${page}">${text}<svg aria-hidden="true"><use href="#i-chevron"/></svg></button>`;
 const section = (icon: string, title: string, page: string, body: string, footer: string) => `<section class="home-card"><header class="home-card-header"><img src="/icons/nav/${icon}.png" alt=""/><h3>${title}</h3>${link(page)}</header>${body}<footer class="home-card-footer">${footer}</footer></section>`;
 const releaseNotes = [...changelog.matchAll(/^## (v[^\r\n]+)\r?\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)].slice(0,3).map(m => ({title:m[1], body:m[2].trim()}));
@@ -42,6 +43,9 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
   let feed = feedCache.get(user?.is_oversea ?? false)?.data;
   let feedError = "";
   let newsTab = "game";
+  let announcementCount = ANNOUNCEMENT_BATCH_SIZE;
+  let newsObserver: IntersectionObserver | undefined;
+  let newsAppendFrame: number | undefined;
   const cycles: (CycleSummary | undefined)[] = [undefined,undefined,undefined];
   const cycleErrors = ["","",""];
   content.innerHTML = `<div class="home-page" id="home-page">
@@ -162,12 +166,60 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
     el("home-pools").innerHTML = pools.length ? `<div class="home-pool-columns">${poolColumn(false)}${poolColumn(true)}</div>` : `<div class="home-content-empty">${user?.is_oversea ? "国际服活动请以游戏内公告为准" : feed ? "当前暂无可用卡池信息" : feedError ? "卡池信息暂时不可用" : "正在加载当期祈愿…"}</div>`;
     renderNews();
   }
+  function stopNewsLoading(): void {
+    newsObserver?.disconnect();
+    newsObserver = undefined;
+    if (newsAppendFrame !== undefined) window.cancelAnimationFrame(newsAppendFrame);
+    newsAppendFrame = undefined;
+  }
+  function announcementRow(n: HomeFeed["announcements"][number]): string {
+    return `<button class="home-news-row" data-announcement="${esc(n.id)}"><span class="home-news-tag">${esc(n.category)}</span><span>${esc(n.title)}</span><time>${esc(n.date.slice(5,10))}</time></button>`;
+  }
+  function announcementFooter(total: number): string {
+    return announcementCount < total ? '<button class="home-link" data-news-more>加载更多</button>' : `<span>已显示全部 ${total} 条公告</span>`;
+  }
+  function appendAnnouncements(): void {
+    if (!active() || newsTab !== "game" || !feed?.announcements.length) return;
+    const list = el("home-news-list");
+    const footer = list.querySelector<HTMLElement>(".home-news-more");
+    if (!footer) return;
+    const start = list.querySelectorAll("[data-announcement]").length;
+    const end = Math.min(start + ANNOUNCEMENT_BATCH_SIZE, feed.announcements.length);
+    if (end <= start) return;
+    const restoreFocus = footer.contains(document.activeElement);
+    footer.insertAdjacentHTML("beforebegin",feed.announcements.slice(start,end).map(announcementRow).join(""));
+    announcementCount = end;
+    footer.innerHTML = announcementFooter(feed.announcements.length);
+    if (end === feed.announcements.length) newsObserver?.disconnect();
+    else { newsObserver?.unobserve(footer); newsObserver?.observe(footer); }
+    if (restoreFocus) footer.querySelector<HTMLButtonElement>("button")?.focus({preventScroll:true});
+    console.info(`[home] 公告列表已加载 ${end}/${feed.announcements.length} 条`);
+  }
+  function queueAnnouncements(): void {
+    if (newsAppendFrame !== undefined) return;
+    newsAppendFrame = window.requestAnimationFrame(() => {
+      newsAppendFrame = undefined;
+      appendAnnouncements();
+    });
+  }
   function renderNews(): void {
+    stopNewsLoading();
     root.querySelectorAll<HTMLButtonElement>('[data-news]').forEach(btn => btn.setAttribute("aria-selected",String(btn.dataset.news === newsTab)));
     const list = el("home-news-list");
+    const scrollTop = list.scrollTop;
+    list.classList.toggle("home-news-scroll",newsTab === "game");
     list.setAttribute("aria-labelledby",newsTab === "game" ? "home-game-tab" : "home-app-tab");
-    list.innerHTML = newsTab === "app" ? releaseNotes.map((n,i) => `<button class="home-news-row" data-release="${i}"><span class="home-news-tag">更新</span><span>${esc(n.title)} 更新说明</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>`).join("") || '<div class="home-content-empty">暂无更新说明</div>' : feed?.announcements.length ? feed.announcements.slice(0,3).map(n => `<button class="home-news-row" data-announcement="${esc(n.id)}"><span class="home-news-tag">${esc(n.category)}</span><span>${esc(n.title)}</span><time>${esc(n.date.slice(5,10))}</time></button>`).join("") : `<div class="home-content-empty">${feed?.announcement_error || feedError ? '公告加载失败 <button class="home-link" data-feed-retry>重试</button>' : feed ? "暂无游戏公告" : "正在加载游戏公告…"}</div>`;
+    announcementCount = Math.min(Math.max(ANNOUNCEMENT_BATCH_SIZE,announcementCount),feed?.announcements.length ?? ANNOUNCEMENT_BATCH_SIZE);
+    list.innerHTML = newsTab === "app" ? releaseNotes.map((n,i) => `<button class="home-news-row" data-release="${i}"><span class="home-news-tag">更新</span><span>${esc(n.title)} 更新说明</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>`).join("") || '<div class="home-content-empty">暂无更新说明</div>' : feed?.announcements.length ? `${feed.announcements.slice(0,announcementCount).map(announcementRow).join("")}<div class="home-news-more" role="status" aria-live="polite">${announcementFooter(feed.announcements.length)}</div>` : `<div class="home-content-empty">${feed?.announcement_error || feedError ? '公告加载失败 <button class="home-link" data-feed-retry>重试</button>' : feed ? "暂无游戏公告" : "正在加载游戏公告…"}</div>`;
     if (newsTab === "game" && feedError && feed?.announcements.length) list.insertAdjacentHTML("afterbegin",'<div class="home-inline-error" role="status">公告刷新失败，显示上次内容</div>');
+    list.scrollTop = newsTab === "game" ? scrollTop : 0;
+    const footer = list.querySelector<HTMLElement>(".home-news-more");
+    if (footer && announcementCount < (feed?.announcements.length ?? 0)) {
+      newsObserver = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting)) queueAnnouncements();
+      },{root:list,rootMargin:"0px 0px 64px 0px"});
+      newsObserver.observe(footer);
+    }
   }
   async function loadFeed(force: boolean): Promise<void> {
     const oversea = user?.is_oversea ?? false;
@@ -201,6 +253,7 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
     else if (btn.id === "home-feedback") { localStorage.setItem("hoyo-settings-tab","feedback"); context.navigate({page:"setting"}); }
     else if (btn.dataset.pity) { pityPage = Number(btn.dataset.pity); renderPity(); }
     else if (btn.dataset.news) { newsTab = btn.dataset.news; renderNews(); }
+    else if (btn.hasAttribute("data-news-more")) queueAnnouncements();
     else if (btn.hasAttribute("data-feed-retry")) { btn.disabled = true; void loadFeed(true); }
     else if (btn.dataset.release !== undefined) {
       const release = releaseNotes[Number(btn.dataset.release)];
@@ -232,5 +285,5 @@ export function renderHomePage(content: HTMLElement, context: Context): () => vo
   renderAccount(); renderNote(); renderPity(); renderCycles(); renderFeed();
   void refresh(false);
   const timer = window.setInterval(() => { if (active() && !refreshing) void refresh(false); },DAILY_NOTE_TTL);
-  return () => { alive = false; generation++; window.clearInterval(timer); };
+  return () => { alive = false; generation++; stopNewsLoading(); window.clearInterval(timer); };
 }
