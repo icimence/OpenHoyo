@@ -223,6 +223,7 @@ pub async fn cookie_login(
 #[tauri::command]
 pub async fn remove_user(state: State<'_, AppState>, handle: AppHandle, id: i64) -> ApiResult<()> {
     log::info!("[user] 移除账号 id={id}");
+    crate::reminders::remove_user(&handle, id).await?;
     {
         let db = state.db.lock().unwrap();
         store::delete(&db, id).map_err(|e| ApiError::retcode(-4, format!("数据库错误: {e}")))?;
@@ -435,6 +436,7 @@ fn find_user(state: &State<'_, AppState>, user_id: i64) -> ApiResult<UserRecord>
 #[tauri::command]
 pub async fn daily_note(
     state: State<'_, AppState>,
+    handle: AppHandle,
     user_id: i64,
     game_uid: String,
     challenge: Option<String>,
@@ -472,7 +474,10 @@ pub async fn daily_note(
     )
     .await;
     match &result {
-        Ok(_) => log::info!("[dailynote] 拉取成功（uid={game_uid}）"),
+        Ok(note) => {
+            log::info!("[dailynote] 拉取成功（uid={game_uid}）");
+            crate::reminders::observe(&handle, user_id, &game_uid, note.clone()).await;
+        }
         Err(e) => log::warn!(
             "[dailynote] 拉取失败（uid={game_uid}）: ({}) {}",
             e.code,

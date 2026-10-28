@@ -32,6 +32,7 @@ mod http;
 mod models;
 mod passport;
 mod random;
+mod reminders;
 mod response;
 mod service;
 mod state;
@@ -57,6 +58,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
         // 官方图片本地缓存协议（见 static_res.rs）
         .register_asynchronous_uri_scheme_protocol("hoyoimg", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
@@ -95,12 +97,15 @@ pub fn run() {
 
             let conn = rusqlite::Connection::open(dir.join("users.db")).expect("无法打开数据库");
             store::init(&conn).expect("无法初始化数据库");
+            reminders::init(&conn).expect("无法初始化提醒设置");
             gacha::init_tables(&conn).expect("无法初始化祈愿记录表");
             game_record::init_tables(&conn).expect("无法初始化周期记录表");
             static_res::cleanup_after_move(&conn, &dir);
 
             app.manage(static_res::StaticRes::new(dir.clone(), default_dir.clone(), &conn));
             app.manage(state::AppState::new(conn));
+            app.manage(reminders::ReminderGate::default());
+            reminders::start(app.handle().clone());
 
             log::info!(
                 "应用启动 v{}（tauri {}，{} {}）",
@@ -147,6 +152,10 @@ pub fn run() {
             commands::gacha_refresh_by_web_cache,
             commands::gacha_refresh_by_manual,
             commands::daily_note,
+            reminders::reminder_status,
+            reminders::reminder_save,
+            reminders::reminder_test,
+            reminders::reminder_resume,
             commands::card_create_verification,
             commands::card_verify_verification,
             commands::chronicle_list,

@@ -8,6 +8,7 @@ interface AndroidBridge {
   canInstallPackages(): boolean;
   openInstallSettings(): void;
   installApk(path: string): boolean;
+  openNotificationSettings(): void;
 }
 
 function bridge(): AndroidBridge | undefined {
@@ -21,11 +22,12 @@ function applyInsets(): void {
     return;
   }
   try {
-    const v = JSON.parse(b.insets()) as Record<"top" | "right" | "bottom" | "left", number>;
+    const v = JSON.parse(b.insets()) as Record<"top" | "right" | "bottom" | "left", number> & { keyboard?: number };
     const root = document.documentElement.style;
     for (const side of ["top", "right", "bottom", "left"] as const) {
       root.setProperty(`--safe-${side}`, `${v[side] ?? 0}px`);
     }
+    root.setProperty("--keyboard-bottom", `${v.keyboard ?? 0}px`);
   } catch (e) {
     console.warn(`[platform] 读取系统栏边距失败: ${String(e)}`);
   }
@@ -62,4 +64,9 @@ export function openInstallSettings(): void {
 /** 安卓：拉起系统安装器安装已下载的更新包 */
 export function installApk(path: string): boolean {
   return bridge()?.installApk(path) ?? false;
+}
+
+export function openNotificationSettings(): void {
+  console.info("[reminder] 打开系统通知设置");
+  bridge()?.openNotificationSettings();
 }

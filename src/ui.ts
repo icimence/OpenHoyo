@@ -15,7 +15,7 @@ export function openDialog(
   removeDialogDismissHandlers?.();
   removeDialogDismissHandlers = undefined;
   const cancelable = options?.cancelable ?? true;
-  box().classList.remove("home-announcement-dialog");
+  box().classList.remove("home-announcement-dialog", "reminder-node-dialog");
   box().innerHTML = `
     <div class="dialog-title">${title}</div>
     <div class="dialog-body">${bodyHtml}</div>
@@ -39,7 +39,7 @@ export function openDialog(
     const cancel = (source: string): void => {
       const button = document.getElementById("dialog-cancel") as HTMLButtonElement | null;
       if (!button || button.disabled) return;
-      console.info(`[dialog] 通过${source}关闭公告`);
+      console.info(`[dialog] 通过${source}关闭对话框`);
       button.click();
     };
     const pointerDown = (event: PointerEvent): void => { pressedOnBackdrop = event.target === overlay; };
@@ -67,7 +67,7 @@ export function closeDialog(): void {
   removeDialogDismissHandlers?.();
   removeDialogDismissHandlers = undefined;
   layer().classList.add("hidden");
-  box().classList.remove("home-announcement-dialog");
+  box().classList.remove("home-announcement-dialog", "reminder-node-dialog");
   box().innerHTML = "";
 }
 

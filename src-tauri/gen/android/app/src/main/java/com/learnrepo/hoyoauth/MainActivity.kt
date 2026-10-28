@@ -37,7 +37,7 @@ class MainActivity : TauriActivity() {
       val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
       val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
       fun dp(px: Int) = Math.round(px / density)
-      insetsJson = "{\"top\":${dp(bars.top)},\"right\":${dp(bars.right)},\"bottom\":${dp(maxOf(bars.bottom, ime.bottom))},\"left\":${dp(bars.left)}}"
+      insetsJson = "{\"top\":${dp(bars.top)},\"right\":${dp(bars.right)},\"bottom\":${dp(maxOf(bars.bottom, ime.bottom))},\"left\":${dp(bars.left)},\"keyboard\":${dp(ime.bottom)}}"
       view.post { (view as WebView).evaluateJavascript("window.dispatchEvent(new Event('hoyo-insets'))", null) }
       insets
     }
@@ -51,6 +51,15 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun moveToBack() {
       runOnUiThread { moveTaskToBack(true) }
+    }
+
+    /** 只打开本应用的通知设置，权限选择由用户在系统界面完成。 */
+    @JavascriptInterface
+    fun openNotificationSettings() {
+      runOnUiThread {
+        startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+          .putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+      }
     }
 
     /** 是否已获准安装应用内下载的更新包（「安装未知应用」权限） */

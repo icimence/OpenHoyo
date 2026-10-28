@@ -8,6 +8,8 @@ import "./dailynote.css";
 import "./chronicle.css";
 import "./home.css";
 import "./mobile.css";
+import "./reminders.css";
+import { initReminderLifecycle } from "./reminders";
 import { api, errText, type CaptchaRisk, type UserDto } from "./api";
 import { renderGachaPage } from "./gacha";
 import { geetestVerify } from "./geetest";
@@ -237,9 +239,12 @@ function renderPage(): void {
     });
     gachaIntent = undefined;
   } else if (currentPage === "setting") {
-    void renderSettingsPage(content);
+    void renderSettingsPage(content, currentUser());
   } else if (currentPage === "dailynote") {
-    renderDailyNotePage(content, currentUser());
+    renderDailyNotePage(content, currentUser(), () => {
+      localStorage.setItem("hoyo-settings-tab", "reminders");
+      currentPage = "setting"; renderNav(); renderPage();
+    });
   } else if (currentPage === "avatarproperty") {
     renderAvatarPropertyPage(content, currentUser());
   } else if (currentPage === "spiralabyss") {
@@ -746,6 +751,7 @@ async function main(): Promise<void> {
   // console.* → 后端日志文件（反馈中心采集用；不要改用 attachConsole，方向相反）
   const { initFrontendLog } = await import("./log");
   initFrontendLog();
+  initReminderLifecycle();
 
   // 新版本首次启动展示更新说明（失败静默）
   void initChangelog();

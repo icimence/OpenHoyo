@@ -1,6 +1,7 @@
 // 设置页：主题切换（跟随系统/浅色/深色）、当前版本号与手动检查更新、数据文件夹与图像资源、反馈中心
 import { checkForUpdates } from "./updater";
-import { api, errText, type GroupProgress, type StaticStatus } from "./api";
+import { api, errText, type GroupProgress, type StaticStatus, type UserDto } from "./api";
+import { renderReminderSettings } from "./reminders";
 import { changeDataFolder, downloadGroups, fmtBytes, progressCard } from "./static-res";
 import { confirmDialog, toast } from "./ui";
 import { isMobile } from "./platform";
@@ -47,6 +48,7 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
 
 const SETTINGS_TABS = [
   { key: "general", label: "常规" },
+  { key: "reminders", label: "提醒" },
   { key: "storage", label: "存储与图像资源" },
   { key: "feedback", label: "反馈中心" },
 ];
@@ -81,7 +83,7 @@ function fmtWhen(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export async function renderSettingsPage(content: HTMLElement): Promise<void> {
+export async function renderSettingsPage(content: HTMLElement, user?: UserDto): Promise<void> {
   // 版本号取自构建时嵌入的 tauri.conf.json，正是更新成功与否的判据
   let version = "";
   try {
@@ -138,6 +140,7 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
       </div>
     </section>
 
+    <section class="settings-panel" data-panel="reminders"><div id="reminder-settings" class="reminder-settings"></div></section>
     <section class="settings-panel" data-panel="storage">
       <div class="settings-section">
         <div class="settings-section-head"><h3>数据文件夹</h3><p>${
@@ -217,6 +220,7 @@ export async function renderSettingsPage(content: HTMLElement): Promise<void> {
     </section>`;
 
   bindTabs(content);
+  void renderReminderSettings(content.querySelector<HTMLElement>("#reminder-settings")!, user);
 
   const seg = content.querySelector<HTMLElement>("#theme-seg")!;
   const markActive = (): void => {

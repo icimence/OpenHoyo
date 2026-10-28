@@ -219,7 +219,7 @@ function startTicker(): void {
   }, 30_000);
 }
 
-export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto | undefined): void {
+export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto | undefined, openReminders?: () => void): void {
   if (!currentUser) {
     content.innerHTML = `
       <div class="page-header"><h2>实时便签</h2><p>树脂、委托、派遣等游戏内实时数据</p></div>
@@ -241,6 +241,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
     <div class="page-header"><h2>实时便签</h2><p>树脂、委托、派遣等游戏内实时数据</p></div>
     <div class="dn-toolbar">
       <button class="primary" id="dn-refresh"><svg><use href="#i-refresh"/></svg>刷新数据</button>
+      ${openReminders ? '<button id="dn-reminders">提醒设置</button>' : ""}
       <span class="dn-hint">页面停留期间每 8 分钟自动刷新</span>
     </div>
     <div id="dn-root" class="dn-grid">
@@ -250,6 +251,7 @@ export function renderDailyNotePage(content: HTMLElement, currentUser: UserDto |
     </div>`;
 
   const root = document.getElementById("dn-root")!;
+  document.getElementById("dn-reminders")?.addEventListener("click", () => openReminders?.());
   const refreshBtn = document.getElementById("dn-refresh") as HTMLButtonElement;
 
   /** pending=true 时无数据且无错误的卡片渲染为骨架屏（刷新进行中） */
